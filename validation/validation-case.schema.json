@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cinema-and-series.local/schemas/validation-case-v0.1.json",
-  "title": "Cinema and Series Validation Case v0.1",
+  "$id": "https://cinema-and-series.local/schemas/validation-case-v0.2.json",
+  "title": "Cinema and Series Validation Case v0.2",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -61,12 +61,17 @@
               "season",
               "episode",
               "special",
+              "structure_edition",
               "person",
               "organization",
               "release_event",
               "country",
               "language",
               "source_element",
+              "external_creative_work",
+              "musical_work",
+              "music_recording",
+              "soundtrack_release",
               "other"
             ]
           },
@@ -109,6 +114,7 @@
               "festival",
               "archive",
               "institutional_catalog",
+              "open_dataset",
               "licensed_provider",
               "trade_press",
               "reference",
