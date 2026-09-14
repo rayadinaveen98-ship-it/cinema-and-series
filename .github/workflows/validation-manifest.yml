@@ -36,5 +36,8 @@ jobs:
       - name: Validate hard-case corpus manifests
         run: python validation/run_manifest_validation.py
 
+      - name: Audit primary cohort quota mapping
+        run: python validation/run_quota_audit.py
+
       - name: Validate multilingual search benchmark manifests
         run: python validation/search/run_search_manifest_validation.py
