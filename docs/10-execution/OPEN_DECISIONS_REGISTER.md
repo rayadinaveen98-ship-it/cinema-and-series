@@ -29,16 +29,16 @@ Decision states:
 
 | ID | Decision | State | Freeze impact | Resolution path |
 |---|---|---|---|---|
-| OD-S01 | Exact production source set for initial bulk/open ingestion | OPEN | critical | field-source matrix + licences + benchmark coverage |
-| OD-S02 | Wikidata production role and refresh strategy | WORKING | high | dump/API benchmark, vandalism/error strategy, references/qualifier ingestion |
-| OD-S03 | MusicBrainz exact CC0 field subset for production adapter | WORKING | high | verify core/supplementary field boundary against adapter contract |
-| OD-S04 | TMDB production use | OPEN/PARTNER_REQUIRED | high | either commercial licence before use or keep non-production/test-only |
-| OD-S05 | TheTVDB production use | OPEN | medium/high | tier/license/right image policy decision |
-| OD-S06 | Streaming availability provider | OPEN | medium | licensed provider/partner or defer availability from launch while retaining schema |
-| OD-S07 | CBFC scalable production access | OPEN | medium/high for India depth | do not bypass CAPTCHA; seek official/partner route or retain manual verification path |
-| OD-S08 | India historical bulk source/collaboration path | OPEN | high | NFAI/NFDC/open sources/partnership strategy |
+| OD-S01 | Exact production source set for initial bulk/open ingestion | LOCKED | resolved | `INITIAL_PRODUCTION_SOURCE_BASELINE.md`: Wikidata CC0 + MusicBrainz CC0 core + CAS editorial/manual evidence; other adapters opt-in only after approval |
+| OD-S02 | Wikidata production role and refresh strategy | LOCKED | resolved | `WIKIDATA_ADAPTER_CONTRACT.md`: weekly JSON entity dump baseline + incremental/add-change validation + targeted refresh; statements become Claims |
+| OD-S03 | MusicBrainz exact CC0 field subset for production adapter | LOCKED | resolved | `MUSICBRAINZ_ADAPTER_CONTRACT.md`: CC0 core dump allowlist; supplementary/non-commercial datasets fail closed |
+| OD-S04 | TMDB production use | DEFERRED_OUT_OF_V1 | resolved for baseline | not required for initial production; may be added only under appropriate commercial licence/approval |
+| OD-S05 | TheTVDB production use | DEFERRED_OUT_OF_V1 | resolved for baseline | not required for initial production; future licensed adapter only |
+| OD-S06 | Streaming availability provider | DEFERRED_OUT_OF_V1 | resolved for baseline | schema remains; launch data disabled unless a licensed sustainable provider is approved |
+| OD-S07 | CBFC scalable production access | WORKING | medium/high for India depth | do not bypass CAPTCHA; manual verification/source evidence allowed; seek official/partner route for scalable ingestion |
+| OD-S08 | India historical bulk source/collaboration path | OPEN | high | NFAI/NFDC/open sources/partnership strategy; V1 may begin without unauthorized bulk ingestion but historical coverage SLA depends on this |
 | OD-S09 | Initial artwork publication source strategy | OPEN | high UX, not core DB | rights-cleared/open/provider-licensed sources + placeholder policy |
-| OD-S10 | Source terms-change monitoring method | WORKING | medium | source registry policy version + scheduled review + adapter kill switch |
+| OD-S10 | Source terms-change monitoring method | LOCKED | resolved | version source policy/terms reference; scheduled review; adapter kill switch; material change = operational incident |
 
 # C. Database / backend architecture decisions
 
@@ -95,7 +95,7 @@ Remaining architecture decisions:
 
 | ID | Decision | State | Freeze impact | Resolution path |
 |---|---|---|---|---|
-| OD-P01 | V1 launch includes streaming availability or schema-only | OPEN | medium | depends on licensed sustainable provider path |
+| OD-P01 | V1 launch includes streaming availability or schema-only | DEFERRED_OUT_OF_V1 | resolved for launch baseline | schema/API capability may exist; no consumer availability promise without licensed sustainable provider |
 | OD-P02 | V1 launch includes user account/library/watchlist | OPEN | medium | current foundation is database-first; decide after data product core acceptance |
 | OD-P03 | Exact consumer navigation labels/order across web vs Android | WORKING | low/medium | production-realistic design validation before UI freeze |
 | OD-P04 | Public evidence/provenance depth | WORKING | medium | consumer-friendly source summary vs expert detail; Control Room always deep |
