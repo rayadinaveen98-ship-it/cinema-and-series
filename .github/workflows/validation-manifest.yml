@@ -48,5 +48,8 @@ jobs:
       - name: Semantic assertion preflight
         run: python validation/semantic/run_semantic_preflight.py
 
+      - name: Report semantic binding debt
+        run: python validation/semantic/report_semantic_debt.py
+
       - name: Execute semantic reference benchmark
         run: python validation/semantic/run_reference_semantics.py
