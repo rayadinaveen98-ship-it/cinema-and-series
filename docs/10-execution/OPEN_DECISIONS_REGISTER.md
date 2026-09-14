@@ -55,7 +55,10 @@ Already LOCKED:
 - Supabase Auth + custom claims/RLS Control Room RBAC — ADR-010;
 - NestJS + Fastify + OpenAPI API layer — ADR-011;
 - transactional outbox for domain-event propagation — ADR-012;
-- provider-independent UUIDv7 canonical IDs — ADR-013.
+- provider-independent UUIDv7 canonical IDs — ADR-013;
+- S3-compatible ObjectStore abstraction; Supabase Storage may be initial implementation — ADR-014;
+- layered backup/recovery with production RPO/RTO and restore drills — ADR-015;
+- deterministic versioned canonicalization rules; AI is not canonical authority — ADR-016.
 
 Remaining architecture decisions:
 
@@ -63,15 +66,15 @@ Remaining architecture decisions:
 |---|---|---|---|---|
 | OD-A01 | TypeScript API framework | LOCKED | resolved | ADR-011 — NestJS + Fastify |
 | OD-A02 | Background job/queue technology | LOCKED | resolved | ADR-008 — pgmq/Supabase Queues + pg_cron scheduling |
-| OD-A03 | Object storage for permitted raw snapshots/assets | OPEN | high | S3-compatible boundary + retention/right-to-delete requirements; evaluate Supabase Storage initially |
+| OD-A03 | Object storage for permitted raw snapshots/assets | LOCKED | resolved | ADR-014 — S3-compatible ObjectStore; Supabase Storage initial candidate |
 | OD-A04 | AuthN/AuthZ for Control Room | LOCKED | resolved | ADR-010 — Supabase Auth custom claims + RLS + domain permissions |
 | OD-A05 | Public API authentication/rate-limit strategy | OPEN | medium | V1 public read model vs future developer API |
 | OD-A06 | Cache technology / invalidation | OPEN | medium | begin no-cache/HTTP/Postgres cache unless measured need; document threshold |
 | OD-A07 | Search escalation threshold from Postgres FTS/pg_trgm | WORKING | medium | multilingual benchmark latency/quality threshold; no dedicated engine without evidence |
 | OD-A08 | Observability stack | OPEN | high | logs, tracing, errors, source/job metrics, cost |
 | OD-A09 | Deployment topology | OPEN | high | web/API/workers/DB/storage environments and separation |
-| OD-A10 | Backup/restore RPO/RTO | OPEN | critical | define data classes, backup frequency, PITR/export strategy, restore drill |
-| OD-A11 | Canonicalization rule-engine implementation | OPEN | critical | deterministic rule layer + versioning + explainability; AI cannot be authority |
+| OD-A10 | Backup/restore RPO/RTO | LOCKED | resolved | ADR-015 — Tier-A RPO <=5m, RTO <=4h; PITR/equivalent + off-provider logical/object recovery |
+| OD-A11 | Canonicalization rule-engine implementation | LOCKED | resolved | ADR-016 — deterministic typed versioned rule engine |
 | OD-A12 | Internal event/outbox pattern | LOCKED | resolved | ADR-012 — transactional outbox + idempotent queue consumers |
 | OD-A13 | Stable CAS ID format | LOCKED | resolved | ADR-013 — RFC 9562 UUIDv7, provider-independent |
 | OD-A14 | Physical partitioning/archive strategy | WORKING | medium | do not partition prematurely; define thresholds for Claims/Snapshots/Audit |
