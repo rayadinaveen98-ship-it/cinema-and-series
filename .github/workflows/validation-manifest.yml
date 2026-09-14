@@ -44,3 +44,6 @@ jobs:
 
       - name: Audit pre-freeze search floors
         run: python validation/search/run_search_floor_audit.py
+
+      - name: Semantic assertion preflight
+        run: python validation/semantic/run_semantic_preflight.py
