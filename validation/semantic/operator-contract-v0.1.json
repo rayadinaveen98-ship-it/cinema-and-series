@@ -1,63 +1,69 @@
 {
-  "version": "0.2",
+  "version": "0.3",
   "purpose": "Runtime-neutral semantic assertion contract for Cinema and Series validation cases.",
   "identity_scopes": {
-    "exact_entity": "Two references resolve to the same durable CAS entity.",
-    "underlying_work": "Two references may be different CAS entity kinds, but resolve to the same underlying creative Work.",
-    "series_lineage": "Two references participate in the same program/franchise lineage without asserting exact entity identity."
+    "exact_entity": "Two or more references resolve to the same durable CAS entity.",
+    "underlying_work": "References may be different CAS entity kinds, but resolve to the same underlying creative Work.",
+    "series_lineage": "References participate in the same program/franchise lineage without asserting exact entity identity."
   },
   "operators": {
     "same_identity": {
-      "mode": "identity_pair",
+      "mode": "identity_pair_or_set",
       "required_bindings": ["subject_ref", "object_ref", "identity_scope"],
       "engine_domain": "identity",
-      "notes": "identity_scope is mandatory because exact entity identity and shared underlying Work identity are different semantics."
+      "notes": "identity_scope is mandatory. Optional subject_refs/object_refs extend the assertion to a set; all bound refs must match at the requested scope."
     },
     "different_identity": {
-      "mode": "identity_pair",
+      "mode": "identity_pair_or_set",
       "required_bindings": ["subject_ref", "object_ref"],
       "engine_domain": "identity",
-      "notes": "Defaults to exact durable entity identity unless a future assertion contract explicitly scopes otherwise."
+      "notes": "Optional subject_refs/object_refs extend the assertion to a set; every bound ref must have a distinct exact identity key."
     },
     "has_relationship": {
-      "mode": "relationship",
+      "mode": "relationship_pair_or_set",
       "required_bindings": ["subject_ref", "predicate", "object_ref"],
-      "engine_domain": "relationship"
+      "engine_domain": "relationship",
+      "notes": "Optional subject_refs/object_refs are evaluated as the Cartesian product of all bound subjects and objects."
     },
     "does_not_have_relationship": {
-      "mode": "relationship",
+      "mode": "relationship_pair_or_set",
       "required_bindings": ["subject_ref", "predicate", "object_ref"],
-      "engine_domain": "relationship"
+      "engine_domain": "relationship",
+      "notes": "Optional subject_refs/object_refs are evaluated as the Cartesian product of all bound subjects and objects."
     },
     "has_value": {
-      "mode": "field_value",
+      "mode": "field_value_or_set",
       "required_bindings": ["subject_ref", "predicate"],
-      "engine_domain": "canonical_data"
+      "engine_domain": "canonical_data",
+      "notes": "Optional subject_refs require the field to exist for every bound subject."
     },
     "does_not_overwrite": {
-      "mode": "claim_preservation",
+      "mode": "claim_preservation_or_set",
       "required_bindings": ["subject_ref", "predicate"],
-      "engine_domain": "canonicalization"
+      "engine_domain": "canonicalization",
+      "notes": "Optional subject_refs require the non-overwrite guard for every bound subject."
     },
     "preserves_claims": {
-      "mode": "claim_set",
+      "mode": "claim_set_or_subject_set",
       "required_bindings": ["subject_ref", "predicate"],
-      "engine_domain": "canonicalization"
+      "engine_domain": "canonicalization",
+      "notes": "Optional subject_refs require a preserved multi-claim set for every bound subject."
     },
     "resolves_search": {
-      "mode": "search_resolution",
+      "mode": "search_resolution_or_set",
       "required_bindings": ["subject_ref"],
       "engine_domain": "search"
     },
     "routes_to_review": {
-      "mode": "review_routing",
+      "mode": "review_routing_or_set",
       "required_bindings": ["subject_ref"],
       "engine_domain": "review_routing"
     },
     "supports_multiple": {
-      "mode": "cardinality",
+      "mode": "cardinality_or_subject_set",
       "required_bindings": ["subject_ref", "predicate"],
-      "engine_domain": "representation"
+      "engine_domain": "representation",
+      "notes": "Optional subject_refs require multiplicity support for every bound subject."
     },
     "custom": {
       "mode": "manual_or_specialized",
@@ -78,6 +84,9 @@
     "Missing bindings are validation debt, not a passing result.",
     "same_identity without an explicit identity_scope is not runtime-ready.",
     "A Version and its parent Work are different CAS entities even when identity_scope=underlying_work evaluates true.",
+    "subject_refs and object_refs are additive to their singular counterparts and must never be used to hide an unbound required singular reference.",
+    "Set-aware identity assertions evaluate every bound entity, not only the first pair.",
+    "Set-aware relationship assertions evaluate every required subject-object pair.",
     "custom assertions require an explicitly named specialized evaluator before they can pass automatically.",
     "Engine results must identify the assertion_id and observed state used to reach the result."
   ]
