@@ -5,6 +5,11 @@ Research/QA tooling only. This script verifies every machine-readable validation
 case is assigned exactly one valid primary cohort and reports progress against
 the locked ~1,000-case quotas. Being below final quotas does not fail CI while
 the corpus is still under construction; structural mismatches do.
+
+Primary-cohort assignments are split across incremental CSV files matching
+`corpus-primary-cohorts-*.csv`. This keeps the mapping maintainable as the corpus
+grows toward ~1,000 cases while preserving duplicate/stale/missing detection
+across the complete assignment set.
 """
 from __future__ import annotations
 
@@ -15,7 +20,7 @@ from pathlib import Path
 import sys
 
 ROOT = Path(__file__).resolve().parent
-CSV_PATH = ROOT / "corpus-primary-cohorts-v0.1.csv"
+CSV_GLOB = "corpus-primary-cohorts-*.csv"
 
 TARGETS = {
     "india_identity_multilingual_localization": 180,
@@ -51,20 +56,30 @@ def discover_case_ids() -> set[str]:
 
 def load_assignments() -> dict[str, str]:
     assignments: dict[str, str] = {}
+    sources: dict[str, str] = {}
     duplicates: list[str] = []
-    with CSV_PATH.open(newline="", encoding="utf-8") as handle:
-        reader = csv.DictReader(handle)
-        expected = {"case_id", "primary_cohort"}
-        if set(reader.fieldnames or []) != expected:
-            raise ValueError(f"unexpected CSV columns: {reader.fieldnames}")
-        for row in reader:
-            case_id = row["case_id"].strip()
-            cohort = row["primary_cohort"].strip()
-            if case_id in assignments:
-                duplicates.append(case_id)
-            assignments[case_id] = cohort
+    csv_paths = sorted(ROOT.glob(CSV_GLOB))
+    if not csv_paths:
+        raise ValueError(f"no primary-cohort CSV files found matching {CSV_GLOB}")
+
+    for csv_path in csv_paths:
+        with csv_path.open(newline="", encoding="utf-8") as handle:
+            reader = csv.DictReader(handle)
+            expected = {"case_id", "primary_cohort"}
+            if set(reader.fieldnames or []) != expected:
+                raise ValueError(f"unexpected CSV columns in {csv_path.name}: {reader.fieldnames}")
+            for row_number, row in enumerate(reader, start=2):
+                case_id = row["case_id"].strip()
+                cohort = row["primary_cohort"].strip()
+                location = f"{csv_path.name}:{row_number}"
+                if case_id in assignments:
+                    duplicates.append(f"{case_id} ({sources[case_id]}, {location})")
+                    continue
+                assignments[case_id] = cohort
+                sources[case_id] = location
+
     if duplicates:
-        raise ValueError("duplicate cohort assignment(s): " + ", ".join(sorted(set(duplicates))))
+        raise ValueError("duplicate cohort assignment(s): " + ", ".join(sorted(duplicates)))
     return assignments
 
 
@@ -97,6 +112,7 @@ def main() -> int:
     counts = Counter(assignments.values())
     print("PASS_QUOTA_AUDIT")
     print(f"classified_cases={len(assignments)}")
+    print(f"assignment_files={len(list(ROOT.glob(CSV_GLOB)))}")
     print("primary_cohort_progress:")
     for cohort, target in TARGETS.items():
         count = counts[cohort]
