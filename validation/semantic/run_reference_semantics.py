@@ -26,6 +26,9 @@ CONTRACT_PATH = SEMANTIC / "operator-contract-v0.1.json"
 BINDING_SCHEMA_PATH = SEMANTIC / "semantic-binding.schema.json"
 REFERENCE_SCHEMA_PATH = SEMANTIC / "reference-state.schema.json"
 
+SCALAR_BINDING_KEYS = ("subject_ref", "object_ref", "predicate", "identity_scope")
+SET_BINDING_KEYS = ("subject_refs", "object_refs")
+
 
 def load_jsonl(path: Path):
     with path.open("r", encoding="utf-8") as fh:
@@ -90,10 +93,18 @@ def effective_assertion(assertion: dict, overlay: dict | None) -> dict:
     )
     if not binding:
         return result
-    for key in ("subject_ref", "object_ref", "predicate", "identity_scope"):
+    for key in SCALAR_BINDING_KEYS + SET_BINDING_KEYS:
         if not result.get(key) and binding.get(key):
             result[key] = binding[key]
     return result
+
+
+def all_refs(primary: str | None, extras: list[str] | None) -> list[str]:
+    refs: list[str] = []
+    for ref in ([primary] if primary else []) + list(extras or []):
+        if ref not in refs:
+            refs.append(ref)
+    return refs
 
 
 def state_indexes(state: dict):
@@ -125,18 +136,24 @@ def evaluate(assertion: dict, state: dict) -> tuple[str, object]:
     obj = assertion.get("object_ref")
     predicate = assertion.get("predicate")
     scope = assertion.get("identity_scope")
+    subjects = all_refs(subject, assertion.get("subject_refs"))
+    objects = all_refs(obj, assertion.get("object_refs"))
 
     entities, relationships, fields, claims, guards, review_routes, search_resolutions = state_indexes(state)
 
     if operator in {"same_identity", "different_identity"}:
-        if subject not in entities or obj not in entities:
-            return "FAIL_DATA", {"reason": "missing_reference_entity", "subject": subject, "object": obj}
+        refs = all_refs(None, subjects + objects)
+        missing_refs = [ref for ref in refs if ref not in entities]
+        if missing_refs:
+            return "FAIL_DATA", {"reason": "missing_reference_entity", "refs": missing_refs}
+
         if operator == "different_identity":
-            same = entities[subject]["exact_identity_key"] == entities[obj]["exact_identity_key"]
-            return ("PASS" if not same else "FAIL_DATA"), {
+            keys = {ref: entities[ref]["exact_identity_key"] for ref in refs}
+            distinct = len(set(keys.values())) == len(keys)
+            return ("PASS" if distinct else "FAIL_DATA"), {
                 "identity_scope": "exact_entity",
-                "subject_key": entities[subject]["exact_identity_key"],
-                "object_key": entities[obj]["exact_identity_key"],
+                "keys": keys,
+                "all_distinct": distinct,
             }
 
         scope_to_key = {
@@ -147,67 +164,88 @@ def evaluate(assertion: dict, state: dict) -> tuple[str, object]:
         key_name = scope_to_key.get(scope)
         if not key_name:
             return "NOT_IMPLEMENTED", {"reason": "unknown_or_missing_identity_scope", "scope": scope}
-        left = entities[subject].get(key_name)
-        right = entities[obj].get(key_name)
-        if not left or not right:
-            return "FAIL_DATA", {"reason": "missing_identity_scope_key", "scope": scope}
-        return ("PASS" if left == right else "FAIL_DATA"), {
+        keys = {ref: entities[ref].get(key_name) for ref in refs}
+        if any(not value for value in keys.values()):
+            return "FAIL_DATA", {"reason": "missing_identity_scope_key", "scope": scope, "keys": keys}
+        same = len(set(keys.values())) == 1
+        return ("PASS" if same else "FAIL_DATA"), {
             "identity_scope": scope,
-            "subject_key": left,
-            "object_key": right,
+            "keys": keys,
+            "all_same": same,
         }
 
-    if operator == "has_relationship":
-        observed = (subject, predicate, obj) in relationships
-        return ("PASS" if observed else "FAIL_DATA"), {
-            "relationship": [subject, predicate, obj],
-            "observed": observed,
-        }
-
-    if operator == "does_not_have_relationship":
-        observed = (subject, predicate, obj) in relationships
-        return ("PASS" if not observed else "FAIL_DATA"), {
-            "relationship": [subject, predicate, obj],
-            "observed": observed,
+    if operator in {"has_relationship", "does_not_have_relationship"}:
+        required_triples = [
+            (left, predicate, right)
+            for left in subjects
+            for right in objects
+        ]
+        observed = [triple for triple in required_triples if triple in relationships]
+        if operator == "has_relationship":
+            passed = len(observed) == len(required_triples)
+        else:
+            passed = len(observed) == 0
+        return ("PASS" if passed else "FAIL_DATA"), {
+            "required_relationships": [list(t) for t in required_triples],
+            "observed_relationships": [list(t) for t in observed],
         }
 
     if operator == "has_value":
-        key = (subject, predicate)
-        if key not in fields:
-            return "FAIL_DATA", {"reason": "field_missing", "field": [subject, predicate]}
-        return "PASS", {"value": fields[key]}
+        values = {(left, predicate): fields.get((left, predicate)) for left in subjects}
+        missing = [left for left in subjects if (left, predicate) not in fields]
+        return ("PASS" if not missing else "FAIL_DATA"), {
+            "values": {left: values[(left, predicate)] for left in subjects if (left, predicate) in fields},
+            "missing_subjects": missing,
+        }
 
     if operator == "does_not_overwrite":
-        observed = (subject, predicate) in guards
-        return ("PASS" if observed else "FAIL_DATA"), {
-            "guard": [subject, predicate],
-            "observed": observed,
+        missing = [left for left in subjects if (left, predicate) not in guards]
+        return ("PASS" if not missing else "FAIL_DATA"), {
+            "predicate": predicate,
+            "guarded_subjects": [left for left in subjects if (left, predicate) in guards],
+            "missing_subjects": missing,
         }
 
     if operator == "preserves_claims":
-        values = claims.get((subject, predicate))
-        observed = isinstance(values, list) and len(values) >= 2
-        return ("PASS" if observed else "FAIL_DATA"), {
-            "claim_values": values,
-            "minimum_required": 2,
+        claim_values = {left: claims.get((left, predicate)) for left in subjects}
+        invalid = [
+            left for left, values in claim_values.items()
+            if not isinstance(values, list) or len(values) < 2
+        ]
+        return ("PASS" if not invalid else "FAIL_DATA"), {
+            "claim_values": claim_values,
+            "minimum_required_per_subject": 2,
+            "invalid_subjects": invalid,
         }
 
     if operator == "supports_multiple":
-        field_value = fields.get((subject, predicate))
-        if isinstance(field_value, list) and len(field_value) >= 2:
-            return "PASS", {"field_values": field_value}
-        rel_count = sum(1 for s, p, _ in relationships if s == subject and p == predicate)
-        if rel_count >= 2:
-            return "PASS", {"relationship_count": rel_count}
-        return "FAIL_DATA", {"field_values": field_value, "relationship_count": rel_count}
+        observations: dict[str, object] = {}
+        failures: list[str] = []
+        for left in subjects:
+            field_value = fields.get((left, predicate))
+            rel_count = sum(1 for s, p, _ in relationships if s == left and p == predicate)
+            supported = (isinstance(field_value, list) and len(field_value) >= 2) or rel_count >= 2
+            observations[left] = {"field_values": field_value, "relationship_count": rel_count}
+            if not supported:
+                failures.append(left)
+        return ("PASS" if not failures else "FAIL_DATA"), {
+            "observations": observations,
+            "unsupported_subjects": failures,
+        }
 
     if operator == "routes_to_review":
-        observed = subject in review_routes
-        return ("PASS" if observed else "FAIL_DATA"), {"routed": observed, "subject": subject}
+        missing = [left for left in subjects if left not in review_routes]
+        return ("PASS" if not missing else "FAIL_DATA"), {
+            "routed_subjects": [left for left in subjects if left in review_routes],
+            "missing_subjects": missing,
+        }
 
     if operator == "resolves_search":
-        observed = subject in search_resolutions
-        return ("PASS" if observed else "FAIL_DATA"), {"resolved": observed, "subject": subject}
+        missing = [left for left in subjects if left not in search_resolutions]
+        return ("PASS" if not missing else "FAIL_DATA"), {
+            "resolved_subjects": [left for left in subjects if left in search_resolutions],
+            "missing_subjects": missing,
+        }
 
     if operator == "custom":
         return "NOT_IMPLEMENTED", {"reason": "specialized_evaluator_required"}
@@ -270,7 +308,7 @@ def main() -> int:
     print(f"reference_cases={executed_cases}")
     print(f"reference_assertions={executed_assertions}")
     print("result_counts=" + json.dumps(dict(sorted(result_counts.items())), sort_keys=True))
-    print("adapter=reference_graph_v0.1")
+    print("adapter=reference_graph_v0.2")
     if failure_details:
         print("failures=" + json.dumps(failure_details, ensure_ascii=False, sort_keys=True))
         return 1
