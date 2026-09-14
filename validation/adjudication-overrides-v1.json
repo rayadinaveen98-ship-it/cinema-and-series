@@ -1,0 +1,141 @@
+{
+  "schema_version": "v1",
+  "effective_date": "2026-09-14",
+  "description": "Authoritative V1 semantic overrides for validation cases originally seeded with OPEN or superseded expected outcomes. Original corpus records remain historical evidence; the runner must apply the latest valid override before semantic execution.",
+  "overrides": [
+    {
+      "case_id": "VC-0010",
+      "new_status": "gold_candidate",
+      "decision": "pass_expected_model",
+      "expected_outcome": {
+        "classic_run_identity": "separate_series_work",
+        "revival_2005_identity": "separate_series_work",
+        "shared_lineage": true,
+        "relationship": ["REVIVAL_OF", "CONTINUES"]
+      },
+      "assertions": [
+        {
+          "assertion_id": "adj-vc0010-1",
+          "domain": "identity",
+          "operator": "different_identity",
+          "expected": "classic_run_and_2005_revival_series_ids"
+        },
+        {
+          "assertion_id": "adj-vc0010-2",
+          "domain": "relationship",
+          "operator": "has_relationship",
+          "predicate": "REVIVAL_OF_OR_CONTINUES",
+          "expected": true
+        }
+      ],
+      "controlling_spec": "docs/03-data/DOMAIN_ADJUDICATIONS_V1.md#rule-d--long-gap-revival-runs-may-use-separate-series-work-identities-linked-by-continuity"
+    },
+    {
+      "case_id": "VC-0061",
+      "new_status": "gold_candidate",
+      "decision": "pass_expected_model",
+      "expected_outcome": {
+        "volume_1": "independent_work",
+        "volume_2": "independent_work",
+        "whole_bloody_affair": "combined_presentation_work",
+        "destructive_merge": false
+      },
+      "assertions": [
+        {
+          "assertion_id": "adj-vc0061-1",
+          "domain": "identity",
+          "operator": "different_identity",
+          "expected": "volume_1_volume_2_and_combined_work_have_distinct_work_ids"
+        },
+        {
+          "assertion_id": "adj-vc0061-2",
+          "domain": "relationship",
+          "operator": "has_relationship",
+          "predicate": "COMPILATION_CONTAINS_OR_DERIVED_FROM",
+          "expected": "combined_work_links_to_both_volumes"
+        }
+      ],
+      "controlling_spec": "docs/03-data/DOMAIN_ADJUDICATIONS_V1.md#rule-b--a-combined-presentation-of-multiple-independently-released-works-is-a-distinct-combined-work"
+    },
+    {
+      "case_id": "VC-0064",
+      "new_status": "gold_candidate",
+      "decision": "pass_expected_model",
+      "expected_outcome": {
+        "him": "work",
+        "her": "work",
+        "them": "derived_work",
+        "project_grouping": true
+      },
+      "assertions": [
+        {
+          "assertion_id": "adj-vc0064-1",
+          "domain": "identity",
+          "operator": "different_identity",
+          "expected": "him_her_them_are_distinct_linked_works"
+        },
+        {
+          "assertion_id": "adj-vc0064-2",
+          "domain": "relationship",
+          "operator": "has_relationship",
+          "predicate": "DERIVED_FROM_OR_COMBINES_MATERIAL_FROM",
+          "expected": "them_links_to_him_and_her"
+        }
+      ],
+      "controlling_spec": "docs/03-data/DOMAIN_ADJUDICATIONS_V1.md#rule-c--independently-perspective-structured-films-can-remain-separate-works-even-when-sold-as-versions"
+    },
+    {
+      "case_id": "VC-0095",
+      "new_status": "gold_candidate",
+      "decision": "pass_expected_model",
+      "expected_outcome": {
+        "series_identity": "one_core_series_work",
+        "original_broadcast": "structure_edition",
+        "netflix_recut": "structure_edition",
+        "content_unit_mapping_required": true
+      },
+      "assertions": [
+        {
+          "assertion_id": "adj-vc0095-1",
+          "domain": "identity",
+          "operator": "same_identity",
+          "expected": "provider_recut_does_not_create_new_series"
+        },
+        {
+          "assertion_id": "adj-vc0095-2",
+          "domain": "series_structure",
+          "operator": "supports_multiple",
+          "expected": "original_and_netflix_structure_editions"
+        }
+      ],
+      "controlling_spec": "docs/03-data/DOMAIN_ADJUDICATIONS_V1.md#rule-f--provider-specific-recutsrepartitioning-do-not-create-a-new-series-work"
+    },
+    {
+      "case_id": "VC-0097",
+      "new_status": "gold_candidate",
+      "decision": "pass_expected_model",
+      "expected_outcome": {
+        "original_series": "series_work_a",
+        "2017_limited_event": "series_work_b",
+        "shared_lineage": true,
+        "relationship": "CONTINUES"
+      },
+      "assertions": [
+        {
+          "assertion_id": "adj-vc0097-1",
+          "domain": "identity",
+          "operator": "different_identity",
+          "expected": "original_and_2017_series_run_ids"
+        },
+        {
+          "assertion_id": "adj-vc0097-2",
+          "domain": "relationship",
+          "operator": "has_relationship",
+          "predicate": "CONTINUES",
+          "expected": true
+        }
+      ],
+      "controlling_spec": "docs/03-data/DOMAIN_ADJUDICATIONS_V1.md#rule-e--a-separately-commissioned-limited-event-continuation-is-a-separate-series-work"
+    }
+  ]
+}
