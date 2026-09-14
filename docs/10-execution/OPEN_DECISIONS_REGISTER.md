@@ -7,7 +7,7 @@ This register exists because the project contract requires architecture, data be
 
 Decision states:
 - `OPEN` — unresolved, freeze blocker if implementation-critical.
-- `WORKING` — preferred direction requiring validation/evidence.
+- `WORKING` — current preferred direction requiring validation/evidence.
 - `LOCKED` — accepted; change requires ADR/spec revision.
 - `DEFERRED_OUT_OF_V1` — deliberately outside V1; must not leak into V1 coding.
 
@@ -40,25 +40,31 @@ Decision states:
 | OD-S09 | Initial artwork publication source strategy | OPEN | high UX, not core DB | rights-cleared/open/provider-licensed sources + placeholder policy |
 | OD-S10 | Source terms-change monitoring method | WORKING | medium | source registry policy version + scheduled review + adapter kill switch |
 
-# C. Database / backend architecture blockers
+# C. Database / backend architecture decisions
 
 Already LOCKED:
-- PostgreSQL authoritative store;
-- Postgres-first portability even if Supabase hosts initially;
-- modular monolith + asynchronous workers;
-- source ingestion through immutable evidence/claims;
-- canonical projections are derived/rebuildable;
-- search is a rebuildable projection;
-- TypeScript service layer + Python data tooling + Next.js web/control room + native Kotlin Android direction.
+- PostgreSQL authoritative store — ADR-001;
+- modular monolith — ADR-002;
+- source ingestion through immutable evidence/claims — ADR-003;
+- canonical projections are derived/rebuildable — ADR-004;
+- search is a rebuildable projection — ADR-005;
+- Postgres-first portability even if Supabase hosts initially — ADR-006;
+- TypeScript/Python/Next.js/Kotlin stack direction — ADR-007;
+- Postgres-native durable queues (`pgmq`) + `pg_cron` scheduling — ADR-008;
+- SQL-first, version-controlled database migrations — ADR-009;
+- Supabase Auth + custom claims/RLS Control Room RBAC — ADR-010;
+- NestJS + Fastify + OpenAPI API layer — ADR-011;
+- transactional outbox for domain-event propagation — ADR-012;
+- provider-independent UUIDv7 canonical IDs — ADR-013.
 
-Still open:
+Remaining architecture decisions:
 
 | ID | Decision | State | Freeze impact | Resolution path |
 |---|---|---|---|---|
-| OD-A01 | TypeScript API framework | OPEN | high | compare Fastify/NestJS/Next server boundary against domain/worker needs; record ADR |
-| OD-A02 | Background job/queue technology | OPEN | critical | reliability, retries, schedules, Supabase/Postgres compatibility, free/early-stage cost; record ADR |
-| OD-A03 | Object storage for permitted raw snapshots/assets | OPEN | high | Supabase Storage/S3-compatible boundary + retention/right-to-delete requirements |
-| OD-A04 | AuthN/AuthZ for Control Room | OPEN | critical | admin roles, least privilege, Supabase Auth portability boundary; record ADR |
+| OD-A01 | TypeScript API framework | LOCKED | resolved | ADR-011 — NestJS + Fastify |
+| OD-A02 | Background job/queue technology | LOCKED | resolved | ADR-008 — pgmq/Supabase Queues + pg_cron scheduling |
+| OD-A03 | Object storage for permitted raw snapshots/assets | OPEN | high | S3-compatible boundary + retention/right-to-delete requirements; evaluate Supabase Storage initially |
+| OD-A04 | AuthN/AuthZ for Control Room | LOCKED | resolved | ADR-010 — Supabase Auth custom claims + RLS + domain permissions |
 | OD-A05 | Public API authentication/rate-limit strategy | OPEN | medium | V1 public read model vs future developer API |
 | OD-A06 | Cache technology / invalidation | OPEN | medium | begin no-cache/HTTP/Postgres cache unless measured need; document threshold |
 | OD-A07 | Search escalation threshold from Postgres FTS/pg_trgm | WORKING | medium | multilingual benchmark latency/quality threshold; no dedicated engine without evidence |
@@ -66,11 +72,11 @@ Still open:
 | OD-A09 | Deployment topology | OPEN | high | web/API/workers/DB/storage environments and separation |
 | OD-A10 | Backup/restore RPO/RTO | OPEN | critical | define data classes, backup frequency, PITR/export strategy, restore drill |
 | OD-A11 | Canonicalization rule-engine implementation | OPEN | critical | deterministic rule layer + versioning + explainability; AI cannot be authority |
-| OD-A12 | Internal event/outbox pattern | OPEN | high | guarantee canonical change -> search/audit/job projections without distributed inconsistency |
-| OD-A13 | Stable CAS ID format | OPEN | high | sortable/non-provider IDs, merge safety, public URL ergonomics |
+| OD-A12 | Internal event/outbox pattern | LOCKED | resolved | ADR-012 — transactional outbox + idempotent queue consumers |
+| OD-A13 | Stable CAS ID format | LOCKED | resolved | ADR-013 — RFC 9562 UUIDv7, provider-independent |
 | OD-A14 | Physical partitioning/archive strategy | WORKING | medium | do not partition prematurely; define thresholds for Claims/Snapshots/Audit |
-| OD-A15 | Schema migration tooling | OPEN | high | SQL-first/version-controlled migration tool compatible with Postgres/Supabase and CI |
-| OD-A16 | API contract tooling | WORKING | medium | OpenAPI-first or generated contract; choose exact framework/tooling |
+| OD-A15 | Schema migration tooling | LOCKED | resolved | ADR-009 — SQL migrations through Supabase CLI workflow |
+| OD-A16 | API contract tooling | LOCKED | resolved | ADR-011 — OpenAPI through NestJS tooling |
 
 # D. Control Room / automation blockers
 
