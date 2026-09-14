@@ -1,0 +1,75 @@
+{
+  "version": "0.1",
+  "purpose": "Runtime-neutral semantic assertion contract for Cinema and Series validation cases.",
+  "operators": {
+    "same_identity": {
+      "mode": "identity_pair",
+      "required_bindings": ["subject_ref", "object_ref"],
+      "engine_domain": "identity"
+    },
+    "different_identity": {
+      "mode": "identity_pair",
+      "required_bindings": ["subject_ref", "object_ref"],
+      "engine_domain": "identity"
+    },
+    "has_relationship": {
+      "mode": "relationship",
+      "required_bindings": ["subject_ref", "predicate", "object_ref"],
+      "engine_domain": "relationship"
+    },
+    "does_not_have_relationship": {
+      "mode": "relationship",
+      "required_bindings": ["subject_ref", "predicate", "object_ref"],
+      "engine_domain": "relationship"
+    },
+    "has_value": {
+      "mode": "field_value",
+      "required_bindings": ["subject_ref", "predicate"],
+      "engine_domain": "canonical_data"
+    },
+    "does_not_overwrite": {
+      "mode": "claim_preservation",
+      "required_bindings": ["subject_ref", "predicate"],
+      "engine_domain": "canonicalization"
+    },
+    "preserves_claims": {
+      "mode": "claim_set",
+      "required_bindings": ["subject_ref", "predicate"],
+      "engine_domain": "canonicalization"
+    },
+    "resolves_search": {
+      "mode": "search_resolution",
+      "required_bindings": ["subject_ref"],
+      "engine_domain": "search"
+    },
+    "routes_to_review": {
+      "mode": "review_routing",
+      "required_bindings": ["subject_ref"],
+      "engine_domain": "review_routing"
+    },
+    "supports_multiple": {
+      "mode": "cardinality",
+      "required_bindings": ["subject_ref", "predicate"],
+      "engine_domain": "representation"
+    },
+    "custom": {
+      "mode": "manual_or_specialized",
+      "required_bindings": [],
+      "engine_domain": "specialized"
+    }
+  },
+  "result_states": [
+    "PASS",
+    "FAIL_MODEL",
+    "FAIL_ENGINE",
+    "FAIL_DATA",
+    "BLOCKED_EVIDENCE",
+    "NOT_IMPLEMENTED"
+  ],
+  "rules": [
+    "A semantic engine must never convert NOT_IMPLEMENTED into PASS.",
+    "Missing bindings are validation debt, not a passing result.",
+    "custom assertions require an explicitly named specialized evaluator before they can pass automatically.",
+    "Engine results must identify the assertion_id and observed state used to reach the result."
+  ]
+}
