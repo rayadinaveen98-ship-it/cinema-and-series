@@ -21,7 +21,8 @@ They are the truth/evidence layer and should not be rewritten merely to satisfy 
 
 - local entity references;
 - assertion subject/object bindings;
-- predicates required by an operator.
+- predicates required by an operator;
+- identity scope where identity semantics would otherwise be ambiguous.
 
 Bindings are additive. They may not contradict an inline binding already present in a corpus case.
 
@@ -29,9 +30,16 @@ Bindings are additive. They may not contradict an inline binding already present
 
 `operator-contract-v0.1.json` defines the runtime-neutral meaning and minimum bindings for each assertion operator.
 
-Examples:
+Identity assertions explicitly distinguish:
 
-- `same_identity` / `different_identity`: subject + object;
+- `exact_entity` — both refs resolve to the same durable CAS entity;
+- `underlying_work` — refs may be different entity kinds, such as Work and Version, but belong to the same creative Work;
+- `series_lineage` — refs participate in the same program/franchise lineage without asserting exact identity.
+
+A Version and its parent Work must never be assigned the same exact CAS identity merely because `underlying_work` is shared.
+
+Other examples:
+
 - relationship assertions: subject + predicate + object;
 - field/canonicalization assertions: subject + predicate;
 - review/search assertions: subject;
@@ -47,11 +55,33 @@ It reports:
 - `needs_binding`;
 - `manual_or_specialized`.
 
-**Runtime-ready does not mean PASS.** It only means a future runtime adapter has enough structured references to execute the assertion.
+**Runtime-ready does not mean PASS.** It only means an evaluator has enough structured references to execute the assertion.
+
+### Reference states
+
+`reference-state-*.jsonl` are independently structured, evidence-derived semantic graphs used to test the assertion model itself.
+
+`run_reference_semantics.py` executes supported assertions against those graphs.
+
+A reference PASS means:
+
+> the assertion and independently structured reference state agree.
+
+It does **not** mean a production engine is correct.
+
+Production engines must never read reference-state files to calculate their output.
+
+### Future production-engine observations
+
+`engine-observation.schema.json` and `ENGINE_ADAPTER_CONTRACT.md` define the neutral output expected from future Identity, Relationship, Release, Canonicalization, Review-Routing and Search implementations.
+
+The implementation under test exports observed state. The benchmark then evaluates the same semantic assertions against that output.
+
+Reference results and real-engine results must always be reported separately.
 
 ## Runtime result contract
 
-A real engine/reference-fixture adapter must emit one of:
+An evaluator emits one of:
 
 - `PASS`
 - `FAIL_MODEL`
@@ -62,15 +92,16 @@ A real engine/reference-fixture adapter must emit one of:
 
 `NOT_IMPLEMENTED` must never be converted into `PASS`.
 
-Every result must identify:
+Every real engine result must identify:
 
 1. `case_id`;
 2. `assertion_id`;
 3. evaluator/adapter version;
-4. observed state used for comparison;
-5. expected state;
-6. result classification;
-7. reason code / explanation.
+4. implementation revision;
+5. observed state used for comparison;
+6. expected state;
+7. result classification;
+8. reason code / explanation.
 
 ## Migration policy
 
@@ -89,6 +120,16 @@ Priority order:
 
 Do not pad semantic readiness by binding easy assertions while leaving critical identity cases descriptive.
 
-## Current milestone
+Evidence status remains independent from binding completeness. An `evidence_upgrade_needed` case does not become gold merely because it has executable bindings.
 
-The first binding overlay (`bindings-001.jsonl`) covers VC-0156..VC-0165. CI confirmed the overlay mechanism raises runtime readiness without mutating evidence manifests.
+## Current accepted milestone
+
+At the first executable semantic milestone:
+
+- corpus: 165 cases / 371 assertions;
+- search: 213/500 pre-freeze queries;
+- structurally runtime-ready: 76 assertions;
+- first reference benchmark: 12 cases / 33 assertions / 33 PASS;
+- production-engine benchmark: not implemented yet.
+
+The reference benchmark is a validation-foundation milestone, not permission to open the production implementation gate.
