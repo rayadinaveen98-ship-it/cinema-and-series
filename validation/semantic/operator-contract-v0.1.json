@@ -1,16 +1,23 @@
 {
-  "version": "0.1",
+  "version": "0.2",
   "purpose": "Runtime-neutral semantic assertion contract for Cinema and Series validation cases.",
+  "identity_scopes": {
+    "exact_entity": "Two references resolve to the same durable CAS entity.",
+    "underlying_work": "Two references may be different CAS entity kinds, but resolve to the same underlying creative Work.",
+    "series_lineage": "Two references participate in the same program/franchise lineage without asserting exact entity identity."
+  },
   "operators": {
     "same_identity": {
       "mode": "identity_pair",
-      "required_bindings": ["subject_ref", "object_ref"],
-      "engine_domain": "identity"
+      "required_bindings": ["subject_ref", "object_ref", "identity_scope"],
+      "engine_domain": "identity",
+      "notes": "identity_scope is mandatory because exact entity identity and shared underlying Work identity are different semantics."
     },
     "different_identity": {
       "mode": "identity_pair",
       "required_bindings": ["subject_ref", "object_ref"],
-      "engine_domain": "identity"
+      "engine_domain": "identity",
+      "notes": "Defaults to exact durable entity identity unless a future assertion contract explicitly scopes otherwise."
     },
     "has_relationship": {
       "mode": "relationship",
@@ -69,6 +76,8 @@
   "rules": [
     "A semantic engine must never convert NOT_IMPLEMENTED into PASS.",
     "Missing bindings are validation debt, not a passing result.",
+    "same_identity without an explicit identity_scope is not runtime-ready.",
+    "A Version and its parent Work are different CAS entities even when identity_scope=underlying_work evaluates true.",
     "custom assertions require an explicitly named specialized evaluator before they can pass automatically.",
     "Engine results must identify the assertion_id and observed state used to reach the result."
   ]
