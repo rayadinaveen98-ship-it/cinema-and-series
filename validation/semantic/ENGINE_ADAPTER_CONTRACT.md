@@ -40,6 +40,30 @@ The benchmark uses case-local references such as `work_jersey_telugu_2019`.
 
 A production adapter is responsible for mapping those test fixture references to actual seeded CAS entities. The observation may additionally expose the actual `cas_entity_id`, but benchmark assertions must remain valid even if CAS UUIDs change between disposable test databases.
 
+## Set-aware assertion bindings
+
+A semantic binding always retains the existing singular anchors `subject_ref` and, where required by the operator, `object_ref`.
+
+For assertions that genuinely describe more than one subject or object, bindings may additionally provide:
+
+- `subject_refs` — additional subjects governed by the same assertion;
+- `object_refs` — additional objects governed by the same assertion.
+
+These arrays are **additive**, not replacements for required singular bindings. This preserves backward compatibility while allowing the benchmark to test complete groups instead of choosing a convenient representative pair.
+
+Set-aware evaluation rules are strict:
+
+- `same_identity` requires every bound entity to agree at the requested identity scope;
+- `different_identity` requires every bound entity to have a distinct exact identity;
+- `has_relationship` requires every bound subject/object pair in the assertion to exist;
+- `does_not_have_relationship` requires none of those subject/object pairs to exist;
+- field, non-overwrite, claim-preservation, search and review assertions with additional subjects must hold for every bound subject;
+- a partially satisfied set is a failure, never a partial PASS.
+
+This capability exists specifically for cases such as merger predecessors, combined presentations, three-work identity boundaries and restoration properties that apply across a collection. It must not be used to broaden an assertion beyond what its evidence supports.
+
+The observation schema itself remains normalized: adapters emit individual entities, relationships, fields, claims and guards. Set semantics are evaluated by the benchmark against those normalized observations.
+
 ## Identity outputs
 
 For every relevant entity, emit:
@@ -66,6 +90,8 @@ Predicates must use benchmark/domain vocabulary, for example:
 - `release_of_version`
 - `produced_by`
 - `distributed_by`
+- `formed_from`
+- `integrated_from`
 
 An adapter may translate internal relation names into this vocabulary, but the translation table must be version-controlled.
 
