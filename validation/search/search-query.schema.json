@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://cinema-and-series.local/schemas/search-query-v1.json",
+  "title": "Cinema and Series Search Benchmark Query",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "query_id",
+    "query_text",
+    "query_class",
+    "derivation",
+    "target",
+    "expected",
+    "evidence",
+    "tags"
+  ],
+  "properties": {
+    "query_id": {
+      "type": "string",
+      "pattern": "^SQ-[0-9]{4}$"
+    },
+    "query_text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "query_class": {
+      "type": "string",
+      "enum": [
+        "native_exact",
+        "latin_exact",
+        "sourced_alias",
+        "generated_transliteration",
+        "generated_spelling_variant",
+        "minor_typo",
+        "qualified_query",
+        "same_title_collision",
+        "person_alias",
+        "episode_context"
+      ]
+    },
+    "derivation": {
+      "type": "string",
+      "enum": [
+        "source_statement",
+        "source_label",
+        "source_alias",
+        "source_sitelink",
+        "generated_search_only",
+        "generated_qualified_query"
+      ]
+    },
+    "language_code": {
+      "type": ["string", "null"],
+      "minLength": 2
+    },
+    "script_code": {
+      "type": ["string", "null"],
+      "minLength": 4,
+      "maxLength": 4
+    },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["benchmark_ref", "label", "entity_kind"],
+      "properties": {
+        "benchmark_ref": {
+          "type": "string",
+          "pattern": "^[a-z0-9_-]+:[A-Za-z0-9._-]+$"
+        },
+        "label": {"type": "string", "minLength": 1},
+        "entity_kind": {
+          "type": "string",
+          "enum": ["work", "series", "episode", "person", "organization", "franchise", "music"]
+        },
+        "year": {"type": ["integer", "null"], "minimum": 1800, "maximum": 2200},
+        "original_language": {"type": ["string", "null"]}
+      }
+    },
+    "expected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_rank", "must_resolve_target"],
+      "properties": {
+        "max_rank": {"type": "integer", "minimum": 1, "maximum": 100},
+        "must_resolve_target": {"type": "boolean"},
+        "must_show_disambiguation": {"type": "boolean", "default": false},
+        "notes": {"type": "string"}
+      }
+    },
+    "evidence": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source_name", "source_url", "grade", "supports"],
+        "properties": {
+          "source_name": {"type": "string", "minLength": 1},
+          "source_url": {"type": "string", "format": "uri"},
+          "grade": {"type": "string", "enum": ["A", "B", "C"]},
+          "supports": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "notes": {"type": "string"}
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "derivation": {"const": "generated_search_only"}
+        },
+        "required": ["derivation"]
+      },
+      "then": {
+        "properties": {
+          "query_class": {
+            "enum": ["generated_transliteration", "generated_spelling_variant", "minor_typo"]
+          }
+        }
+      }
+    }
+  ]
+}
