@@ -41,3 +41,6 @@ jobs:
 
       - name: Validate multilingual search benchmark manifests
         run: python validation/search/run_search_manifest_validation.py
+
+      - name: Audit pre-freeze search floors
+        run: python validation/search/run_search_floor_audit.py
