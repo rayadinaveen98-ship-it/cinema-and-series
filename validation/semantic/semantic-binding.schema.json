@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://cinema-and-series.local/schemas/semantic-binding-v0.2.json",
-  "title": "Cinema and Series Semantic Binding Overlay v0.2",
+  "$id": "https://cinema-and-series.local/schemas/semantic-binding-v0.3.json",
+  "title": "Cinema and Series Semantic Binding Overlay v0.3",
   "type": "object",
   "additionalProperties": false,
   "required": ["case_id", "entities", "bindings"],
@@ -31,7 +31,19 @@
         "properties": {
           "assertion_id": {"type": "string", "minLength": 1},
           "subject_ref": {"type": "string", "minLength": 1},
+          "subject_refs": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
           "object_ref": {"type": "string", "minLength": 1},
+          "object_refs": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {"type": "string", "minLength": 1}
+          },
           "predicate": {"type": "string", "minLength": 1},
           "identity_scope": {
             "type": "string",
