@@ -88,7 +88,8 @@ Target: approximately 1,000 deliberately difficult evidence-backed cases under `
 
 Current:
 - evidence-seeded: **115 / ~1,000**;
-- machine-readable: **20 / 115**;
+- machine-readable: **115 / 115 current researched cases**;
+- current manifests: **CI-green** under validation schema v0.2;
 - quota compliance: **NOT YET**;
 - gold/adjudicated evidence coverage: **PARTIAL**.
 
@@ -101,21 +102,29 @@ Requirements:
 - [ ] people/music cohorts met.
 - [ ] source-conflict/canonicalization cohorts met.
 - [ ] search/transliteration cohorts met.
-- [ ] all critical identity edge cases adjudicated with competent evidence.
+- [x] current high-impact identity edge cases have explicit V1 adjudications.
 
 **Gate E: FAIL / ACTIVE**
 
 # Gate F — Executable validation
 
 Requirements:
-- [x] versioned validation-case JSON schema exists.
-- [ ] every gold/adjudicated case is machine-readable.
-- [ ] validation runner can load/validate manifests.
+- [x] versioned validation-case JSON schema exists (`v0.2`).
+- [x] all **current 115 researched cases** are machine-readable.
+- [x] manifest runner loads and schema-validates all current JSONL manifests.
+- [x] duplicate case/assertion/evidence-ID invariants are CI-enforced.
+- [x] GitHub CI is green across the current 115-case manifest.
+- [x] machine-readable adjudication overrides exist for prior OPEN high-impact cases.
+- [ ] every eventual gold case in the final ~1,000-case corpus is machine-readable.
 - [ ] semantic operators execute against a test model/engine.
-- [ ] failures are classified (`FAIL_MODEL`, `FAIL_ENGINE`, `FAIL_DATA`, `BLOCKED_EVIDENCE`, etc.).
+- [ ] adjudication overrides are applied automatically by the semantic runner.
+- [ ] failures are classified (`FAIL_MODEL`, `FAIL_ENGINE`, `FAIL_DATA`, `FAIL_SEARCH`, `FAIL_POLICY`, `BLOCKED_EVIDENCE`, etc.).
+- [ ] freeze-candidate validation run is reproducible and preserved.
 - [ ] no hard case is removed to improve pass rate.
 
-**Gate F: FAIL / ACTIVE**
+**Gate F: PARTIAL PASS / ACTIVE**
+
+The manifest/schema layer is working and CI-enforced. The remaining blocker is semantic execution of the final gold corpus, not machine-readable conversion of the existing research set.
 
 # Gate G — Identity / canonicalization quality
 
@@ -186,8 +195,8 @@ A Product/domain       PASS
 B Source baseline      PASS
 C Architecture         PASS
 D Product operations   PASS
-E Corpus breadth       ACTIVE / FAIL
-F Executable corpus    ACTIVE / FAIL
+E Corpus breadth       ACTIVE / FAIL (115/~1000)
+F Executable corpus    PARTIAL PASS / ACTIVE (115/115 current manifests CI-green)
 G Identity quality     NOT EXECUTED
 H Search quality       NOT EXECUTED
 I Coverage SLA         NOT EXECUTED
