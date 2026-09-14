@@ -41,6 +41,7 @@ def load_jsonl(path: Path):
 def main() -> int:
     contract = json.loads(CONTRACT_PATH.read_text(encoding="utf-8"))
     operators = contract["operators"]
+    identity_scopes = set(contract.get("identity_scopes", {}))
     binding_schema = json.loads(BINDING_SCHEMA_PATH.read_text(encoding="utf-8"))
     binding_validator = Draft202012Validator(binding_schema)
 
@@ -97,6 +98,9 @@ def main() -> int:
                     ref = binding.get(ref_key)
                     if ref and ref not in entity_refs:
                         errors.append(f"{case_id}/{assertion_id}: {ref_key}={ref!r} not declared in overlay entities")
+                scope = binding.get("identity_scope")
+                if scope and scope not in identity_scopes:
+                    errors.append(f"{case_id}/{assertion_id}: unknown identity_scope {scope!r}")
 
             overlays[case_id] = overlay
 
@@ -105,6 +109,7 @@ def main() -> int:
     readiness_counts: Counter[str] = Counter()
     missing_binding_counts: Counter[str] = Counter()
     missing_by_operator: defaultdict[str, Counter[str]] = defaultdict(Counter)
+    identity_scope_counts: Counter[str] = Counter()
     assertion_total = 0
 
     for case_id, case in cases.items():
@@ -137,7 +142,7 @@ def main() -> int:
 
             effective = dict(assertion)
             overlay_binding = bindings_by_assertion.get(assertion_id, {})
-            for key in ("subject_ref", "object_ref", "predicate"):
+            for key in ("subject_ref", "object_ref", "predicate", "identity_scope"):
                 overlay_value = overlay_binding.get(key)
                 inline_value = assertion.get(key)
                 if overlay_value and inline_value and overlay_value != inline_value:
@@ -149,6 +154,8 @@ def main() -> int:
 
             operator_counts[operator] += 1
             domain_counts[domain] += 1
+            if effective.get("identity_scope"):
+                identity_scope_counts[effective["identity_scope"]] += 1
 
             required = operators[operator].get("required_bindings", [])
             missing = [name for name in required if not effective.get(name)]
@@ -186,6 +193,7 @@ def main() -> int:
     print("readiness_counts=" + json.dumps(dict(sorted(readiness_counts.items())), sort_keys=True))
     print("operator_counts=" + json.dumps(dict(sorted(operator_counts.items())), sort_keys=True))
     print("domain_counts=" + json.dumps(dict(sorted(domain_counts.items())), sort_keys=True))
+    print("identity_scope_counts=" + json.dumps(dict(sorted(identity_scope_counts.items())), sort_keys=True))
     print("missing_binding_counts=" + json.dumps(dict(sorted(missing_binding_counts.items())), sort_keys=True))
     print(
         "missing_by_operator="
