@@ -25,6 +25,9 @@ SEMANTIC = VALIDATION / "semantic"
 CONTRACT_PATH = SEMANTIC / "operator-contract-v0.1.json"
 BINDING_SCHEMA_PATH = SEMANTIC / "semantic-binding.schema.json"
 
+SCALAR_BINDING_KEYS = ("subject_ref", "object_ref", "predicate", "identity_scope")
+SET_BINDING_KEYS = ("subject_refs", "object_refs")
+
 
 def load_jsonl(path: Path):
     with path.open("r", encoding="utf-8") as fh:
@@ -36,6 +39,14 @@ def load_jsonl(path: Path):
                 yield line_number, json.loads(line)
             except json.JSONDecodeError as exc:
                 raise RuntimeError(f"{path}:{line_number}: invalid JSON: {exc}") from exc
+
+
+def merged_refs(primary: str | None, extras: list[str] | None) -> list[str]:
+    refs: list[str] = []
+    for ref in ([primary] if primary else []) + list(extras or []):
+        if ref not in refs:
+            refs.append(ref)
+    return refs
 
 
 def main() -> int:
@@ -81,7 +92,8 @@ def main() -> int:
                 continue
 
             entity_refs = [e.get("local_ref") for e in overlay.get("entities", [])]
-            if len(entity_refs) != len(set(entity_refs)):
+            entity_ref_set = {ref for ref in entity_refs if ref}
+            if len(entity_refs) != len(entity_ref_set):
                 errors.append(f"{case_id}: duplicate entity local_ref in semantic overlay")
 
             assertion_ids = {a.get("assertion_id") for a in cases[case_id].get("assertions", [])}
@@ -94,10 +106,25 @@ def main() -> int:
                 seen_binding_ids.add(assertion_id)
                 if assertion_id not in assertion_ids:
                     errors.append(f"{case_id}: binding references unknown assertion {assertion_id}")
+
                 for ref_key in ("subject_ref", "object_ref"):
                     ref = binding.get(ref_key)
-                    if ref and ref not in entity_refs:
+                    if ref and ref not in entity_ref_set:
                         errors.append(f"{case_id}/{assertion_id}: {ref_key}={ref!r} not declared in overlay entities")
+
+                for ref_key in SET_BINDING_KEYS:
+                    for ref in binding.get(ref_key, []) or []:
+                        if ref not in entity_ref_set:
+                            errors.append(f"{case_id}/{assertion_id}: {ref_key} contains undeclared ref {ref!r}")
+
+                for primary_key, extras_key in (("subject_ref", "subject_refs"), ("object_ref", "object_refs")):
+                    primary = binding.get(primary_key)
+                    extras = binding.get(extras_key, []) or []
+                    if primary and primary in extras:
+                        errors.append(
+                            f"{case_id}/{assertion_id}: {primary_key}={primary!r} must not be repeated in {extras_key}"
+                        )
+
                 scope = binding.get("identity_scope")
                 if scope and scope not in identity_scopes:
                     errors.append(f"{case_id}/{assertion_id}: unknown identity_scope {scope!r}")
@@ -110,6 +137,7 @@ def main() -> int:
     missing_binding_counts: Counter[str] = Counter()
     missing_by_operator: defaultdict[str, Counter[str]] = defaultdict(Counter)
     identity_scope_counts: Counter[str] = Counter()
+    set_aware_assertions = 0
     assertion_total = 0
 
     for case_id, case in cases.items():
@@ -142,7 +170,7 @@ def main() -> int:
 
             effective = dict(assertion)
             overlay_binding = bindings_by_assertion.get(assertion_id, {})
-            for key in ("subject_ref", "object_ref", "predicate", "identity_scope"):
+            for key in SCALAR_BINDING_KEYS + SET_BINDING_KEYS:
                 overlay_value = overlay_binding.get(key)
                 inline_value = assertion.get(key)
                 if overlay_value and inline_value and overlay_value != inline_value:
@@ -156,6 +184,8 @@ def main() -> int:
             domain_counts[domain] += 1
             if effective.get("identity_scope"):
                 identity_scope_counts[effective["identity_scope"]] += 1
+            if effective.get("subject_refs") or effective.get("object_refs"):
+                set_aware_assertions += 1
 
             required = operators[operator].get("required_bindings", [])
             missing = [name for name in required if not effective.get(name)]
@@ -171,6 +201,20 @@ def main() -> int:
                         errors.append(
                             f"{case_id}/{assertion_id}: effective {ref_key}={ref!r} not present in declared entities"
                         )
+                for ref_key in SET_BINDING_KEYS:
+                    for ref in effective.get(ref_key, []) or []:
+                        if ref not in entity_refs:
+                            errors.append(
+                                f"{case_id}/{assertion_id}: effective {ref_key} contains undeclared ref {ref!r}"
+                            )
+
+            for primary_key, extras_key in (("subject_ref", "subject_refs"), ("object_ref", "object_refs")):
+                primary = effective.get(primary_key)
+                extras = effective.get(extras_key, []) or []
+                if primary and primary in extras:
+                    errors.append(
+                        f"{case_id}/{assertion_id}: effective {primary_key}={primary!r} repeated in {extras_key}"
+                    )
 
             if operator == "custom":
                 readiness_counts["manual_or_specialized"] += 1
@@ -190,6 +234,7 @@ def main() -> int:
     print(f"assertions={assertion_total}")
     print(f"binding_overlays={len(overlays)}")
     print(f"overlay_bindings={overlay_binding_total}")
+    print(f"set_aware_assertions={set_aware_assertions}")
     print("readiness_counts=" + json.dumps(dict(sorted(readiness_counts.items())), sort_keys=True))
     print("operator_counts=" + json.dumps(dict(sorted(operator_counts.items())), sort_keys=True))
     print("domain_counts=" + json.dumps(dict(sorted(domain_counts.items())), sort_keys=True))
