@@ -49,6 +49,21 @@ def filter_candidates(candidates: list[dict], known: dict[str, set[str]]) -> tup
     return filtered, suppressed_dates
 
 
+def matching_sources(candidates: list[dict], registry_payload: dict) -> list[dict]:
+    """Return only source rows needed by retained observations.
+
+    An empty review queue must produce empty SQL so the workflow can truly skip
+    D1 writes instead of touching every registered website source on each run.
+    """
+    source_keys = {candidate.get("source_key") for candidate in candidates if candidate.get("source_key")}
+    if not source_keys:
+        return []
+    return [
+        source for source in registry_payload.get("sources", [])
+        if source.get("active") and source.get("website_url") and source.get("key") in source_keys
+    ]
+
+
 def main() -> int:
     candidates_payload = json.loads(CANDIDATES.read_text(encoding="utf-8"))
     releases_payload = json.loads(RELEASES.read_text(encoding="utf-8"))
@@ -66,11 +81,7 @@ def main() -> int:
     )
     CANDIDATES.write_text(json.dumps(candidates_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    source_keys = {candidate.get("source_key") for candidate in filtered}
-    sources = [
-        source for source in registry_payload.get("sources", [])
-        if source.get("active") and source.get("website_url") and (not source_keys or source.get("key") in source_keys)
-    ]
+    sources = matching_sources(filtered, registry_payload)
     OUT_SQL.write_text(build_sql(filtered, sources), encoding="utf-8")
     print(
         f"website candidate dedupe kept {len(filtered)} observation(s) and suppressed "
