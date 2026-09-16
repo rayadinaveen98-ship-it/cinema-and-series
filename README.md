@@ -1,39 +1,54 @@
 # Cinema and Series
 
-**Cinema and Series** is a long-term cinema and television data platform: a living, source-transparent knowledge database for world cinema and series, with exceptionally deep support for Indian cinema, multilingual identity, production lifecycle, release history, provenance, and change tracking.
+**Cinema and Series** is now building a deliberately focused first product: an India-first movie release experience centered on **movie names, release dates, and premium cinematic presentation**.
 
-## Current stage
+The repository also preserves a much deeper long-term research foundation for a future world-cinema knowledge platform. That research remains valuable reference material, but it no longer blocks the active V1.
 
-**Research Foundation v0.1** — product, source, data, architecture, engine, UX, licensing, and quality decisions are being defined before implementation.
+## Active V1
 
-> No production implementation should begin until the V1 specification package is explicitly frozen.
+The current implementation contract is:
 
-## Core principles
+1. movie names;
+2. reliable release dates;
+3. premium cinematic UI and release-calendar experience.
 
-- Database before UI.
-- Evidence before assumption.
-- Cinema and Series owns its canonical identifiers.
-- Multiple sources before dependency on a single provider.
-- Accuracy before raw record count.
-- Measured coverage instead of fake claims of completeness.
-- Indian cinema is modeled as many language and regional cinema traditions, not as "Bollywood + regional".
-- Original language, native-script title, aliases, transliterations, dubbed versions, remakes, and releases are distinct concepts.
-- A release is an event, not one date field.
-- Upcoming productions have lifecycle history.
-- Important facts require provenance.
-- AI may assist reconciliation; unsupported AI-generated metadata must never become canonical fact.
-- Artwork requires provenance and rights/licensing metadata.
-- No source can directly overwrite canonical truth.
-- Important canonical changes are auditable and recoverable.
+See [`docs/10-execution/V1_FAST_TRACK_PRODUCT_AND_TECH_LOCK.md`](docs/10-execution/V1_FAST_TRACK_PRODUCT_AND_TECH_LOCK.md) for the authoritative active V1 scope, stack and implementation sequence.
+
+## Locked active stack
+
+- React Router v8 + React + TypeScript
+- Tailwind CSS + shadcn/ui + Motion
+- Cloudflare Workers for full-stack hosting/runtime
+- Cloudflare D1 for the V1 catalogue
+- GitHub Actions for scheduled Wikidata/official-source ingestion
+- Wikidata as the open catalogue seed
+- first-party/official evidence for release-date verification
+- YouTube Data API for approved official-channel monitoring once credentials are available
+- Cloudflare R2 only later for rights-safe media if needed
+
+## V1 data principle
+
+Production pages read our own database. They do not depend on live Wikidata, YouTube or other upstream providers.
+
+Wikidata provides discovery/base data; official production houses, studios, distributors, movie sites and approved official channels provide higher-authority release-date evidence. External-source failures may delay refreshes but must not break the public product.
+
+## Future platform research
+
+The existing source, domain, identity, provenance, canonicalization, multilingual, release-history and validation research is retained for future expansion toward a substantially deeper cinema/television database.
+
+The previous ~1,000-case research/validation program is **not an implementation prerequisite for the active fast-track V1**.
 
 ## Repository navigation
 
-Start with [`START_HERE.md`](START_HERE.md).
+For active implementation, start with:
 
-The repository is intended to become the authoritative source of truth for product philosophy, research, source policy, data models, architecture, design, QA, and implementation decisions.
+1. [`docs/10-execution/V1_FAST_TRACK_PRODUCT_AND_TECH_LOCK.md`](docs/10-execution/V1_FAST_TRACK_PRODUCT_AND_TECH_LOCK.md)
+2. [`docs/02-sources/INITIAL_PRODUCTION_SOURCE_BASELINE.md`](docs/02-sources/INITIAL_PRODUCTION_SOURCE_BASELINE.md)
+
+Use [`START_HERE.md`](START_HERE.md) when working on the preserved long-term research platform.
 
 ## Product status
 
-Implementation: **NOT STARTED BY DESIGN**  
-Foundation research: **IN PROGRESS**  
-V1 contract: **NOT YET FROZEN**
+Fast-track V1: **ACTIVE / IMPLEMENTATION AUTHORIZED**  
+Long-term research foundation: **PRESERVED**  
+Target initial platform cost: **₹0 / $0 while within free-tier limits**
