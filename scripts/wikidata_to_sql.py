@@ -3,6 +3,8 @@
 
 The movie identity remains stable (`wd-QID`) when a release-date candidate
 changes. Previous release evidence is retained rather than overwritten.
+Unresolved rows whose label is still only their Wikidata QID are deliberately
+excluded until a human-readable title becomes available.
 
 Wrangler's remote `d1 execute --file` path must not contain explicit SQL
 transaction statements, so this generator emits only idempotent statements.
@@ -24,8 +26,13 @@ def build_statements(payload: dict) -> list[str]:
     statements: list[str] = []
 
     for movie in payload.get("movies", []):
-        qid = esc(movie["wikidata_qid"])
-        title = esc(movie["title"])
+        raw_qid = str(movie["wikidata_qid"])
+        raw_title = str(movie["title"]).strip()
+        if not raw_title or raw_title == raw_qid:
+            continue
+
+        qid = esc(raw_qid)
+        title = esc(raw_title)
         release_date = esc(movie["release_date"])
         languages = movie.get("languages") or ["Unknown"]
         language_name = esc(languages[0])
