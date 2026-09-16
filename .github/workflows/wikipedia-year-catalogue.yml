@@ -58,6 +58,10 @@ jobs:
           max_titles="4000"
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             profile="bootstrap"
+            if [[ "${{ contains(github.event.head_commit.message, '[historical-burst]') }}" == "true" ]]; then
+              profile="all-historical"
+              max_titles="1500"
+            fi
           elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             profile="${{ github.event.inputs.profile }}"
             max_titles="${{ github.event.inputs.max_titles }}"
