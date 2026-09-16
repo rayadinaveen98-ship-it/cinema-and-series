@@ -86,7 +86,7 @@ jobs:
                   try:
                       request = urllib.request.Request(
                           root + path,
-                          headers={"Accept": "application/json", "User-Agent": "CinemaAndSeries-LiveSmoke/1.3"},
+                          headers={"Accept": "application/json", "User-Agent": "CinemaAndSeries-LiveSmoke/1.4"},
                       )
                       with urllib.request.urlopen(request, timeout=20) as response:
                           if response.status != 200:
@@ -98,17 +98,46 @@ jobs:
                           time.sleep(3)
               raise RuntimeError(f"live smoke failed for {path}: {last_error}")
 
+          def get_all_official_movies():
+              movies = []
+              offset = 0
+              expected_total = None
+              while True:
+                  payload = get_json(f"/api/movies?scope=all&official=1&limit=200&offset={offset}")
+                  if payload.get("source") != "d1":
+                      raise RuntimeError(f"official catalogue is not backed by D1: {payload.get('source')}")
+                  page = payload.get("movies") or []
+                  pagination = payload.get("pagination") or {}
+                  if expected_total is None:
+                      expected_total = int(pagination.get("total") or 0)
+                  movies.extend(page)
+                  if not pagination.get("hasMore"):
+                      break
+                  if not page:
+                      raise RuntimeError("official catalogue pagination stalled with hasMore=true")
+                  offset += len(page)
+                  if offset > 10000:
+                      raise RuntimeError("official catalogue smoke exceeded pagination safety ceiling")
+              if len(movies) != int(expected_total or 0):
+                  raise RuntimeError(f"official pagination mismatch: rows={len(movies)} total={expected_total}")
+              return movies
+
           health = get_json("/api/health")
           if health.get("ok") is not True or health.get("database") is not True:
               raise RuntimeError(f"unhealthy production Worker: {health}")
 
-          catalogue = get_json("/api/movies?scope=all")
+          catalogue = get_json("/api/movies?scope=all&limit=60&offset=0")
           movies = catalogue.get("movies") or []
           stats = catalogue.get("stats") or {}
+          pagination = catalogue.get("pagination") or {}
           if catalogue.get("source") != "d1":
               raise RuntimeError(f"production catalogue is not backed by D1: {catalogue.get('source')}")
           if not movies:
               raise RuntimeError("production catalogue returned no movies")
+          if int(pagination.get("total") or 0) != int(stats.get("total") or 0):
+              raise RuntimeError(
+                  f"catalogue pagination/global total mismatch: pagination={pagination.get('total')} stats={stats.get('total')}"
+              )
           if int(stats.get("activeSources") or 0) < 21:
               raise RuntimeError(f"official-source coverage regressed: {stats.get('activeSources')}")
           if not catalogue.get("catalogueUpdatedAt"):
@@ -118,10 +147,10 @@ jobs:
           if leaked_qids:
               raise RuntimeError(f"unresolved Wikidata labels leaked into public catalogue: {leaked_qids[:3]}")
 
-          verified_movies = [movie for movie in movies if movie.get("verificationStatus") == "verified"]
+          verified_movies = get_all_official_movies()
           if len(verified_movies) != int(stats.get("verified") or 0):
               raise RuntimeError(
-                  f"verified movie count mismatch: api rows={len(verified_movies)} stats={stats.get('verified')}"
+                  f"verified movie count mismatch: paged official rows={len(verified_movies)} stats={stats.get('verified')}"
               )
           verified_without_source_names = [
               movie for movie in verified_movies if not str(movie.get("releaseSourceName") or "").strip()
@@ -165,7 +194,8 @@ jobs:
               "live smoke passed:",
               json.dumps(
                   {
-                      "movies": len(movies),
+                      "cataloguePageRows": len(movies),
+                      "catalogueTotal": int(stats.get("total") or 0),
                       "verified": int(stats.get("verified") or 0),
                       "verifiedWithSourceName": len(verified_movies),
                       "activeSources": int(stats.get("activeSources") or 0),
