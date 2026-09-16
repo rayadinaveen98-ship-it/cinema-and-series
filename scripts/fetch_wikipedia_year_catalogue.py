@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Build a broad year-precision movie catalogue from English Wikipedia.
 
-This lane intentionally avoids Wikidata release-date APIs. Wikipedia year +
-country/language categories provide an honest release year; categorymembers
-provides stable page IDs; Wikipedia pageprops optionally provides Wikidata QIDs.
-No fake day/month is created.
+Wikipedia year + country/language categories provide an honest release year.
+The discovery query also requests Wikipedia pageprops, so a Wikidata QID is
+captured in the same request whenever available. A slower page-ID fallback is
+used only for pages whose QID was not returned during discovery.
 
-Rows land in the separate `catalogue_titles` projection. Exact-day release
-intelligence in `movies` remains untouched and higher-trust.
+No fake day/month is created. Rows land in `catalogue_titles`; exact-day
+release intelligence in `movies` remains untouched and higher-trust.
 """
 from __future__ import annotations
 
@@ -26,6 +26,7 @@ MAX_TITLES_PER_RUN = 4000
 CATEGORY_MEMBER_CAP = 140
 PAGEPROP_BATCH = 50
 REQUEST_DELAY_SECONDS = 0.50
+QID_FALLBACK_DELAY_SECONDS = 1.0
 MAX_CONSECUTIVE_CATEGORY_FAILURES = 40
 FAILURE_COOLDOWN_EVERY = 5
 FAILURE_COOLDOWN_SECONDS = 8
@@ -39,6 +40,7 @@ class Discovery:
     country_code: str
     language: str | None
     category: str
+    wikidata_qid: str | None = None
 
 
 def category_year(category: str) -> int:
@@ -61,10 +63,6 @@ def _interleave(values_a: list[base.Seed], values_b: list[base.Seed]) -> list[ba
 
 def ordered_seeds(profile: str) -> list[base.Seed]:
     seeds = base.build_seeds(profile)
-    # Balance India-language discovery with global-country discovery inside each
-    # year. The previous alphabetical group order placed every country bucket
-    # ahead of every India-language bucket and could exhaust a throttled run
-    # before Telugu/Hindi/Tamil/etc. were ever attempted.
     by_year: dict[int, list[base.Seed]] = {}
     for seed in seeds:
         by_year.setdefault(category_year(seed.category), []).append(seed)
@@ -85,27 +83,33 @@ def ordered_seeds(profile: str) -> list[base.Seed]:
 
 
 def category_members(seed: base.Seed, cap: int = CATEGORY_MEMBER_CAP) -> list[Discovery]:
+    """Discover article rows and QIDs in one MediaWiki request family."""
     rows: list[Discovery] = []
     continuation: str | None = None
     year = category_year(seed.category)
     while len(rows) < cap:
         params = {
             "action": "query",
-            "list": "categorymembers",
-            "cmtitle": seed.category,
-            "cmnamespace": "0",
-            "cmtype": "page",
-            "cmlimit": str(min(500, cap - len(rows))),
+            "generator": "categorymembers",
+            "gcmtitle": seed.category,
+            "gcmnamespace": "0",
+            "gcmtype": "page",
+            "gcmlimit": str(min(500, cap - len(rows))),
+            "prop": "pageprops",
+            "ppprop": "wikibase_item",
             "format": "json",
             "formatversion": "2",
             "origin": "*",
         }
         if continuation:
-            params["cmcontinue"] = continuation
+            params["gcmcontinue"] = continuation
         payload = base.request_json(base.ENWIKI_API, params)
-        for member in payload.get("query", {}).get("categorymembers", []):
-            title = str(member.get("title") or "").strip()
-            page_id = int(member.get("pageid") or 0)
+        for page in payload.get("query", {}).get("pages", []):
+            title = str(page.get("title") or "").strip()
+            page_id = int(page.get("pageid") or 0)
+            qid = str(page.get("pageprops", {}).get("wikibase_item") or "").strip() or None
+            if qid and not qid.startswith("Q"):
+                qid = None
             if not title or page_id <= 0 or title.casefold().startswith("list of "):
                 continue
             rows.append(
@@ -116,11 +120,12 @@ def category_members(seed: base.Seed, cap: int = CATEGORY_MEMBER_CAP) -> list[Di
                     country_code=seed.country_code,
                     language=seed.language,
                     category=seed.category,
+                    wikidata_qid=qid,
                 )
             )
             if len(rows) >= cap:
                 break
-        continuation = payload.get("continue", {}).get("cmcontinue")
+        continuation = payload.get("continue", {}).get("gcmcontinue")
         if not continuation:
             break
         time.sleep(REQUEST_DELAY_SECONDS)
@@ -137,13 +142,11 @@ def discover(profile: str, maximum: int) -> tuple[dict[int, list[Discovery]], li
         try:
             rows = category_members(seed)
             consecutive_failures = 0
-            reports.append({"category": seed.category, "status": "ok", "pages": len(rows), "group": seed.group})
+            qids = sum(1 for row in rows if row.wikidata_qid)
+            reports.append({"category": seed.category, "status": "ok", "pages": len(rows), "qids": qids, "group": seed.group})
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as exc:
             consecutive_failures += 1
             reports.append({"category": seed.category, "status": "deferred", "error": str(exc)[:180], "group": seed.group})
-            # Wikimedia throttling can arrive in bursts. Back off periodically,
-            # then continue walking the seed map instead of losing every later
-            # language/country because one burst happened early in the run.
             if consecutive_failures % FAILURE_COOLDOWN_EVERY == 0:
                 time.sleep(FAILURE_COOLDOWN_SECONDS)
             if consecutive_failures >= MAX_CONSECUTIVE_CATEGORY_FAILURES:
@@ -157,14 +160,26 @@ def discover(profile: str, maximum: int) -> tuple[dict[int, list[Discovery]], li
     return by_page, reports
 
 
+def captured_qids(by_page: dict[int, list[Discovery]]) -> dict[int, str]:
+    resolved: dict[int, str] = {}
+    for page_id, rows in by_page.items():
+        for row in rows:
+            if row.wikidata_qid:
+                resolved[page_id] = row.wikidata_qid
+                break
+    return resolved
+
+
 def chunks(values: list[int], size: int):
     for index in range(0, len(values), size):
         yield values[index:index + size]
 
 
 def resolve_qids(page_ids: list[int]) -> tuple[dict[int, str], list[dict]]:
+    """Fallback resolver for only the pages missing a QID during discovery."""
     resolved: dict[int, str] = {}
     reports: list[dict] = []
+    consecutive_failures = 0
     for batch_index, batch in enumerate(chunks(page_ids, PAGEPROP_BATCH)):
         try:
             payload = base.request_json(
@@ -187,12 +202,14 @@ def resolve_qids(page_ids: list[int]) -> tuple[dict[int, str], list[dict]]:
                 if page_id > 0 and qid.startswith("Q"):
                     resolved[page_id] = qid
                     found += 1
+            consecutive_failures = 0
             reports.append({"batch": batch_index, "status": "ok", "requested": len(batch), "resolved": found})
         except Exception as exc:
-            # QID is useful but optional. Stable Wikipedia page ID is enough to
-            # retain the title without discarding a whole batch.
+            consecutive_failures += 1
             reports.append({"batch": batch_index, "status": "deferred", "requested": len(batch), "error": str(exc)[:180]})
-        time.sleep(REQUEST_DELAY_SECONDS)
+            if consecutive_failures % 3 == 0:
+                time.sleep(FAILURE_COOLDOWN_SECONDS)
+        time.sleep(QID_FALLBACK_DELAY_SECONDS)
     return resolved, reports
 
 
@@ -200,9 +217,6 @@ def merge_discoveries(by_page: dict[int, list[Discovery]], qids: dict[int, str])
     movies: list[dict] = []
     for page_id, discoveries in by_page.items():
         years = sorted({item.release_year for item in discoveries})
-        # Categories occasionally carry an article in more than one year. Do
-        # not silently decide a precise year in that conflict; choose earliest
-        # only as discovery sorting metadata and expose all observed years.
         release_year = years[0]
         countries = sorted({item.country_code for item in discoveries if item.country_code})
         languages = sorted({item.language for item in discoveries if item.language})
@@ -240,9 +254,7 @@ def sql_quote(value: object | None) -> str:
 
 
 def build_sql(movies: list[dict]) -> str:
-    statements = [
-        "-- Wikipedia-native year-precision catalogue discovery; exact-day movies are untouched.",
-    ]
+    statements = ["-- Wikipedia-native year-precision catalogue discovery; exact-day movies are untouched."]
     for movie in movies:
         statements.append(
             "INSERT INTO catalogue_titles "
@@ -275,7 +287,11 @@ def main() -> int:
     if not by_page:
         print("No Wikipedia catalogue pages discovered.")
         return 1
-    qids, qid_reports = resolve_qids(list(by_page))
+
+    qids = captured_qids(by_page)
+    missing_page_ids = [page_id for page_id in by_page if page_id not in qids]
+    fallback_qids, qid_reports = resolve_qids(missing_page_ids) if missing_page_ids else ({}, [])
+    qids.update(fallback_qids)
     movies = merge_discoveries(by_page, qids)[:maximum]
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
@@ -287,7 +303,7 @@ def main() -> int:
                 "source": "english_wikipedia_categories",
                 "date_precision": "year",
                 "max_titles_per_run": maximum,
-                "selection_policy": "Wikipedia year/category membership only; stable page identity; optional QID via Wikipedia pageprops; no invented day/month",
+                "selection_policy": "Wikipedia year/category membership only; stable page identity; QID captured from Wikipedia pageprops during discovery when available; no invented day/month",
                 "category_report": category_reports,
                 "qid_resolution_report": qid_reports,
                 "movies": movies,
@@ -299,9 +315,10 @@ def main() -> int:
     )
     args.sql_out.parent.mkdir(parents=True, exist_ok=True)
     args.sql_out.write_text(build_sql(movies), encoding="utf-8")
+    native_count = len(captured_qids(by_page))
     print(
         f"Wikipedia year catalogue wrote {len(movies)} title(s); "
-        f"{len(qids)} resolved to Wikidata QIDs; exact-day release table untouched"
+        f"{len(qids)} have Wikidata QIDs ({native_count} captured during discovery); exact-day release table untouched"
     )
     return 0
 
