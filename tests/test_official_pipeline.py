@@ -35,6 +35,39 @@ class OfficialPipelineTests(unittest.TestCase):
         self.assertIn("release_date_source=excluded.release_date_source", sql)
         self.assertIn("is_official", sql)
 
+    def test_title_only_release_uses_title_language_and_year_identity(self):
+        statements = module.build_statements(
+            {
+                "releases": [
+                    {
+                        "title": "Love & War",
+                        "wikidata_qid": None,
+                        "language": "Hindi",
+                        "country_code": "IN",
+                        "release_date": "2027-03-20",
+                        "source_key": "example_studio",
+                        "source_type": "official_website",
+                        "source_title": "Love & War release announcement",
+                        "source_url": "https://example.com/love-and-war",
+                    }
+                ]
+            },
+            {"sources": []},
+        )
+        sql = "\n".join(statements)
+        self.assertIn("UPDATE movies SET", sql)
+        self.assertIn("language_name COLLATE NOCASE='Hindi'", sql)
+        self.assertIn("BETWEEN 2026 AND 2028", sql)
+        self.assertIn("='lovewar'", sql)
+        self.assertIn("official-love-war-2027-hindi", sql)
+
+    def test_title_identity_ignores_common_punctuation(self):
+        self.assertEqual(module.canonical_title("Love & War"), "lovewar")
+        self.assertEqual(module.canonical_title("Love-and-War!"), "lovewar")
+        expression = module.sql_title_key("title")
+        self.assertIn("lower(trim(title))", expression)
+        self.assertIn("replace(", expression)
+
     def test_title_only_release_reuses_existing_title_before_insert(self):
         statements = module.build_statements(
             {
@@ -57,7 +90,7 @@ class OfficialPipelineTests(unittest.TestCase):
         sql = "\n".join(statements)
         self.assertIn("UPDATE movies SET", sql)
         self.assertIn("WHERE NOT EXISTS", sql)
-        self.assertIn("official-dragon", sql)
+        self.assertIn("official-dragon-2027-telugu", sql)
 
     def test_source_registry_is_idempotent(self):
         statements = module.build_statements(
