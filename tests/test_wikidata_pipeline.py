@@ -1,5 +1,9 @@
 import unittest
+import urllib.error
+from email.message import Message
+from unittest.mock import patch
 
+from scripts import fetch_wikidata
 from scripts.fetch_wikidata import normalize
 from scripts.wikidata_to_sql import build_statements
 
@@ -96,6 +100,38 @@ class WikidataNormalizationTests(unittest.TestCase):
             }
         )
         self.assertEqual(statements, [])
+
+    def test_long_rate_limit_is_deferred_without_sleeping(self):
+        headers = Message()
+        headers["Retry-After"] = "1000"
+        error = urllib.error.HTTPError(
+            url=fetch_wikidata.ENDPOINTS[0],
+            code=429,
+            msg="Too Many Requests",
+            hdrs=headers,
+            fp=None,
+        )
+        with patch.object(fetch_wikidata, "fetch", side_effect=error), patch.object(fetch_wikidata.time, "sleep") as sleep:
+            with self.assertRaises(fetch_wikidata.WikidataDeferred):
+                fetch_wikidata.fetch_with_resilience()
+        sleep.assert_not_called()
+
+    def test_bounded_rate_limit_cooldown_can_retry(self):
+        headers = Message()
+        headers["Retry-After"] = "65"
+        error = urllib.error.HTTPError(
+            url=fetch_wikidata.ENDPOINTS[0],
+            code=429,
+            msg="Too Many Requests",
+            hdrs=headers,
+            fp=None,
+        )
+        payload = {"results": {"bindings": []}}
+        with patch.object(fetch_wikidata, "fetch", side_effect=[error, payload]) as fetch, patch.object(fetch_wikidata.time, "sleep") as sleep:
+            result = fetch_wikidata.fetch_with_resilience()
+        self.assertEqual(result, payload)
+        self.assertEqual(fetch.call_count, 2)
+        sleep.assert_called_once_with(65)
 
 
 if __name__ == "__main__":
