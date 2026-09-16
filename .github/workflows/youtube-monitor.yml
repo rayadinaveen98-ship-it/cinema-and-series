@@ -7,8 +7,10 @@ on:
     paths:
       - ".github/workflows/youtube-monitor.yml"
       - "scripts/youtube_monitor.py"
+      - "scripts/filter_youtube_candidates.py"
       - "scripts/cloudflare_bootstrap.py"
       - "data/official/source_registry.json"
+      - "data/official/releases.json"
       - "migrations/**"
   schedule:
     - cron: "27 */6 * * *"
@@ -46,6 +48,10 @@ jobs:
       - name: Poll official channel uploads
         if: steps.youtube.outputs.ready == 'true'
         run: python scripts/youtube_monitor.py
+
+      - name: Suppress already verified YouTube signals
+        if: steps.youtube.outputs.ready == 'true'
+        run: python scripts/filter_youtube_candidates.py
 
       - name: Validate candidate payload
         if: steps.youtube.outputs.ready == 'true'
@@ -94,5 +100,5 @@ jobs:
           if [[ -s data/generated/youtube-candidates-upsert.sql ]]; then
             npx wrangler d1 execute cinema-and-series --remote --file=data/generated/youtube-candidates-upsert.sql
           else
-            echo "No release-date candidates detected in the latest official uploads."
+            echo "No new release-date candidates detected in the latest official uploads."
           fi
