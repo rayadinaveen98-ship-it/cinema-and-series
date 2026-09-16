@@ -18,9 +18,11 @@ jobs:
   authorize-and-dispatch:
     if: github.actor == 'rayadinaveen98-ship-it'
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 6
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Validate explicit operator request
         id: request
@@ -54,11 +56,58 @@ jobs:
           if not re.fullmatch(r"[0-9a-f]{40}", head_sha):
               raise SystemExit("validated_analysis_head_sha must be a full 40-character commit SHA")
 
+          expected_summary = request.get("expected_summary")
+          fields = ("candidates", "updates", "ambiguous", "missing_claim", "missing_label")
+          if not isinstance(expected_summary, dict):
+              raise SystemExit("expected_summary must be an object")
+          for field in fields:
+              value = expected_summary.get(field)
+              if not isinstance(value, int) or value < 0:
+                  raise SystemExit(f"expected_summary.{field} must be a non-negative integer")
+          if expected_summary["updates"] + expected_summary["ambiguous"] + expected_summary["missing_claim"] + expected_summary["missing_label"] != expected_summary["candidates"]:
+              raise SystemExit("expected_summary categories must partition candidates exactly")
+          if expected_summary["updates"] <= 0:
+              raise SystemExit("write request must contain at least one analyzed update")
+
           output = Path(os.environ["GITHUB_OUTPUT"])
           with output.open("a", encoding="utf-8") as handle:
               handle.write(f"analysis_run_id={run_id}\n")
               handle.write(f"analysis_head_sha={head_sha}\n")
           print(f"Authorized request references analysis run {run_id} at {head_sha}")
+          PY
+
+      - name: Prove enrichment-critical code is unchanged since analysis
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANALYSIS_HEAD_SHA: ${{ steps.request.outputs.analysis_head_sha }}
+        shell: bash
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/compare/${ANALYSIS_HEAD_SHA}...${GITHUB_SHA}" > /tmp/analysis-to-request-compare.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          compare = json.loads(Path("/tmp/analysis-to-request-compare.json").read_text(encoding="utf-8"))
+          if compare.get("status") not in {"ahead", "identical"}:
+              raise SystemExit(f"analysis commit is not an ancestor of write request: {compare.get('status')}")
+
+          exact_critical = {
+              ".github/workflows/series-language-enrichment-v1.yml",
+              "scripts/enrich_series_languages.py",
+              "scripts/fetch_mediawiki_backfill.py",
+              "scripts/cloudflare_bootstrap.py",
+              "tests/test_series_language_enrichment.py",
+              "package.json",
+              "package-lock.json",
+          }
+          changed = [item.get("filename") for item in compare.get("files", []) if item.get("filename")]
+          blocked = sorted(
+              path for path in changed
+              if path in exact_critical or path.startswith("migrations/")
+          )
+          if blocked:
+              raise SystemExit("enrichment-critical code changed after analysis: " + ", ".join(blocked))
+          print("ANALYZED_CODE_IMMUTABLE=true")
           PY
 
       - name: Verify successful immutable analysis evidence
@@ -71,6 +120,9 @@ jobs:
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ANALYSIS_RUN_ID}" > /tmp/analysis-run.json
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ANALYSIS_RUN_ID}/jobs?per_page=100" > /tmp/analysis-jobs.json
           gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ANALYSIS_RUN_ID}/artifacts?per_page=100" > /tmp/analysis-artifacts.json
+          rm -rf /tmp/analysis-summary
+          mkdir -p /tmp/analysis-summary
+          gh run download "${ANALYSIS_RUN_ID}" -n series-language-enrichment-v1-summary -D /tmp/analysis-summary
 
           python - <<'PY'
           import json
@@ -80,6 +132,7 @@ jobs:
           run = json.loads(Path("/tmp/analysis-run.json").read_text(encoding="utf-8"))
           jobs_payload = json.loads(Path("/tmp/analysis-jobs.json").read_text(encoding="utf-8"))
           artifacts_payload = json.loads(Path("/tmp/analysis-artifacts.json").read_text(encoding="utf-8"))
+          request = json.loads(Path("ops/series-language-enrichment-write-request.json").read_text(encoding="utf-8"))
           expected_sha = os.environ["ANALYSIS_HEAD_SHA"].lower()
 
           checks = {
@@ -106,11 +159,24 @@ jobs:
           if len(summaries) != 1:
               raise SystemExit("analysis run must retain exactly one unexpired aggregate summary artifact")
 
+          summary_path = Path("/tmp/analysis-summary/series-language-enrichment-v1-summary.json")
+          summary = json.loads(summary_path.read_text(encoding="utf-8"))
+          if summary.get("state") != "complete" or summary.get("shards") != 8:
+              raise SystemExit("aggregate summary is not a complete 8-shard analysis")
+
+          expected_summary = request["expected_summary"]
+          for field in ("candidates", "updates", "ambiguous", "missing_claim", "missing_label"):
+              if summary.get(field) != expected_summary.get(field):
+                  raise SystemExit(
+                      f"aggregate summary mismatch for {field}: expected {expected_summary.get(field)}, got {summary.get(field)}"
+                  )
+
           print("ANALYSIS_WRITE_GATE_VERIFIED=" + json.dumps({
               "run_id": run.get("id"),
               "head_sha": run.get("head_sha"),
               "required_jobs": len(required_jobs),
               "summary_artifact_id": summaries[0].get("id"),
+              "summary": expected_summary,
           }, sort_keys=True))
           PY
 
