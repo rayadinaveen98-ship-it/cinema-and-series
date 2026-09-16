@@ -58,14 +58,14 @@ class OfficialPipelineTests(unittest.TestCase):
         self.assertIn("UPDATE movies SET", sql)
         self.assertIn("language_name COLLATE NOCASE='Hindi'", sql)
         self.assertIn("BETWEEN 2026 AND 2028", sql)
-        self.assertIn("='lovewar'", sql)
+        self.assertIn("='loveandwar'", sql)
         self.assertIn("official-love-war-2027-hindi", sql)
 
-    def test_title_identity_ignores_common_punctuation(self):
-        self.assertEqual(module.canonical_title("Love & War"), "lovewar")
-        self.assertEqual(module.canonical_title("Love-and-War!"), "lovewar")
+    def test_title_identity_ignores_common_punctuation_and_ampersand_alias(self):
+        self.assertEqual(module.canonical_title("Love & War"), "loveandwar")
+        self.assertEqual(module.canonical_title("Love-and-War!"), "loveandwar")
         expression = module.sql_title_key("title")
-        self.assertIn("lower(trim(title))", expression)
+        self.assertIn("replace(lower(trim(title)),'&','and')", expression)
         self.assertIn("replace(", expression)
 
     def test_title_only_release_reuses_existing_title_before_insert(self):
