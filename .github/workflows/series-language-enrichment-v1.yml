@@ -2,7 +2,7 @@ name: Series Language Enrichment V1
 
 on:
   push:
-    branches: [main, "feature/series-language-quota-resilience"]
+    branches: [main]
     paths:
       - "migrations/0019_series_language_provenance.sql"
       - "scripts/enrich_series_languages.py"
