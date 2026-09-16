@@ -13,14 +13,18 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from observation_sql import build_observation_sql
 from release_identity import candidate_matches_verified_release, verified_titles_by_source_date
-from website_monitor import build_sql
 
 CANDIDATES = Path("data/generated/website-release-candidates.json")
 RELEASES = Path("data/official/releases.json")
 REGISTRY = Path("data/official/source_registry.json")
 OUT_SQL = Path("data/generated/website-candidates-upsert.sql")
 IDENTITY_FIELDS = ("page_title", "review_title", "context_excerpts")
+
+
+def build_sql(candidates: list[dict], sources: list[dict]) -> str:
+    return build_observation_sql(candidates, sources, "website")
 
 
 def filter_candidates(
@@ -75,7 +79,7 @@ def main() -> int:
     candidates_payload["policy"] = (
         "first-party websites only; explicit day-level release signals become pending review observations; "
         "a date is suppressed only when the same source/date candidate explicitly names the same verified movie; "
-        "never auto-verify"
+        "short local evidence context is preserved for human review; never auto-verify"
     )
     CANDIDATES.write_text(json.dumps(candidates_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

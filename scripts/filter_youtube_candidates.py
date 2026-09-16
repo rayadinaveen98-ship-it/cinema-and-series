@@ -12,14 +12,19 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from observation_sql import build_observation_sql
 from release_identity import candidate_matches_verified_release, verified_titles_by_source_date
-from youtube_monitor import build_sql, sources_for_candidates
+from youtube_monitor import sources_for_candidates
 
 CANDIDATES = Path("data/generated/youtube-release-candidates.json")
 RELEASES = Path("data/official/releases.json")
 REGISTRY = Path("data/official/source_registry.json")
 OUT_SQL = Path("data/generated/youtube-candidates-upsert.sql")
 IDENTITY_FIELDS = ("video_title",)
+
+
+def build_sql(candidates: list[dict], sources: list[dict] | None = None) -> str:
+    return build_observation_sql(candidates, sources, "youtube")
 
 
 def filter_candidates(

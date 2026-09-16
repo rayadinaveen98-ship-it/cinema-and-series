@@ -27,6 +27,20 @@ type SourcesRow = {
   latest_updated_at: string | null;
 };
 
+type ObservationRow = {
+  id: number;
+  source_key: string;
+  source_name: string | null;
+  external_id: string;
+  external_url: string;
+  title: string;
+  published_at: string | null;
+  candidate_release_date: string | null;
+  candidate_dates_json: string;
+  evidence_contexts_json: string;
+  observed_at: string;
+};
+
 const previewMovies = [
   { id: "preview-1", title: "A Film in Production", language: "Telugu", releaseDate: "2026-09-18", verificationStatus: "unconfirmed", releaseSource: "preview" },
   { id: "preview-2", title: "Festival Premiere", language: "Malayalam", releaseDate: "2026-09-19", verificationStatus: "supported", releaseSource: "preview" },
@@ -39,10 +53,10 @@ const movieColumns = `m.id, m.wikidata_qid, m.title, m.native_title, m.language_
   m.verification_status, m.release_date_source, s.source_name AS release_source_name`;
 const movieSourceJoin = "LEFT JOIN source_channels s ON s.source_key = m.release_date_source";
 
-function json(data: unknown, status = 200) {
+function json(data: unknown, status = 200, cacheControl = "public, max-age=60, s-maxage=300") {
   return Response.json(data, {
     status,
-    headers: { "Cache-Control": "public, max-age=60, s-maxage=300" },
+    headers: { "Cache-Control": cacheControl },
   });
 }
 
@@ -51,12 +65,65 @@ function d1TimestampToIso(value: string | null | undefined) {
   return `${value.replace(" ", "T")}Z`;
 }
 
+function parseJsonArray(value: string | null | undefined): unknown[] {
+  if (!value) return [];
+  try {
+    const parsed: unknown = JSON.parse(value);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/health") {
       return json({ ok: true, database: Boolean(env.DB), now: new Date().toISOString() });
+    }
+
+    if (url.pathname === "/api/review-observations") {
+      if (!env.DB) {
+        return json(
+          { observations: [], source: "preview", generatedAt: new Date().toISOString() },
+          200,
+          "no-store",
+        );
+      }
+
+      const result = await env.DB.prepare(
+        `SELECT o.id, o.source_key, s.source_name, o.external_id, o.external_url, o.title,
+                o.published_at, o.candidate_release_date, o.candidate_dates_json,
+                o.evidence_contexts_json, o.observed_at
+         FROM source_observations o
+         LEFT JOIN source_channels s ON s.source_key = o.source_key
+         WHERE o.review_status = 'pending_review'
+         ORDER BY COALESCE(o.candidate_release_date, '9999-12-31') ASC, o.observed_at DESC
+         LIMIT 100`,
+      ).all<ObservationRow>();
+
+      return json(
+        {
+          observations: result.results.map((observation) => ({
+            id: observation.id,
+            sourceKey: observation.source_key,
+            sourceName: observation.source_name ?? observation.source_key,
+            externalId: observation.external_id,
+            externalUrl: observation.external_url,
+            title: observation.title,
+            publishedAt: observation.published_at ?? undefined,
+            candidateReleaseDate: observation.candidate_release_date ?? undefined,
+            candidateDates: parseJsonArray(observation.candidate_dates_json),
+            evidenceContexts: parseJsonArray(observation.evidence_contexts_json),
+            observedAt: d1TimestampToIso(observation.observed_at),
+          })),
+          source: "d1",
+          generatedAt: new Date().toISOString(),
+        },
+        200,
+        "no-store",
+      );
     }
 
     if (url.pathname === "/api/movies") {

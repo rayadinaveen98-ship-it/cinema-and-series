@@ -8,6 +8,7 @@ on:
       - ".github/workflows/website-monitor.yml"
       - "scripts/website_monitor.py"
       - "scripts/filter_website_candidates.py"
+      - "scripts/observation_sql.py"
       - "scripts/release_identity.py"
       - "scripts/cloudflare_bootstrap.py"
       - "data/official/source_registry.json"
