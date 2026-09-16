@@ -8,8 +8,9 @@ reviewable candidates for D1. Sources may be registered by stable channel ID or
 by an official @handle; handle-only entries are resolved through channels.list.
 
 To avoid catalogue metadata and post-release promotional chatter being mistaken
-for useful release announcements, only recent uploads are considered and a
-candidate release date cannot precede the upload date.
+for useful release announcements, only recent uploads are considered, a
+candidate release date cannot precede the upload date, and response/review
+promotional videos are excluded from the review queue.
 """
 from __future__ import annotations
 
@@ -38,6 +39,11 @@ MONTHS = {
 }
 RELEASE_CONTEXT = re.compile(
     r"\b(release|releasing|releases|worldwide|cinema|cinemas|theatre|theatres|theater|theaters|in theatres|in cinemas|from)\b",
+    re.IGNORECASE,
+)
+LOW_VALUE_PROMO = re.compile(
+    r"\b(public|audience|fan|fans)?\s*(response|responses|reaction|reactions|review|reviews)\b|"
+    r"\bsuccess\s*(meet|party|celebration|celebrations)\b",
     re.IGNORECASE,
 )
 DATE_PATTERNS = [
@@ -85,6 +91,10 @@ def extract_release_dates(text: str) -> list[str]:
             if parsed:
                 dates.add(parsed)
     return sorted(dates)
+
+
+def is_low_value_promo(title: str) -> bool:
+    return bool(LOW_VALUE_PROMO.search(title))
 
 
 def parse_published_at(value: str | None) -> datetime | None:
@@ -197,6 +207,8 @@ def fetch_latest_uploads(
         if not video_id:
             continue
         title = snippet.get("title", "").strip()
+        if is_low_value_promo(title):
+            continue
         description = snippet.get("description", "").strip()
         published_at = snippet.get("publishedAt")
         dates = filter_plausible_release_dates(
@@ -295,7 +307,7 @@ def main() -> int:
         json.dumps(
             {
                 "generated_at": scan_time.isoformat(),
-                "policy": "official-channel observations only; recent uploads and same-day/future release dates become pending review candidates; never auto-verify",
+                "policy": "official-channel observations only; recent non-response/review uploads and same-day/future release dates become pending review candidates; never auto-verify",
                 "channels_registered": len(sources),
                 "channels_checked": channels_checked,
                 "candidates": candidates,
