@@ -23,21 +23,18 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  SHARD_COUNT: "8"
+  SHARD_SIZE: "1200"
+  SNAPSHOT_LIMIT: "8000"
+
 jobs:
-  enrich:
-    name: enrich-shard-${{ matrix.shard }}
+  prepare:
     runs-on: ubuntu-24.04
-    timeout-minutes: 12
-    strategy:
-      fail-fast: false
-      max-parallel: 1
-      matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    timeout-minutes: 8
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      SHARD_SIZE: "1000"
-      SHARD_INDEX: ${{ matrix.shard }}
     steps:
       - uses: actions/checkout@v4
 
@@ -67,25 +64,81 @@ jobs:
         run: python scripts/cloudflare_bootstrap.py
 
       - name: Capture current production language baseline
-        if: matrix.shard == 0
         run: |
           npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS total_series, SUM(CASE WHEN language_name IS NOT NULL AND TRIM(language_name)<>'' AND LOWER(language_name)<>'unknown' THEN 1 ELSE 0 END) AS language_known FROM series_titles;"
 
-      - name: Capture unknown-language SeriesRun shard
+      - name: Capture stable unknown-language SeriesRun snapshot
         shell: bash
         run: |
           mkdir -p data/generated
-          OFFSET=$((SHARD_INDEX * SHARD_SIZE))
-          echo "Capturing shard ${SHARD_INDEX}: LIMIT ${SHARD_SIZE} OFFSET ${OFFSET}"
-          npx wrangler d1 execute cinema-and-series --remote --json \
-            --command "SELECT id,wikidata_qid,title,language_name FROM series_titles WHERE (language_name IS NULL OR TRIM(language_name)='' OR LOWER(language_name)='unknown') AND wikidata_qid IS NOT NULL ORDER BY wikidata_qid LIMIT ${SHARD_SIZE} OFFSET ${OFFSET};" \
-            > "data/generated/series-language-candidates-${SHARD_INDEX}.json"
+          SNAPSHOT="data/generated/series-language-candidates-snapshot.json"
+          if ! npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,language_name FROM series_titles WHERE (language_name IS NULL OR TRIM(language_name)='' OR LOWER(language_name)='unknown') AND wikidata_qid IS NOT NULL ORDER BY wikidata_qid LIMIT ${SNAPSHOT_LIMIT};" \
+            > "$SNAPSHOT"; then
+            echo "D1 snapshot capture failed; response follows:"
+            cat "$SNAPSHOT" || true
+            exit 1
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("data/generated/series-language-candidates-snapshot.json")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          rows = []
+          for batch in payload if isinstance(payload, list) else [payload]:
+              if isinstance(batch, dict):
+                  rows.extend(batch.get("results") or [])
+          if len(rows) > 8000:
+              raise SystemExit(f"snapshot cap exceeded: {len(rows)}")
+          print(f"SERIES_LANGUAGE_SNAPSHOT_ROWS={len(rows)}")
+          PY
 
-      - name: Resolve explicit Wikidata P364 languages
+      - name: Preserve stable candidate snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: series-language-enrichment-v1-candidate-snapshot
+          path: data/generated/series-language-candidates-snapshot.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Apply D1 migration before production write mode
+        if: github.event_name == 'workflow_dispatch' && inputs.apply_writes == true && github.ref == 'refs/heads/main'
+        run: npx wrangler d1 migrations apply cinema-and-series --remote
+
+  enrich:
+    name: enrich-shard-${{ matrix.shard }}
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    env:
+      SHARD_INDEX: ${{ matrix.shard }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Restore stable candidate snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: series-language-enrichment-v1-candidate-snapshot
+          path: data/generated
+
+      - name: Resolve explicit Wikidata P364 language shard
         run: |
           python scripts/enrich_series_languages.py \
-            --input "data/generated/series-language-candidates-${SHARD_INDEX}.json" \
+            --input data/generated/series-language-candidates-snapshot.json \
             --max-series "${SHARD_SIZE}" \
+            --shard-index "${SHARD_INDEX}" \
+            --shard-count "${SHARD_COUNT}" \
             --out-json "data/generated/series-language-enrichment-v1-${SHARD_INDEX}.json" \
             --sql-out "data/generated/series-language-enrichment-v1-${SHARD_INDEX}.sql"
 
@@ -95,16 +148,18 @@ jobs:
           import json
           import os
           from pathlib import Path
-          shard = os.environ["SHARD_INDEX"]
+          shard = int(os.environ["SHARD_INDEX"])
           report = json.loads(Path(f"data/generated/series-language-enrichment-v1-{shard}.json").read_text(encoding="utf-8"))
           candidates = int(report.get("candidate_count") or 0)
           updates = int(report.get("update_count") or 0)
+          if report.get("shard_index") != shard or report.get("shard_count") != int(os.environ["SHARD_COUNT"]):
+              raise SystemExit("shard metadata mismatch")
           if candidates > int(os.environ["SHARD_SIZE"]):
               raise SystemExit(f"candidate cap exceeded: {candidates}")
           if updates > candidates:
               raise SystemExit(f"updates exceed candidates: updates={updates} candidates={candidates}")
           print("SERIES_LANGUAGE_ENRICHMENT_SHARD_VALIDATED=" + json.dumps({
-              "shard": int(shard),
+              "shard": shard,
               "candidates": candidates,
               "updates": updates,
               "ambiguous": report.get("ambiguous_count", 0),
@@ -118,7 +173,6 @@ jobs:
         with:
           name: series-language-enrichment-v1-analysis-shard-${{ matrix.shard }}
           path: |
-            data/generated/series-language-candidates-${{ matrix.shard }}.json
             data/generated/series-language-enrichment-v1-${{ matrix.shard }}.json
             data/generated/series-language-enrichment-v1-${{ matrix.shard }}.sql
           if-no-files-found: error
@@ -126,12 +180,20 @@ jobs:
 
       - name: Explain write gate on analysis runs
         if: github.event_name != 'workflow_dispatch' || inputs.apply_writes != true
-        run: |
-          echo "Shard analysis complete. No production mutation requested."
+        run: echo "Shard analysis complete. No production mutation requested."
 
-      - name: Apply D1 migrations once before production writes
-        if: github.event_name == 'workflow_dispatch' && inputs.apply_writes == true && github.ref == 'refs/heads/main' && matrix.shard == 0
-        run: npx wrangler d1 migrations apply cinema-and-series --remote
+      - uses: actions/setup-node@v4
+        if: github.event_name == 'workflow_dispatch' && inputs.apply_writes == true && github.ref == 'refs/heads/main'
+        with:
+          node-version: 22
+
+      - name: Install Wrangler for write mode
+        if: github.event_name == 'workflow_dispatch' && inputs.apply_writes == true && github.ref == 'refs/heads/main'
+        run: npm install --no-audit --no-fund
+
+      - name: Bind production D1 for write mode
+        if: github.event_name == 'workflow_dispatch' && inputs.apply_writes == true && github.ref == 'refs/heads/main'
+        run: python scripts/cloudflare_bootstrap.py
 
       - name: Apply provenance-safe language shard updates
         if: github.event_name == 'workflow_dispatch' && inputs.apply_writes == true && github.ref == 'refs/heads/main'
@@ -144,8 +206,81 @@ jobs:
             echo "No explicit P364 language updates in shard ${SHARD_INDEX}."
           fi
 
-      - name: Verify production language coverage after final shard
-        if: github.event_name == 'workflow_dispatch' && inputs.apply_writes == true && github.ref == 'refs/heads/main' && matrix.shard == 7
+  summarize:
+    needs: enrich
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: series-language-enrichment-v1-analysis-shard-*
+          path: data/generated/shards
+          merge-multiple: true
+
+      - name: Aggregate and validate all shard reports
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          reports = []
+          for shard in range(8):
+              path = Path(f"data/generated/shards/series-language-enrichment-v1-{shard}.json")
+              if not path.exists():
+                  raise SystemExit(f"missing shard report: {path}")
+              reports.append(json.loads(path.read_text(encoding="utf-8")))
+          seen_qids = set()
+          totals = {"candidates": 0, "updates": 0, "ambiguous": 0, "missing_claim": 0, "missing_label": 0}
+          for shard, report in enumerate(reports):
+              if report.get("shard_index") != shard or report.get("shard_count") != 8:
+                  raise SystemExit(f"invalid shard metadata for shard {shard}")
+              totals["candidates"] += int(report.get("candidate_count") or 0)
+              totals["updates"] += int(report.get("update_count") or 0)
+              totals["ambiguous"] += int(report.get("ambiguous_count") or 0)
+              totals["missing_claim"] += int(report.get("missing_claim_count") or 0)
+              totals["missing_label"] += int(report.get("missing_label_count") or 0)
+              for item in report.get("updates") or []:
+                  qid = item.get("wikidata_qid")
+                  if qid in seen_qids:
+                      raise SystemExit(f"duplicate update across shards: {qid}")
+                  seen_qids.add(qid)
+          if totals["candidates"] > 8000:
+              raise SystemExit(f"aggregate candidate cap exceeded: {totals['candidates']}")
+          if totals["updates"] != len(seen_qids):
+              raise SystemExit("aggregate update count does not match unique QIDs")
+          summary = {"schema_version": "series-language-enrichment-v1-summary", "shards": 8, **totals}
+          Path("data/generated").mkdir(parents=True, exist_ok=True)
+          Path("data/generated/series-language-enrichment-v1-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print("SERIES_LANGUAGE_ENRICHMENT_SUMMARY=" + json.dumps(summary, sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: series-language-enrichment-v1-summary
+          path: data/generated/series-language-enrichment-v1-summary.json
+          if-no-files-found: error
+          retention-days: 30
+
+  verify-write:
+    needs: [enrich, summarize]
+    if: github.event_name == 'workflow_dispatch' && inputs.apply_writes == true && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: python scripts/cloudflare_bootstrap.py
+      - name: Verify production language coverage
         run: |
           npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS total_series, SUM(CASE WHEN language_name IS NOT NULL AND TRIM(language_name)<>'' AND LOWER(language_name)<>'unknown' THEN 1 ELSE 0 END) AS language_known, SUM(CASE WHEN language_source IS NOT NULL AND TRIM(language_source)<>'' THEN 1 ELSE 0 END) AS language_with_provenance FROM series_titles;"
           npx wrangler d1 execute cinema-and-series --remote --command "SELECT language_name, COUNT(*) AS titles FROM series_titles WHERE language_name IS NOT NULL AND TRIM(language_name)<>'' AND LOWER(language_name)<>'unknown' GROUP BY language_name ORDER BY titles DESC LIMIT 30;"
