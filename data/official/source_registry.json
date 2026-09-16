@@ -280,6 +280,16 @@
       "youtube_handle": "@MammoottyKampany",
       "languages": ["Malayalam"],
       "active": true
+    },
+    {
+      "key": "t_series",
+      "name": "T-Series",
+      "source_type": "studio_distributor",
+      "website_url": "https://www.tseries.com/",
+      "youtube_channel_id": "UCq-Fj5jknLsUf-MWSy4_brA",
+      "youtube_handle": "@tseries",
+      "languages": ["Hindi", "Telugu", "Tamil", "Malayalam", "Kannada", "Punjabi"],
+      "active": true
     }
   ]
 }
