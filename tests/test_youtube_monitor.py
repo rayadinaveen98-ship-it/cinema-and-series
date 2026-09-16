@@ -24,6 +24,25 @@ class YouTubeMonitorTests(unittest.TestCase):
         text = "Worldwide release 11/06/2027"
         self.assertEqual(module.extract_release_dates(text), ["2027-06-11"])
 
+    def test_release_context_preserves_short_review_excerpt(self):
+        text = (
+            "Main Na Raha Mera teaser. Watch now. "
+            "The film releases worldwide in cinemas on 23 October 2026. "
+            "Subscribe for official updates."
+        )
+        contexts = module.extract_release_date_contexts(text)
+        self.assertEqual(len(contexts), 1)
+        self.assertEqual(contexts[0]["date"], "2026-10-23")
+        self.assertIn("releases worldwide in cinemas", contexts[0]["excerpt"])
+        self.assertIn("23 October 2026", contexts[0]["excerpt"])
+        self.assertNotIn("\n", contexts[0]["excerpt"])
+
+    def test_release_context_dedupes_multiple_mentions_of_same_date(self):
+        contexts = module.extract_release_date_contexts(
+            "In cinemas 15 October 2026. Jailer 2 releases worldwide on 15 October 2026."
+        )
+        self.assertEqual([item["date"] for item in contexts], ["2026-10-15"])
+
     def test_rejects_unrelated_date(self):
         text = "Our channel started on October 15, 2026. Subscribe now."
         self.assertEqual(module.extract_release_dates(text), [])
@@ -91,6 +110,30 @@ class YouTubeMonitorTests(unittest.TestCase):
 
     def test_keeps_release_announcement_title(self):
         self.assertFalse(module.is_low_value_promo("Mirzapur The Movie | In Cinemas 4 Sep 2026"))
+
+    def test_fetch_candidate_keeps_only_plausible_date_contexts(self):
+        source = {"key": "studio", "name": "Studio"}
+        payload = {
+            "items": [
+                {
+                    "snippet": {
+                        "title": "Example Film teaser",
+                        "description": "Old release 1 January 2020. In cinemas 23 October 2026.",
+                        "publishedAt": "2026-09-16T06:30:20Z",
+                    },
+                    "contentDetails": {"videoId": "abc123"},
+                }
+            ]
+        }
+        with patch.object(module, "api_get", return_value=payload):
+            candidates = module.fetch_latest_uploads(
+                source,
+                "UC-studio",
+                "UU-studio",
+                now=datetime(2026, 9, 16, tzinfo=timezone.utc),
+            )
+        self.assertEqual(candidates[0]["candidate_dates"], ["2026-10-23"])
+        self.assertEqual([item["date"] for item in candidates[0]["date_contexts"]], ["2026-10-23"])
 
     def test_sql_keeps_candidates_pending_review(self):
         sql = module.build_sql([
