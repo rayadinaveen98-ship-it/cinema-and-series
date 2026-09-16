@@ -120,6 +120,31 @@ class SeriesLanguageEnrichmentTests(unittest.TestCase):
         self.assertFalse(request_json.call_args_list[0].kwargs["post"])
         sleep.assert_called_once_with(7)
 
+    def test_wikidata_request_retries_http_200_maxlag_payload(self):
+        with mock.patch.object(
+            module.base,
+            "request_json",
+            side_effect=[
+                {"error": {"code": "maxlag", "lag": 7, "info": "Waiting for database replication lag"}},
+                {"entities": {}},
+            ],
+        ) as request_json, mock.patch.object(module.time, "sleep") as sleep:
+            payload = module.request_wikidata({"action": "wbgetentities", "ids": "Q1"})
+
+        self.assertEqual(payload, {"entities": {}})
+        self.assertEqual(request_json.call_count, 2)
+        sleep.assert_called_once_with(8)
+
+    def test_non_transient_wikidata_api_error_never_becomes_missing_metadata(self):
+        with mock.patch.object(
+            module.base,
+            "request_json",
+            return_value={"error": {"code": "badvalue", "info": "Invalid ids parameter"}},
+        ), mock.patch.object(module.time, "sleep") as sleep:
+            with self.assertRaisesRegex(RuntimeError, "Wikidata API error badvalue"):
+                module.request_wikidata({"action": "wbgetentities", "ids": "Q1"})
+        sleep.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
