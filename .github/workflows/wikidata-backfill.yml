@@ -6,9 +6,11 @@ on:
     paths:
       - "scripts/fetch_wikidata_backfill.py"
       - "scripts/fetch_mediawiki_backfill.py"
+      - "scripts/merge_catalogue_backfills.py"
       - "scripts/wikidata_to_sql.py"
       - "tests/test_wikidata_backfill.py"
       - "tests/test_mediawiki_backfill.py"
+      - "tests/test_merge_catalogue_backfills.py"
       - ".github/workflows/wikidata-backfill.yml"
   schedule:
     - cron: "23 3 * * *"
@@ -40,6 +42,10 @@ jobs:
         with:
           python-version: "3.13"
 
+      - name: Run catalogue backfill tests
+        run: |
+          python -m unittest tests.test_wikidata_backfill tests.test_mediawiki_backfill tests.test_merge_catalogue_backfills -v
+
       - name: Choose backfill profile
         id: profile
         shell: bash
@@ -53,39 +59,88 @@ jobs:
           echo "profile=$profile" >> "$GITHUB_OUTPUT"
           echo "Catalogue backfill profile: $profile"
 
-      - name: Acquire broad Wikimedia catalogue
+      - name: Acquire and merge broad Wikimedia catalogue
         id: wikimedia
         shell: bash
         run: |
-          rm -f data/generated/wikidata-backfill.json
+          rm -f \
+            data/generated/wdqs-backfill.json \
+            data/generated/mediawiki-backfill.json \
+            data/generated/wikidata-backfill.json
+
+          profile="${{ steps.profile.outputs.profile }}"
+
           set +e
           python scripts/fetch_wikidata_backfill.py \
-            --profile "${{ steps.profile.outputs.profile }}" \
+            --profile "$profile" \
             --max-movies 5000 \
-            --out data/generated/wikidata-backfill.json
+            --out data/generated/wdqs-backfill.json
           primary_code=$?
           set -e
 
-          acquisition="wdqs"
-          if [[ $primary_code -ne 0 || ! -s data/generated/wikidata-backfill.json ]]; then
-            echo "WDQS backfill unavailable; falling back to normal Wikimedia Action APIs."
-            rm -f data/generated/wikidata-backfill.json
-            set +e
-            python scripts/fetch_mediawiki_backfill.py \
-              --profile "${{ steps.profile.outputs.profile }}" \
-              --max-movies 5000 \
-              --out data/generated/wikidata-backfill.json
-            fallback_code=$?
-            set -e
-            acquisition="mediawiki"
-          else
-            fallback_code=0
+          fallback_needed="true"
+          if [[ $primary_code -eq 0 && -s data/generated/wdqs-backfill.json ]]; then
+            fallback_needed=$(python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("data/generated/wdqs-backfill.json").read_text(encoding="utf-8"))
+          shards = payload.get("shards") or []
+          complete = bool(shards) and all(row.get("status") == "ok" for row in shards)
+          print("false" if complete else "true")
+          PY
+            )
           fi
 
-          if [[ -s data/generated/wikidata-backfill.json && $fallback_code -eq 0 ]]; then
+          fallback_code=0
+          if [[ "$fallback_needed" == "true" ]]; then
+            fallback_profile="$profile"
+            if [[ "$profile" == "bootstrap" ]]; then
+              # Existing production coverage is India-heavy. When a bootstrap
+              # WDQS run is partial, spend the fallback budget on international
+              # breadth first instead of repeating the same Indian shards.
+              fallback_profile="global-recent"
+            fi
+            echo "WDQS acquisition was unavailable or incomplete; adding MediaWiki profile: $fallback_profile"
+            set +e
+            python scripts/fetch_mediawiki_backfill.py \
+              --profile "$fallback_profile" \
+              --max-movies 5000 \
+              --out data/generated/mediawiki-backfill.json
+            fallback_code=$?
+            set -e
+          else
+            echo "All requested WDQS shards succeeded; MediaWiki fallback not needed for this run."
+          fi
+
+          inputs=()
+          if [[ -s data/generated/wdqs-backfill.json ]]; then
+            inputs+=(data/generated/wdqs-backfill.json)
+          fi
+          if [[ -s data/generated/mediawiki-backfill.json ]]; then
+            inputs+=(data/generated/mediawiki-backfill.json)
+          fi
+
+          if [[ ${#inputs[@]} -gt 0 ]]; then
+            python scripts/merge_catalogue_backfills.py \
+              "${inputs[@]}" \
+              --max-movies 5000 \
+              --out data/generated/wikidata-backfill.json
+          fi
+
+          if [[ -s data/generated/wikidata-backfill.json ]]; then
+            acquisition=$(python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("data/generated/wikidata-backfill.json").read_text(encoding="utf-8"))
+          print(payload.get("acquisition_path") or "unknown")
+          PY
+            )
             echo "ready=true" >> "$GITHUB_OUTPUT"
             echo "acquisition=$acquisition" >> "$GITHUB_OUTPUT"
             echo "Catalogue acquisition path: $acquisition"
+            if [[ $fallback_code -ne 0 ]]; then
+              echo "MediaWiki fallback deferred, but successful WDQS rows will still be imported safely."
+            fi
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
             echo "acquisition=deferred" >> "$GITHUB_OUTPUT"
@@ -121,31 +176,38 @@ jobs:
               "validated",
               len(movies),
               "backfill movies via",
-              payload.get("acquisition_path", "wdqs"),
+              payload.get("acquisition_path", "unknown"),
           )
-          for shard in payload.get("shards") or []:
+          for source in payload.get("source_reports") or []:
               print(
-                  "shard",
-                  shard.get("key"),
-                  "page", shard.get("page"),
-                  "status", shard.get("status"),
-                  "bindings", shard.get("raw_bindings"),
-                  "possibly_truncated", shard.get("possibly_truncated"),
+                  "source",
+                  source.get("acquisition_path"),
+                  "profile", source.get("profile"),
+                  "movies", source.get("movies"),
               )
-          categories = payload.get("category_report") or []
-          if categories:
-              populated = [row for row in categories if row.get("status") == "ok" and int(row.get("pages") or 0) > 0]
-              deferred = [row for row in categories if row.get("status") == "deferred"]
-              print(
-                  "mediawiki categories:",
-                  len(categories),
-                  "checked,",
-                  len(populated),
-                  "populated,",
-                  len(deferred),
-                  "deferred",
-              )
-              print("sample populated categories:", [(row.get("category"), row.get("pages")) for row in populated[:12]])
+              for shard in source.get("shards") or []:
+                  print(
+                      "shard",
+                      shard.get("key"),
+                      "page", shard.get("page"),
+                      "status", shard.get("status"),
+                      "bindings", shard.get("raw_bindings"),
+                      "possibly_truncated", shard.get("possibly_truncated"),
+                  )
+              categories = source.get("category_report") or []
+              if categories:
+                  populated = [row for row in categories if row.get("status") == "ok" and int(row.get("pages") or 0) > 0]
+                  deferred = [row for row in categories if row.get("status") == "deferred"]
+                  print(
+                      "mediawiki categories:",
+                      len(categories),
+                      "checked,",
+                      len(populated),
+                      "populated,",
+                      len(deferred),
+                      "deferred",
+                  )
+                  print("sample populated categories:", [(row.get("category"), row.get("pages")) for row in populated[:12]])
           PY
           python scripts/wikidata_to_sql.py \
             --src data/generated/wikidata-backfill.json \
@@ -156,8 +218,11 @@ jobs:
         with:
           name: wikimedia-catalogue-backfill
           path: |
+            data/generated/wdqs-backfill.json
+            data/generated/mediawiki-backfill.json
             data/generated/wikidata-backfill.json
             data/generated/wikidata-backfill-upsert.sql
+          if-no-files-found: ignore
           retention-days: 14
 
       - name: Check Cloudflare connection
