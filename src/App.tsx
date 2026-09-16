@@ -206,13 +206,14 @@ export default function App() {
   const [source, setSource] = useState<ApiResponse["source"]>("preview");
   const [activeLanguage, setActiveLanguage] = useState("All");
   const [activeCountry, setActiveCountry] = useState("All");
-  const [activePeriod, setActivePeriod] = useState("upcoming");
+  const [activePeriod, setActivePeriod] = useState("all");
   const [officialOnly, setOfficialOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const today = todayKey();
   const sevenDayEnd = addDaysKey(today, 6);
@@ -301,24 +302,44 @@ export default function App() {
       .finally(() => setLoadingMore(false));
   }
 
+  function resetBrowseFilters() {
+    setActivePeriod("all");
+    setActiveLanguage("All");
+    setActiveCountry("All");
+  }
+
   const verified = useMemo(() => movies.filter((movie) => movie.verificationStatus === "verified"), [movies]);
   const arriving = useMemo(
     () => movies.filter((movie) => Boolean(movie.releaseDate) && movie.releaseDate! >= today).sort((a, b) => a.releaseDate!.localeCompare(b.releaseDate!)),
     [movies, today],
   );
   const featured = verified.length ? verified : (arriving.length ? arriving : movies);
-  const languages = useMemo(() => ["All", ...facets.languages.slice(0, 16).map((item) => item.value)], [facets.languages]);
-  const countries = useMemo(() => ["All", ...facets.countries.slice(0, 12).map((item) => item.value)], [facets.countries]);
-  const years = useMemo(() => facets.years.slice(0, 10), [facets.years]);
+  const languages = useMemo(() => ["All", ...facets.languages.slice(0, 40).map((item) => item.value)], [facets.languages]);
+  const countries = useMemo(() => ["All", ...facets.countries.slice(0, 40).map((item) => item.value)], [facets.countries]);
+  const years = useMemo(() => facets.years.slice(0, 40), [facets.years]);
   const activeHeroArtwork = heroArtwork(hero);
   const heroYearPrecision = isYearPrecision(hero);
+  const activeFilterCount = (activePeriod !== "all" ? 1 : 0) + (activeLanguage !== "All" ? 1 : 0) + (activeCountry !== "All" ? 1 : 0);
+  const browseTitle = debouncedSearch
+    ? `Results for “${debouncedSearch}”`
+    : activeLanguage !== "All"
+      ? `${activeLanguage} movies`
+      : activeCountry !== "All"
+        ? `${countryLabel(activeCountry)} movies`
+        : activePeriod === "upcoming"
+          ? "Upcoming movies"
+          : activePeriod === "30d"
+            ? "Next 30 days"
+            : /^\d{4}$/.test(activePeriod)
+              ? `${activePeriod} movies`
+              : "Explore movies";
 
   return (
     <main className="stream-app">
       <header className="stream-nav">
         <a className="stream-brand" href="#top"><span>CINEMA</span><b>& SERIES</b></a>
         <nav className="desktop-nav" aria-label="Primary navigation">
-          <a className="active" href="#top">Home</a><a href="#upcoming">Upcoming</a><a href="#browse">Browse</a>
+          <a className="active" href="#top">Home</a><a href="#upcoming">Upcoming</a><a href="#series">Series</a><a href="#browse">Movies</a>
         </nav>
         <div className="nav-actions">
           <button className="icon-button" onClick={() => setSearchOpen((value) => !value)} aria-label="Toggle search">⌕</button>
@@ -341,20 +362,20 @@ export default function App() {
             <span>{releaseLabel(hero)}</span><span>{hero.language || "Cinema"}</span><span>{countryLabel(hero.countryCode)}</span>
           </div>
           <p>{heroYearPrecision
-            ? `Discovered through ${movieSourceLabel(hero)} with year-level precision; no exact release day is claimed.`
+            ? `${movieYear(hero)} · ${hero.language || "Cinema"} · ${countryLabel(hero.countryCode)}`
             : hero.verificationStatus === "verified"
-              ? `Release date confirmed through ${movieSourceLabel(hero)}.`
-              : `Currently tracked through ${movieSourceLabel(hero)} while stronger release evidence is monitored.`} Explore a growing India-first, global movie catalogue.</p>
+              ? `Official release date confirmed through ${movieSourceLabel(hero)}.`
+              : `Release information is currently being tracked.`}</p>
           <div className="hero-buttons">
-            <a className="play-button" href="#browse"><span>▶</span> Browse catalogue</a>
+            <a className="play-button" href="#browse"><span>▶</span> Explore movies</a>
             <button className="info-button" onClick={() => setSelectedMovie(hero)}><span>ⓘ</span> More info</button>
           </div>
         </div>
-        <div className="hero-stats"><span>{stats.total.toLocaleString("en-IN")} TITLES</span><i /><span>{stats.activeSources} OFFICIAL SOURCES</span></div>
+        <div className="hero-stats"><span>{stats.total.toLocaleString("en-IN")} MOVIES</span><i /><span>{stats.activeSources} OFFICIAL SOURCES</span></div>
       </section>
 
       <div className={`search-panel ${searchOpen || searchQuery ? "open" : ""}`}>
-        <span>⌕</span><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Titles, languages, countries…" aria-label="Search catalogue" />
+        <span>⌕</span><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search movies…" aria-label="Search catalogue" />
         {searchQuery && <button onClick={() => setSearchQuery("")}>Clear</button>}
       </div>
 
@@ -373,45 +394,61 @@ export default function App() {
           </div>
         </div>
 
-        <div className="stream-row">
-          <div className="row-heading"><h2>Browse by language</h2><span>India-first discovery</span></div>
-          <div className="genre-rail">
-            {facets.languages.slice(0, 12).map((item, index) => (
-              <button key={item.value} className={`language-tile tile-${index % 6}`} onClick={() => { setActiveLanguage(item.value); document.querySelector("#browse")?.scrollIntoView({ behavior: "smooth" }); }}>
-                <span>{item.value}</span><small>{item.count} titles</small><b>→</b>
-              </button>
-            ))}
-          </div>
-        </div>
-
         <section id="browse" className="browse-section">
-          <div className="browse-heading"><div><p>EXPLORE THE CATALOGUE</p><h2>{debouncedSearch ? `Results for “${debouncedSearch}”` : activeLanguage !== "All" ? `${activeLanguage} cinema` : activeCountry !== "All" ? `${countryLabel(activeCountry)} cinema` : "More to discover"}</h2></div><span>{pagination.total} matching titles</span></div>
-          <div className="filter-deck">
-            <div className="filter-strip">
-              <button className={activePeriod === "upcoming" ? "active" : ""} onClick={() => setActivePeriod("upcoming")}>Upcoming</button>
-              <button className={activePeriod === "30d" ? "active" : ""} onClick={() => setActivePeriod("30d")}>Next 30 days</button>
-              {years.map(({ value }) => <button key={value} className={activePeriod === value ? "active" : ""} onClick={() => setActivePeriod(value)}>{value}</button>)}
-              <button className={activePeriod === "all" ? "active" : ""} onClick={() => setActivePeriod("all")}>All years</button>
-            </div>
-            <div className="filter-strip muted-filter">
-              {languages.map((language) => <button key={language} className={activeLanguage === language ? "active" : ""} onClick={() => setActiveLanguage(language)}>{language}</button>)}
-            </div>
-            <div className="filter-strip muted-filter country-filter">
-              {countries.map((country) => <button key={country} className={activeCountry === country ? "active" : ""} onClick={() => setActiveCountry(country)}>{country === "All" ? "All countries" : countryLabel(country)}</button>)}
+          <div className="browse-heading browse-heading-clean">
+            <div><h2>{browseTitle}</h2></div>
+            <div className="browse-heading-actions">
+              <span>{pagination.total.toLocaleString("en-IN")} titles</span>
+              <button className={`browse-filter-toggle ${filtersOpen ? "active" : ""}`} onClick={() => setFiltersOpen((value) => !value)}>
+                Filters{activeFilterCount ? <b>{activeFilterCount}</b> : null}
+              </button>
             </div>
           </div>
+
+          <div className="browse-quick-tabs" aria-label="Movie catalogue views">
+            <button className={activePeriod === "all" ? "active" : ""} onClick={() => setActivePeriod("all")}>All movies</button>
+            <button className={activePeriod === "upcoming" ? "active" : ""} onClick={() => setActivePeriod("upcoming")}>Upcoming</button>
+            <button className={activePeriod === "30d" ? "active" : ""} onClick={() => setActivePeriod("30d")}>Next 30 days</button>
+          </div>
+
+          {filtersOpen ? (
+            <div className="browse-filter-panel">
+              <label>
+                <span>Release year</span>
+                <select value={activePeriod} onChange={(event) => setActivePeriod(event.target.value)}>
+                  <option value="all">All years</option>
+                  <option value="upcoming">Upcoming</option>
+                  <option value="30d">Next 30 days</option>
+                  {years.map(({ value }) => <option key={value} value={value}>{value}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Language</span>
+                <select value={activeLanguage} onChange={(event) => setActiveLanguage(event.target.value)}>
+                  {languages.map((language) => <option key={language} value={language}>{language === "All" ? "All languages" : language}</option>)}
+                </select>
+              </label>
+              <label>
+                <span>Country</span>
+                <select value={activeCountry} onChange={(event) => setActiveCountry(event.target.value)}>
+                  {countries.map((country) => <option key={country} value={country}>{country === "All" ? "All countries" : countryLabel(country)}</option>)}
+                </select>
+              </label>
+              <button className="browse-reset" type="button" onClick={resetBrowseFilters} disabled={!activeFilterCount}>Reset</button>
+            </div>
+          ) : null}
 
           {loading && <div className="skeleton-grid">{Array.from({ length: 12 }).map((_, index) => <div className="skeleton-card" key={index} />)}</div>}
           {!loading && movies.length > 0 && <div className="catalogue-grid">{movies.map((movie) => <PosterCard key={movie.id} movie={movie} onOpen={openMovie} />)}</div>}
-          {!loading && !movies.length && <div className="empty"><span>⌕</span><h3>No titles in this slice</h3><p>Try another year, language, country or confidence filter.</p></div>}
-          {pagination.hasMore && <button className="load-more" onClick={loadMore} disabled={loadingMore}>{loadingMore ? "Loading…" : `Load more · ${Math.max(0, pagination.total - movies.length)} left`}</button>}
+          {!loading && !movies.length && <div className="empty"><span>⌕</span><h3>No titles found</h3><p>Try changing the filters or search.</p></div>}
+          {pagination.hasMore && <button className="load-more" onClick={loadMore} disabled={loadingMore}>{loadingMore ? "Loading…" : "Load more"}</button>}
         </section>
       </section>
 
-      <footer className="stream-footer"><div className="stream-brand"><span>CINEMA</span><b>& SERIES</b></div><p>India-first release intelligence · global cinema catalogue</p><small>{stats.total.toLocaleString("en-IN")} titles · {facets.languages.length} languages · {stats.activeSources} official sources</small></footer>
+      <footer className="stream-footer"><div className="stream-brand"><span>CINEMA</span><b>& SERIES</b></div><p>India-first release intelligence · global cinema catalogue</p><small>{stats.total.toLocaleString("en-IN")} movies · {facets.languages.length} languages · {stats.activeSources} official sources</small></footer>
 
       <nav className="mobile-nav" aria-label="Mobile navigation">
-        <a href="#top"><span>⌂</span><small>Home</small></a><a href="#upcoming"><span>◷</span><small>Upcoming</small></a><button onClick={() => setSearchOpen(true)}><span>⌕</span><small>Search</small></button><a href="#browse"><span>▦</span><small>Browse</small></a>
+        <a href="#top"><span>⌂</span><small>Home</small></a><a href="#upcoming"><span>◷</span><small>Upcoming</small></a><button onClick={() => setSearchOpen(true)}><span>⌕</span><small>Search</small></button><a href="#browse"><span>▦</span><small>Movies</small></a>
       </nav>
 
       {selectedMovie ? <MovieDetail movie={selectedMovie} onClose={() => setSelectedMovie(null)} onFeature={featureMovie} /> : null}
