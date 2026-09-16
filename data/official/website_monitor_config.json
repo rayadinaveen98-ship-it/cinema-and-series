@@ -8,9 +8,8 @@
       "reason": "The canonical homepage exceeds the crawler size cap; the official movies page is a lighter same-host first-party seed."
     },
     "t_series": {
-      "mode": "automatic",
-      "monitor_url": "https://www.tseries.com/news",
-      "reason": "The canonical homepage can time out in CI; the official news page is a lighter same-host first-party seed with release announcements."
+      "mode": "manual",
+      "reason": "The canonical homepage and official news page both time out from GitHub Actions. Keep the official website as first-party provenance while continuing automated monitoring through the verified T-Series YouTube channel and manual website review."
     },
     "zee_studios": {
       "mode": "manual",
