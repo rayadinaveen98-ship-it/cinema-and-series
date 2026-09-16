@@ -8,20 +8,60 @@ on:
 jobs:
   refresh:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+
       - name: Fetch India film release candidates
         run: python scripts/fetch_wikidata.py
+
       - name: Validate generated payload
         run: python -m json.tool data/generated/wikidata-india.json >/dev/null
+
       - name: Build idempotent D1 SQL
         run: python scripts/wikidata_to_sql.py
+
       - uses: actions/upload-artifact@v4
         with:
           name: wikidata-india-candidates
           path: data/generated/
           retention-days: 7
+
+      - name: Check Cloudflare connection
+        id: cloudflare
+        shell: bash
+        run: |
+          if [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "Cloudflare credentials found; catalogue sync enabled."
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Cloudflare credentials are not configured; artifact generated but D1 sync skipped."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.cloudflare.outputs.ready == 'true'
+        with:
+          node-version: 22
+
+      - name: Install Wrangler
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: npm install --no-audit --no-fund
+
+      - name: Find or create D1 and bind it
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: python scripts/cloudflare_bootstrap.py
+
+      - name: Apply D1 migrations
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: npx wrangler d1 migrations apply cinema-and-series --remote
+
+      - name: Sync candidates to D1
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: npx wrangler d1 execute cinema-and-series --remote --file=data/generated/wikidata-upsert.sql
