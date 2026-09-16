@@ -10,6 +10,8 @@ by an official @handle; handle-only entries are resolved through channels.list.
 To keep the live review queue useful, only recent uploads are considered,
 candidate dates must be today-or-future at scan time, candidate dates cannot
 precede the upload date, and response/review promotional videos are excluded.
+Short evidence excerpts are preserved in the generated review artifact so a
+human can see why a date matched without storing full video descriptions.
 """
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ API_ROOT = "https://www.googleapis.com/youtube/v3"
 MAX_UPLOAD_AGE_DAYS = 45
 MAX_RELEASE_LAG_DAYS = 0
 MAX_RELEASE_LEAD_DAYS = 1095
+CONTEXT_RADIUS = 110
 
 MONTHS = {
     "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
@@ -78,18 +81,36 @@ def parse_date(match: re.Match[str]) -> str | None:
         return None
 
 
-def extract_release_dates(text: str) -> list[str]:
-    dates: set[str] = set()
+def _clean_excerpt(value: str) -> str:
+    return " ".join(value.split()).strip()
+
+
+def extract_release_date_contexts(text: str) -> list[dict[str, str]]:
+    """Return explicit release dates with a short local evidence excerpt.
+
+    Multiple syntactic mentions of the same date collapse to one item. Excerpts
+    are deliberately short review aids rather than stored full descriptions.
+    """
+    contexts: dict[str, str] = {}
     for pattern in DATE_PATTERNS:
         for match in pattern.finditer(text):
-            start = max(0, match.start() - 90)
-            end = min(len(text), match.end() + 90)
-            if not RELEASE_CONTEXT.search(text[start:end]):
+            start = max(0, match.start() - CONTEXT_RADIUS)
+            end = min(len(text), match.end() + CONTEXT_RADIUS)
+            window = text[start:end]
+            if not RELEASE_CONTEXT.search(window):
                 continue
             parsed = parse_date(match)
-            if parsed:
-                dates.add(parsed)
-    return sorted(dates)
+            if not parsed:
+                continue
+            excerpt = _clean_excerpt(window)
+            previous = contexts.get(parsed)
+            if previous is None or len(excerpt) < len(previous):
+                contexts[parsed] = excerpt
+    return [{"date": value, "excerpt": contexts[value]} for value in sorted(contexts)]
+
+
+def extract_release_dates(text: str) -> list[str]:
+    return [item["date"] for item in extract_release_date_contexts(text)]
 
 
 def is_low_value_promo(title: str) -> bool:
@@ -213,13 +234,17 @@ def fetch_latest_uploads(
             continue
         description = snippet.get("description", "").strip()
         published_at = snippet.get("publishedAt")
+        combined_text = f"{title}\n{description}"
+        date_contexts = extract_release_date_contexts(combined_text)
         dates = filter_plausible_release_dates(
-            extract_release_dates(f"{title}\n{description}"),
+            [item["date"] for item in date_contexts],
             published_at,
             now=now,
         )
         if not dates:
             continue
+        retained_dates = set(dates)
+        date_contexts = [item for item in date_contexts if item["date"] in retained_dates]
         candidates.append({
             "source_key": source["key"],
             "source_name": source["name"],
@@ -230,6 +255,7 @@ def fetch_latest_uploads(
             "published_at": published_at,
             "candidate_dates": dates,
             "candidate_release_date": dates[0] if len(dates) == 1 else None,
+            "date_contexts": date_contexts,
             "status": "pending_review",
         })
     return candidates
@@ -312,7 +338,7 @@ def main() -> int:
         json.dumps(
             {
                 "generated_at": scan_time.isoformat(),
-                "policy": "official-channel observations only; recent non-response/review uploads with release dates that are still today-or-future become pending review candidates; never auto-verify",
+                "policy": "official-channel observations only; recent non-response/review uploads with release dates that are still today-or-future become pending review candidates; short local date context is preserved for human review; never auto-verify",
                 "channels_registered": len(sources),
                 "channels_checked": channels_checked,
                 "candidates": candidates,
