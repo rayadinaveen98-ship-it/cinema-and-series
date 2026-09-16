@@ -41,16 +41,19 @@ function parseDate(value: string) {
 }
 
 function dateKey(date: Date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: "Asia/Kolkata",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).formatToParts(date).map(({ type, value }) => [type, value]),
+  );
+  return `${parts.year}-${parts.month}-${parts.day}`;
 }
 
 function addDaysKey(value: string, days: number) {
-  const date = parseDate(value);
-  date.setDate(date.getDate() + days);
-  return dateKey(date);
+  return dateKey(new Date(parseDate(value).getTime() + days * 86_400_000));
 }
 
 function formatDate(value: string) {
