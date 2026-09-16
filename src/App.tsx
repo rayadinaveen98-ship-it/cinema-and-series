@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useState } from "react";
 
 type Movie = {
   id: string;
@@ -8,27 +8,60 @@ type Movie = {
   language: string;
   releaseDate: string;
   verificationStatus: "verified" | "supported" | "unconfirmed";
+  releaseSource?: string;
+};
+
+type CatalogueStats = {
+  total: number;
+  verified: number;
+  supported: number;
+  unconfirmed: number;
+  activeSources: number;
 };
 
 type ApiResponse = {
   movies: Movie[];
   source: "d1" | "preview";
   generatedAt: string;
+  stats?: CatalogueStats;
 };
 
 const fallback: Movie[] = [
-  { id: "preview-1", title: "A Film in Production", language: "Telugu", releaseDate: "2026-09-18", verificationStatus: "unconfirmed" },
-  { id: "preview-2", title: "Festival Premiere", language: "Malayalam", releaseDate: "2026-09-19", verificationStatus: "supported" },
-  { id: "preview-3", title: "Theatrical Release", language: "Tamil", releaseDate: "2026-09-25", verificationStatus: "verified" },
-  { id: "preview-4", title: "Coming Soon", language: "Kannada", releaseDate: "2026-10-02", verificationStatus: "unconfirmed" },
+  { id: "preview-1", title: "A Film in Production", language: "Telugu", releaseDate: "2026-09-18", verificationStatus: "unconfirmed", releaseSource: "preview" },
+  { id: "preview-2", title: "Festival Premiere", language: "Malayalam", releaseDate: "2026-09-19", verificationStatus: "supported", releaseSource: "preview" },
+  { id: "preview-3", title: "Theatrical Release", language: "Tamil", releaseDate: "2026-09-25", verificationStatus: "verified", releaseSource: "official" },
+  { id: "preview-4", title: "Coming Soon", language: "Kannada", releaseDate: "2026-10-02", verificationStatus: "unconfirmed", releaseSource: "preview" },
 ];
 
+const fallbackStats: CatalogueStats = { total: 4, verified: 1, supported: 1, unconfirmed: 2, activeSources: 0 };
+
+function parseDate(value: string) {
+  return new Date(`${value}T00:00:00+05:30`);
+}
+
 function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "long", year: "numeric" }).format(new Date(`${value}T00:00:00+05:30`));
+  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "long", year: "numeric" }).format(parseDate(value));
 }
 
 function shortDate(value: string) {
-  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" }).format(new Date(`${value}T00:00:00+05:30`));
+  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" }).format(parseDate(value));
+}
+
+function monthLabel(value: string) {
+  return new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric" }).format(parseDate(value));
+}
+
+function monthKey(value: string) {
+  return value.slice(0, 7);
+}
+
+function dateParts(value: string) {
+  const date = parseDate(value);
+  return {
+    day: new Intl.DateTimeFormat("en-IN", { day: "2-digit" }).format(date),
+    month: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(date).toUpperCase(),
+    year: new Intl.DateTimeFormat("en-IN", { year: "numeric" }).format(date),
+  };
 }
 
 function todayKey() {
@@ -41,21 +74,30 @@ function todayKey() {
 
 function statusLabel(status: Movie["verificationStatus"]) {
   if (status === "verified") return "Officially verified";
-  if (status === "supported") return "Supported";
-  return "Date tracking";
+  if (status === "supported") return "Supported date";
+  return "Open-data tracking";
 }
 
 function periodLabel(period: string) {
-  if (period === "upcoming") return "Upcoming";
+  if (period === "upcoming") return "Upcoming releases";
   if (period === "all") return "All tracked releases";
   return `${period} releases`;
 }
 
+function sourceLabel(source?: string) {
+  if (!source || source === "wikidata") return "Wikidata candidate";
+  if (source === "preview") return "Preview source";
+  return source.split("_").map((word) => word[0]?.toUpperCase() + word.slice(1)).join(" ");
+}
+
 export default function App() {
   const [movies, setMovies] = useState<Movie[]>(fallback);
+  const [stats, setStats] = useState<CatalogueStats>(fallbackStats);
   const [source, setSource] = useState<ApiResponse["source"]>("preview");
   const [activeLanguage, setActiveLanguage] = useState("All");
   const [activePeriod, setActivePeriod] = useState("upcoming");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [visibleCount, setVisibleCount] = useState(60);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -67,6 +109,7 @@ export default function App() {
       })
       .then((data) => {
         if (data.movies.length) setMovies(data.movies);
+        if (data.stats) setStats(data.stats);
         setSource(data.source);
       })
       .catch(() => undefined)
@@ -96,18 +139,33 @@ export default function App() {
     () => ["All", ...Array.from(new Set(periodMovies.map((movie) => movie.language || "Unknown"))).sort()],
     [periodMovies],
   );
-  const filtered = useMemo(
-    () => activeLanguage === "All" ? periodMovies : periodMovies.filter((movie) => (movie.language || "Unknown") === activeLanguage),
-    [activeLanguage, periodMovies],
-  );
+
+  const filtered = useMemo(() => {
+    const query = searchQuery.trim().toLocaleLowerCase();
+    return periodMovies.filter((movie) => {
+      const languageMatch = activeLanguage === "All" || (movie.language || "Unknown") === activeLanguage;
+      const searchMatch = !query || movie.title.toLocaleLowerCase().includes(query) || movie.nativeTitle?.toLocaleLowerCase().includes(query);
+      return languageMatch && searchMatch;
+    });
+  }, [activeLanguage, periodMovies, searchQuery]);
+
   const hero = useMemo(
-    () => movies.find((movie) => movie.releaseDate >= today) ?? movies[0],
+    () => movies.find((movie) => movie.releaseDate >= today && movie.verificationStatus === "verified")
+      ?? movies.find((movie) => movie.releaseDate >= today)
+      ?? movies[0],
     [movies, today],
   );
+
+  const visibleMovies = filtered.slice(0, visibleCount);
+  const heroParts = hero ? dateParts(hero.releaseDate) : null;
 
   useEffect(() => {
     if (!languages.includes(activeLanguage)) setActiveLanguage("All");
   }, [activeLanguage, languages]);
+
+  useEffect(() => {
+    setVisibleCount(60);
+  }, [activeLanguage, activePeriod, searchQuery]);
 
   return (
     <main className="page-shell">
@@ -121,104 +179,166 @@ export default function App() {
         </a>
         <div className="topbar-meta">
           <span className={`live-dot ${source === "d1" ? "is-live" : ""}`} />
-          {source === "d1" ? `${upcomingCount} upcoming · ${movies.length} tracked` : loading ? "Connecting…" : "Preview catalogue"}
+          {source === "d1" ? `${upcomingCount} upcoming · ${stats.verified} verified` : loading ? "Connecting…" : "Preview catalogue"}
         </div>
       </header>
 
       <section className="hero">
-        <div className="hero-kicker">INDIA · RELEASE CALENDAR</div>
+        <div className="hero-kicker">INDIA · RELEASE INTELLIGENCE</div>
         <div className="hero-grid">
           <div className="hero-copy">
-            <p className="eyebrow">Next on the calendar</p>
+            <p className="eyebrow">Next verified signal</p>
             <h1>{hero?.title ?? "Cinema, beautifully timed."}</h1>
             {hero && <p className="hero-date">{formatDate(hero.releaseDate)}</p>}
-            <p className="hero-summary">One calm place for movie names and release dates — sourced from open data and verified against official announcements where possible.</p>
+            <p className="hero-summary">A quiet, source-aware release calendar for Indian cinema. Open data builds the map; official studio evidence upgrades the dates that matter.</p>
             <div className="hero-actions">
-              <a href="#releases" className="primary-action">Explore releases</a>
-              <span className="verification-pill">{hero ? statusLabel(hero.verificationStatus) : "Tracking"}</span>
+              <a href="#releases" className="primary-action">Browse the calendar</a>
+              <span className={`verification-pill ${hero?.verificationStatus ?? "unconfirmed"}`}>{hero ? statusLabel(hero.verificationStatus) : "Tracking"}</span>
             </div>
           </div>
-          <div className="hero-art" aria-hidden="true">
-            <div className="frame frame-a" />
-            <div className="frame frame-b" />
-            <div className="frame frame-c" />
-            <div className="hero-monogram">C&S</div>
+
+          <div className="release-signal" aria-label={hero ? `Next tracked release: ${hero.title}` : "Release calendar"}>
+            <div className="signal-topline">
+              <span>Next signal</span>
+              <span className={`signal-status ${hero?.verificationStatus ?? "unconfirmed"}`}>
+                {hero?.verificationStatus === "verified" ? "Official" : "Tracking"}
+              </span>
+            </div>
+            <div className="signal-date">
+              <span>{heroParts?.day ?? "--"}</span>
+              <div><strong>{heroParts?.month ?? "---"}</strong><small>{heroParts?.year ?? "----"}</small></div>
+            </div>
+            <div className="signal-rule" />
+            <p className="signal-title">{hero?.title ?? "Release date pending"}</p>
+            <div className="signal-meta">
+              <span>{hero?.language || "Language pending"}</span>
+              <span>{sourceLabel(hero?.releaseSource)}</span>
+            </div>
           </div>
+        </div>
+
+        <div className="signal-grid" aria-label="Catalogue status">
+          <div className="metric"><span>Tracked</span><strong>{stats.total}</strong><small>movie dates</small></div>
+          <div className="metric"><span>Upcoming</span><strong>{upcomingCount}</strong><small>from today</small></div>
+          <div className="metric accent"><span>Official</span><strong>{stats.verified}</strong><small>verified dates</small></div>
+          <div className="metric"><span>Sources</span><strong>{stats.activeSources}</strong><small>first-party feeds</small></div>
         </div>
       </section>
 
-      <section className="language-strip" aria-label="Choose release period">
-        <button className={activePeriod === "upcoming" ? "chip active" : "chip"} onClick={() => setActivePeriod("upcoming")}>
-          Upcoming · {upcomingCount}
-        </button>
-        {years.map((year) => (
-          <button key={year} className={activePeriod === year ? "chip active" : "chip"} onClick={() => setActivePeriod(year)}>
-            {year} · {yearCounts.get(year) ?? 0}
-          </button>
-        ))}
-        <button className={activePeriod === "all" ? "chip active" : "chip"} onClick={() => setActivePeriod("all")}>
-          All · {movies.length}
-        </button>
-      </section>
+      <section className="catalogue-dock" aria-label="Catalogue controls">
+        <div className="search-wrap">
+          <span aria-hidden="true">⌕</span>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Search a movie title…"
+            aria-label="Search movie titles"
+          />
+          {searchQuery && <button onClick={() => setSearchQuery("")} aria-label="Clear search">Clear</button>}
+        </div>
 
-      <section className="language-strip" aria-label="Filter by language">
-        {languages.map((language) => (
-          <button
-            key={language}
-            className={language === activeLanguage ? "chip active" : "chip"}
-            onClick={() => setActiveLanguage(language)}
-          >
-            {language}
+        <div className="filter-row" aria-label="Choose release period">
+          <button className={activePeriod === "upcoming" ? "chip active" : "chip"} onClick={() => setActivePeriod("upcoming")}>
+            Upcoming · {upcomingCount}
           </button>
-        ))}
+          {years.map((year) => (
+            <button key={year} className={activePeriod === year ? "chip active" : "chip"} onClick={() => setActivePeriod(year)}>
+              {year} · {yearCounts.get(year) ?? 0}
+            </button>
+          ))}
+          <button className={activePeriod === "all" ? "chip active" : "chip"} onClick={() => setActivePeriod("all")}>
+            All · {movies.length}
+          </button>
+        </div>
+
+        <div className="filter-row language-row" aria-label="Filter by language">
+          {languages.map((language) => (
+            <button
+              key={language}
+              className={language === activeLanguage ? "chip active" : "chip"}
+              onClick={() => setActiveLanguage(language)}
+            >
+              {language}
+            </button>
+          ))}
+        </div>
       </section>
 
       <section id="releases" className="release-section">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Release desk</p>
-            <h2>{periodLabel(activePeriod)}</h2>
+            <h2>{searchQuery ? `Results for “${searchQuery}”` : periodLabel(activePeriod)}</h2>
           </div>
-          <p>{filtered.length} shown · {movies.length} total tracked</p>
+          <p>{filtered.length} matching · {stats.verified} officially verified</p>
         </div>
 
         <div className="release-list">
-          {filtered.map((movie, index) => (
-            <article className="release-card" key={movie.id}>
-              <div className="date-block">
-                <span>{shortDate(movie.releaseDate).split(" ")[0]}</span>
-                <small>{shortDate(movie.releaseDate).split(" ")[1]}</small>
-              </div>
-              <div className="card-copy">
-                <div className="card-topline">
-                  <span>{movie.language || "Language pending"}</span>
-                  <span className={`status ${movie.verificationStatus}`}>{statusLabel(movie.verificationStatus)}</span>
-                </div>
-                <h3>{movie.title}</h3>
-                {movie.nativeTitle && movie.nativeTitle !== movie.title && <p className="native-title">{movie.nativeTitle}</p>}
-              </div>
-              <div className="card-index">{String(index + 1).padStart(2, "0")}</div>
-            </article>
-          ))}
+          {visibleMovies.map((movie, index) => {
+            const newMonth = index === 0 || monthKey(movie.releaseDate) !== monthKey(visibleMovies[index - 1].releaseDate);
+            return (
+              <Fragment key={movie.id}>
+                {newMonth && (
+                  <div className="month-divider">
+                    <span>{monthLabel(movie.releaseDate)}</span>
+                    <span>{filtered.filter((item) => monthKey(item.releaseDate) === monthKey(movie.releaseDate)).length} releases</span>
+                  </div>
+                )}
+                <article className={`release-card ${movie.verificationStatus === "verified" ? "is-verified" : ""}`}>
+                  <div className="date-block">
+                    <span>{shortDate(movie.releaseDate).split(" ")[0]}</span>
+                    <small>{shortDate(movie.releaseDate).split(" ")[1]}</small>
+                  </div>
+                  <div className="card-copy">
+                    <div className="card-topline">
+                      <span>{movie.language || "Language pending"}</span>
+                      <span className={`status ${movie.verificationStatus}`}>{statusLabel(movie.verificationStatus)}</span>
+                    </div>
+                    <h3>{movie.title}</h3>
+                    {movie.nativeTitle && movie.nativeTitle !== movie.title && <p className="native-title">{movie.nativeTitle}</p>}
+                    <p className="source-line">{sourceLabel(movie.releaseSource)}</p>
+                  </div>
+                  <div className="card-index">{String(index + 1).padStart(2, "0")}</div>
+                </article>
+              </Fragment>
+            );
+          })}
+
           {!filtered.length && (
-            <div className="calendar-banner">
+            <div className="empty-state">
               <p className="eyebrow">No matching releases yet</p>
-              <h2>We’re still tracking this slice.</h2>
-              <p>Try another year or language while the scheduled catalogue refresh continues to add release-date candidates.</p>
+              <h2>Nothing in this slice.</h2>
+              <p>Try another year, language, or search term while the source refresh continues to expand the calendar.</p>
             </div>
           )}
         </div>
+
+        {visibleCount < filtered.length && (
+          <button className="load-more" onClick={() => setVisibleCount((count) => count + 60)}>
+            Show 60 more <span>{filtered.length - visibleCount} remaining</span>
+          </button>
+        )}
       </section>
 
       <section className="calendar-banner">
-        <p className="eyebrow">Built for clarity</p>
-        <h2>{movies.length} names and dates, without the noise.</h2>
-        <p>Upcoming is only one view. Use the year and All filters above to browse the complete tracked catalogue while official-source verification grows.</p>
+        <div>
+          <p className="eyebrow">Source-aware by design</p>
+          <h2>Open data finds it. Official evidence confirms it.</h2>
+        </div>
+        <div className="banner-copy">
+          <p>Wikidata remains our discovery layer. Studio websites and verified official channels can promote a date to verified, while conflicting evidence stays preserved instead of disappearing.</p>
+          <div className="confidence-key">
+            <span><i className="key-dot verified" /> Official</span>
+            <span><i className="key-dot supported" /> Supported</span>
+            <span><i className="key-dot unconfirmed" /> Tracking</span>
+          </div>
+        </div>
       </section>
 
       <footer>
         <span>Cinema & Series</span>
-        <span>Fast V1 · 2026</span>
+        <span>India release desk · Fast V1</span>
       </footer>
     </main>
   );
