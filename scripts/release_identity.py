@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Conservative movie-title identity helpers for release-signal dedupe.
 
-Dedupe is intentionally stricter than discovery. A release signal is considered
-already curated only when the official source, release date, and a movie title
-all agree. Matching by source + date alone is unsafe because one studio may
-announce more than one title for the same release day.
+Dedupe is intentionally stricter than discovery. Same-source release signals are
+considered already curated only when source, release date, and movie title all
+agree. Cross-source corroboration is also suppressible when a different
+registered first-party source names the exact same *distinctive* movie title on
+the exact same date. Date-only matching is never sufficient.
 """
 from __future__ import annotations
 
@@ -26,6 +27,23 @@ def title_in_text(title: str | None, text: str | None) -> bool:
     if not needle or not haystack:
         return False
     return f" {needle} " in f" {haystack} "
+
+
+def title_is_distinctive(title: str | None) -> bool:
+    """Return True only for titles safe enough for cross-source corroboration.
+
+    Multi-word titles are considered distinctive once they carry meaningful
+    normalized text. Single-word titles must be at least eight characters so
+    short/generic names such as KING cannot silently cross-dedupe independent
+    projects from different studios.
+    """
+    normalized = normalize_identity_text(title)
+    if not normalized:
+        return False
+    tokens = normalized.split()
+    if len(tokens) >= 2:
+        return len(normalized.replace(" ", "")) >= 6
+    return len(tokens[0]) >= 8
 
 
 def verified_titles_by_source_date(releases_payload: dict) -> dict[str, dict[str, set[str]]]:
@@ -59,10 +77,25 @@ def candidate_matches_verified_release(
     known: dict[str, dict[str, set[str]]],
     identity_fields: tuple[str, ...],
 ) -> bool:
-    """Return True only for a same-source/date candidate naming the same movie."""
+    """Return True for an identity-safe same-movie/date verified occurrence.
+
+    Same-source matching accepts any exact normalized movie title. Cross-source
+    matching is deliberately narrower: the exact date must match and the movie
+    title must be distinctive enough to avoid generic-title collisions.
+    """
     source_key = candidate.get("source_key", "")
-    titles = known.get(source_key, {}).get(release_date, set())
-    if not titles:
+    if not source_key:
         return False
+
     text = candidate_identity_text(candidate, identity_fields)
-    return any(title_in_text(title, text) for title in titles)
+    same_source_titles = known.get(source_key, {}).get(release_date, set())
+    if any(title_in_text(title, text) for title in same_source_titles):
+        return True
+
+    for verified_source_key, dates in known.items():
+        if verified_source_key == source_key:
+            continue
+        for title in dates.get(release_date, set()):
+            if title_is_distinctive(title) and title_in_text(title, text):
+                return True
+    return False

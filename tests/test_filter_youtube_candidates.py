@@ -65,6 +65,48 @@ class YouTubeCandidateFilterTests(unittest.TestCase):
         self.assertEqual(filtered, [candidate])
         self.assertEqual(suppressed, 0)
 
+    def test_distinctive_cross_source_same_title_and_date_is_removed(self):
+        candidate = {
+            "source_key": "t_series",
+            "video_title": "RANABAALI - Hindi Teaser | In Theatres October 16th",
+            "candidate_dates": ["2026-10-16"],
+            "candidate_release_date": "2026-10-16",
+        }
+        filtered, suppressed = module.filter_candidates(
+            [candidate],
+            {"mythri_movie_makers": {"2026-10-16": {"RANABAALI"}}},
+        )
+        self.assertEqual(filtered, [])
+        self.assertEqual(suppressed, 1)
+
+    def test_short_generic_cross_source_title_is_kept_for_review(self):
+        candidate = {
+            "source_key": "t_series",
+            "video_title": "KING | Official Announcement | 24 December 2026",
+            "candidate_dates": ["2026-12-24"],
+            "candidate_release_date": "2026-12-24",
+        }
+        filtered, suppressed = module.filter_candidates(
+            [candidate],
+            {"red_chillies_entertainment": {"2026-12-24": {"KING"}}},
+        )
+        self.assertEqual(filtered, [candidate])
+        self.assertEqual(suppressed, 0)
+
+    def test_cross_source_same_title_but_different_date_is_kept(self):
+        candidate = {
+            "source_key": "t_series",
+            "video_title": "RANABAALI | New Date Announcement",
+            "candidate_dates": ["2026-10-23"],
+            "candidate_release_date": "2026-10-23",
+        }
+        filtered, suppressed = module.filter_candidates(
+            [candidate],
+            {"mythri_movie_makers": {"2026-10-16": {"RANABAALI"}}},
+        )
+        self.assertEqual(filtered, [candidate])
+        self.assertEqual(suppressed, 0)
+
     def test_mixed_candidate_keeps_only_new_date_for_same_movie(self):
         candidates = [
             {
