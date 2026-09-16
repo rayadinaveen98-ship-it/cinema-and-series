@@ -300,6 +300,56 @@
       "youtube_handle": "@JioStudios",
       "languages": ["Hindi", "Marathi", "Tamil", "Telugu", "Malayalam", "Punjabi", "Gujarati"],
       "active": true
+    },
+    {
+      "key": "luv_films",
+      "name": "Luv Films",
+      "source_type": "production_house",
+      "website_url": "https://luvfilms.in/",
+      "youtube_channel_id": null,
+      "youtube_handle": null,
+      "languages": ["Hindi", "Marathi"],
+      "active": true
+    },
+    {
+      "key": "panorama_studios",
+      "name": "Panorama Studios",
+      "source_type": "studio_distributor",
+      "website_url": "https://panoramastudios.in/",
+      "youtube_channel_id": null,
+      "youtube_handle": null,
+      "languages": ["Hindi", "Marathi"],
+      "active": true
+    },
+    {
+      "key": "colour_yellow_productions",
+      "name": "Colour Yellow Productions",
+      "source_type": "production_house",
+      "website_url": "https://www.colouryellow.com/home/",
+      "youtube_channel_id": null,
+      "youtube_handle": null,
+      "languages": ["Hindi", "Marathi"],
+      "active": true
+    },
+    {
+      "key": "pen_studios",
+      "name": "Pen Studios",
+      "source_type": "studio_distributor",
+      "website_url": "https://penstudios.in/",
+      "youtube_channel_id": null,
+      "youtube_handle": null,
+      "languages": ["Hindi"],
+      "active": true
+    },
+    {
+      "key": "zee_studios",
+      "name": "Zee Studios",
+      "source_type": "studio_distributor",
+      "website_url": "https://www.zee.com/products-platforms-movies/",
+      "youtube_channel_id": null,
+      "youtube_handle": null,
+      "languages": ["Hindi", "Marathi"],
+      "active": true
     }
   ]
 }
