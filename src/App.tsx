@@ -7,7 +7,9 @@ type Movie = {
   nativeTitle?: string;
   language: string;
   countryCode?: string;
-  releaseDate: string;
+  releaseDate?: string;
+  releaseYear?: number;
+  datePrecision?: "day" | "year";
   verificationStatus: "verified" | "supported" | "unconfirmed";
   releaseSource?: string;
   releaseSourceName?: string;
@@ -34,10 +36,10 @@ type ApiResponse = {
 };
 
 const fallback: Movie[] = [
-  { id: "preview-1", title: "RANABAALI", language: "Telugu", countryCode: "IN", releaseDate: "2026-10-16", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
-  { id: "preview-2", title: "KING", language: "Hindi", countryCode: "IN", releaseDate: "2026-12-24", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
-  { id: "preview-3", title: "Jailer 2", language: "Tamil", countryCode: "IN", releaseDate: "2026-10-15", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
-  { id: "preview-4", title: "Spirit", language: "Telugu", countryCode: "IN", releaseDate: "2027-03-05", verificationStatus: "supported", releaseSource: "preview" },
+  { id: "preview-1", title: "RANABAALI", language: "Telugu", countryCode: "IN", releaseDate: "2026-10-16", releaseYear: 2026, datePrecision: "day", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
+  { id: "preview-2", title: "KING", language: "Hindi", countryCode: "IN", releaseDate: "2026-12-24", releaseYear: 2026, datePrecision: "day", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
+  { id: "preview-3", title: "Jailer 2", language: "Tamil", countryCode: "IN", releaseDate: "2026-10-15", releaseYear: 2026, datePrecision: "day", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
+  { id: "preview-4", title: "Spirit", language: "Telugu", countryCode: "IN", releaseDate: "2027-03-05", releaseYear: 2027, datePrecision: "day", verificationStatus: "supported", releaseSource: "preview" },
 ];
 const fallbackStats: CatalogueStats = { total: 4, verified: 3, supported: 1, unconfirmed: 0, activeSources: 0 };
 const fallbackFacets: CatalogueFacets = {
@@ -64,10 +66,17 @@ function dateKey(date: Date) {
 function addDaysKey(value: string, days: number) { return dateKey(new Date(parseDate(value).getTime() + days * 86_400_000)); }
 function todayKey() { return dateKey(new Date()); }
 function formatDate(value: string) { return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(parseDate(value)); }
-function yearOf(value: string) { return value.slice(0, 4); }
+function movieYear(movie: Movie) { return movie.releaseYear ?? Number(movie.releaseDate?.slice(0, 4) || 0); }
+function isYearPrecision(movie: Movie) { return movie.datePrecision === "year" || !movie.releaseDate; }
+function releaseLabel(movie: Movie) {
+  if (movie.releaseDate) return formatDate(movie.releaseDate);
+  const year = movieYear(movie);
+  return year ? `${year} · year precision` : "Year not resolved";
+}
 function countryLabel(code?: string) { return !code ? "Global" : countryNames[code] ?? code; }
 function sourceLabel(source?: string) {
   if (!source || source === "wikidata") return "Wikidata";
+  if (source === "wikipedia") return "Wikipedia";
   if (source === "official") return "Official source";
   if (source === "preview") return "Preview";
   return source.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
@@ -107,11 +116,11 @@ function PosterCard({ movie, onOpen, rank }: { movie: Movie; onOpen: (movie: Mov
         <div className="poster-copy">
           <p>{movie.language || "Cinema"}</p>
           <h3>{movie.title}</h3>
-          <div><span>{yearOf(movie.releaseDate)}</span><span>•</span><span>{countryLabel(movie.countryCode)}</span></div>
+          <div><span>{movieYear(movie) || "—"}</span><span>•</span><span>{countryLabel(movie.countryCode)}</span></div>
         </div>
         <div className="poster-hover">
           <span className="play-orb">ⓘ</span>
-          <strong>{formatDate(movie.releaseDate)}</strong>
+          <strong>{releaseLabel(movie)}</strong>
           <small>{movieSourceLabel(movie)}</small>
         </div>
       </article>
@@ -122,6 +131,7 @@ function PosterCard({ movie, onOpen, rank }: { movie: Movie; onOpen: (movie: Mov
 function MovieDetail({ movie, onClose, onFeature }: { movie: Movie; onClose: () => void; onFeature: (movie: Movie) => void }) {
   const artwork = heroArtwork(movie);
   const isVerified = movie.verificationStatus === "verified";
+  const yearPrecision = isYearPrecision(movie);
   const nativeTitle = movie.nativeTitle?.trim() && movie.nativeTitle.trim().toLocaleLowerCase() !== movie.title.trim().toLocaleLowerCase()
     ? movie.nativeTitle.trim()
     : undefined;
@@ -144,16 +154,18 @@ function MovieDetail({ movie, onClose, onFeature }: { movie: Movie; onClose: () 
           <div className="detail-primary">
             <div className="detail-meta">
               <b className={movie.verificationStatus}>{statusLabel(movie.verificationStatus)}</b>
-              <span className="dot">•</span><span>{formatDate(movie.releaseDate)}</span>
+              <span className="dot">•</span><span>{releaseLabel(movie)}</span>
               <span className="dot">•</span><span>{movie.language || "Unknown language"}</span>
               <span className="dot">•</span><span>{countryLabel(movie.countryCode)}</span>
             </div>
             <p className="detail-summary">
-              {isVerified
-                ? `This release date is verified against first-party evidence from ${movieSourceLabel(movie)}.`
-                : movie.verificationStatus === "supported"
-                  ? `This date is supported by the catalogue evidence currently available. First-party confirmation is still being monitored.`
-                  : `This title is being tracked while stronger release evidence is collected. Treat the date as unconfirmed until verification improves.`}
+              {yearPrecision
+                ? `Wikipedia currently places this title in the ${movieYear(movie)} film catalogue. This discovery record claims the year only; no exact release day is being invented.`
+                : isVerified
+                  ? `This release date is verified against first-party evidence from ${movieSourceLabel(movie)}.`
+                  : movie.verificationStatus === "supported"
+                    ? `This date is supported by the catalogue evidence currently available. First-party confirmation is still being monitored.`
+                    : `This title is being tracked while stronger release evidence is collected. Treat the exact date as unconfirmed until verification improves.`}
             </p>
             <div className="detail-actions">
               <button className="detail-feature" type="button" onClick={() => onFeature(movie)}><span>▶</span> Feature this title</button>
@@ -163,13 +175,13 @@ function MovieDetail({ movie, onClose, onFeature }: { movie: Movie; onClose: () 
           <aside className="detail-evidence" aria-label="Movie evidence summary">
             <div className="detail-evidence-row">
               <span>Release status</span>
-              <strong>{statusLabel(movie.verificationStatus)}</strong>
-              <small>{isVerified ? "First-party date confirmation captured" : "Evidence monitoring remains active"}</small>
+              <strong>{yearPrecision ? "Year-level discovery" : statusLabel(movie.verificationStatus)}</strong>
+              <small>{yearPrecision ? "Exact day/month not claimed" : isVerified ? "First-party date confirmation captured" : "Evidence monitoring remains active"}</small>
             </div>
             <div className="detail-evidence-row">
               <span>Release evidence</span>
               <strong>{movieSourceLabel(movie)}</strong>
-              <small>{isVerified ? "Used to verify the listed release date" : "Current catalogue source"}</small>
+              <small>{yearPrecision ? "Supports catalogue year only, not an exact release day" : isVerified ? "Used to verify the listed release date" : "Current catalogue source"}</small>
             </div>
             <div className="detail-evidence-row">
               <span>Visual provenance</span>
@@ -290,12 +302,16 @@ export default function App() {
   }
 
   const verified = useMemo(() => movies.filter((movie) => movie.verificationStatus === "verified"), [movies]);
-  const arriving = useMemo(() => [...movies].sort((a, b) => a.releaseDate.localeCompare(b.releaseDate)), [movies]);
-  const featured = verified.length ? verified : arriving;
+  const arriving = useMemo(
+    () => movies.filter((movie) => Boolean(movie.releaseDate) && movie.releaseDate! >= today).sort((a, b) => a.releaseDate!.localeCompare(b.releaseDate!)),
+    [movies, today],
+  );
+  const featured = verified.length ? verified : (arriving.length ? arriving : movies);
   const languages = useMemo(() => ["All", ...facets.languages.slice(0, 16).map((item) => item.value)], [facets.languages]);
   const countries = useMemo(() => ["All", ...facets.countries.slice(0, 12).map((item) => item.value)], [facets.countries]);
   const years = useMemo(() => facets.years.slice(0, 10), [facets.years]);
   const activeHeroArtwork = heroArtwork(hero);
+  const heroYearPrecision = isYearPrecision(hero);
 
   return (
     <main className="stream-app">
@@ -318,13 +334,17 @@ export default function App() {
         </div>
         <div className="hero-vignette" />
         <div className="stream-hero-copy">
-          <div className="series-label"><span>N</span> FEATURED RELEASE</div>
+          <div className="series-label"><span>N</span> {heroYearPrecision ? "CATALOGUE FEATURE" : "FEATURED RELEASE"}</div>
           <h1>{hero.title}</h1>
           <div className="hero-meta">
             <strong className={hero.verificationStatus}>{statusLabel(hero.verificationStatus)}</strong>
-            <span>{formatDate(hero.releaseDate)}</span><span>{hero.language || "Cinema"}</span><span>{countryLabel(hero.countryCode)}</span>
+            <span>{releaseLabel(hero)}</span><span>{hero.language || "Cinema"}</span><span>{countryLabel(hero.countryCode)}</span>
           </div>
-          <p>{hero.verificationStatus === "verified" ? `Release date confirmed through ${movieSourceLabel(hero)}.` : `Currently tracked through ${movieSourceLabel(hero)} while stronger release evidence is monitored.`} Explore a growing India-first, global movie catalogue.</p>
+          <p>{heroYearPrecision
+            ? `Discovered through ${movieSourceLabel(hero)} with year-level precision; no exact release day is claimed.`
+            : hero.verificationStatus === "verified"
+              ? `Release date confirmed through ${movieSourceLabel(hero)}.`
+              : `Currently tracked through ${movieSourceLabel(hero)} while stronger release evidence is monitored.`} Explore a growing India-first, global movie catalogue.</p>
           <div className="hero-buttons">
             <a className="play-button" href="#browse"><span>▶</span> Browse catalogue</a>
             <button className="info-button" onClick={() => setSelectedMovie(hero)}><span>ⓘ</span> More info</button>
