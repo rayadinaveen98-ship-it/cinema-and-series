@@ -31,21 +31,36 @@ function shortDate(value: string) {
   return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" }).format(new Date(`${value}T00:00:00+05:30`));
 }
 
+function todayKey() {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function statusLabel(status: Movie["verificationStatus"]) {
   if (status === "verified") return "Officially verified";
   if (status === "supported") return "Supported";
   return "Date tracking";
 }
 
+function periodLabel(period: string) {
+  if (period === "upcoming") return "Upcoming";
+  if (period === "all") return "All tracked releases";
+  return `${period} releases`;
+}
+
 export default function App() {
   const [movies, setMovies] = useState<Movie[]>(fallback);
   const [source, setSource] = useState<ApiResponse["source"]>("preview");
   const [activeLanguage, setActiveLanguage] = useState("All");
+  const [activePeriod, setActivePeriod] = useState("upcoming");
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/movies", { signal: controller.signal })
+    fetch("/api/movies?scope=all", { signal: controller.signal })
       .then((response) => {
         if (!response.ok) throw new Error("Movie API unavailable");
         return response.json() as Promise<ApiResponse>;
@@ -59,12 +74,40 @@ export default function App() {
     return () => controller.abort();
   }, []);
 
-  const languages = useMemo(() => ["All", ...Array.from(new Set(movies.map((movie) => movie.language)))], [movies]);
-  const filtered = useMemo(
-    () => activeLanguage === "All" ? movies : movies.filter((movie) => movie.language === activeLanguage),
-    [activeLanguage, movies],
+  const today = todayKey();
+  const years = useMemo(
+    () => Array.from(new Set(movies.map((movie) => movie.releaseDate.slice(0, 4)))).sort(),
+    [movies],
   );
-  const hero = filtered[0] ?? movies[0];
+  const upcomingCount = useMemo(() => movies.filter((movie) => movie.releaseDate >= today).length, [movies, today]);
+  const yearCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    movies.forEach((movie) => counts.set(movie.releaseDate.slice(0, 4), (counts.get(movie.releaseDate.slice(0, 4)) ?? 0) + 1));
+    return counts;
+  }, [movies]);
+
+  const periodMovies = useMemo(() => {
+    if (activePeriod === "all") return movies;
+    if (activePeriod === "upcoming") return movies.filter((movie) => movie.releaseDate >= today);
+    return movies.filter((movie) => movie.releaseDate.startsWith(`${activePeriod}-`));
+  }, [activePeriod, movies, today]);
+
+  const languages = useMemo(
+    () => ["All", ...Array.from(new Set(periodMovies.map((movie) => movie.language || "Unknown"))).sort()],
+    [periodMovies],
+  );
+  const filtered = useMemo(
+    () => activeLanguage === "All" ? periodMovies : periodMovies.filter((movie) => (movie.language || "Unknown") === activeLanguage),
+    [activeLanguage, periodMovies],
+  );
+  const hero = useMemo(
+    () => movies.find((movie) => movie.releaseDate >= today) ?? movies[0],
+    [movies, today],
+  );
+
+  useEffect(() => {
+    if (!languages.includes(activeLanguage)) setActiveLanguage("All");
+  }, [activeLanguage, languages]);
 
   return (
     <main className="page-shell">
@@ -78,7 +121,7 @@ export default function App() {
         </a>
         <div className="topbar-meta">
           <span className={`live-dot ${source === "d1" ? "is-live" : ""}`} />
-          {source === "d1" ? "Live catalogue" : loading ? "Connecting…" : "Preview catalogue"}
+          {source === "d1" ? `${upcomingCount} upcoming · ${movies.length} tracked` : loading ? "Connecting…" : "Preview catalogue"}
         </div>
       </header>
 
@@ -104,6 +147,20 @@ export default function App() {
         </div>
       </section>
 
+      <section className="language-strip" aria-label="Choose release period">
+        <button className={activePeriod === "upcoming" ? "chip active" : "chip"} onClick={() => setActivePeriod("upcoming")}>
+          Upcoming · {upcomingCount}
+        </button>
+        {years.map((year) => (
+          <button key={year} className={activePeriod === year ? "chip active" : "chip"} onClick={() => setActivePeriod(year)}>
+            {year} · {yearCounts.get(year) ?? 0}
+          </button>
+        ))}
+        <button className={activePeriod === "all" ? "chip active" : "chip"} onClick={() => setActivePeriod("all")}>
+          All · {movies.length}
+        </button>
+      </section>
+
       <section className="language-strip" aria-label="Filter by language">
         {languages.map((language) => (
           <button
@@ -120,9 +177,9 @@ export default function App() {
         <div className="section-heading">
           <div>
             <p className="eyebrow">Release desk</p>
-            <h2>Upcoming</h2>
+            <h2>{periodLabel(activePeriod)}</h2>
           </div>
-          <p>{filtered.length} tracked release{filtered.length === 1 ? "" : "s"}</p>
+          <p>{filtered.length} shown · {movies.length} total tracked</p>
         </div>
 
         <div className="release-list">
@@ -134,7 +191,7 @@ export default function App() {
               </div>
               <div className="card-copy">
                 <div className="card-topline">
-                  <span>{movie.language}</span>
+                  <span>{movie.language || "Language pending"}</span>
                   <span className={`status ${movie.verificationStatus}`}>{statusLabel(movie.verificationStatus)}</span>
                 </div>
                 <h3>{movie.title}</h3>
@@ -143,13 +200,20 @@ export default function App() {
               <div className="card-index">{String(index + 1).padStart(2, "0")}</div>
             </article>
           ))}
+          {!filtered.length && (
+            <div className="calendar-banner">
+              <p className="eyebrow">No matching releases yet</p>
+              <h2>We’re still tracking this slice.</h2>
+              <p>Try another year or language while the scheduled catalogue refresh continues to add release-date candidates.</p>
+            </div>
+          )}
         </div>
       </section>
 
       <section className="calendar-banner">
         <p className="eyebrow">Built for clarity</p>
-        <h2>Names. Dates. Nothing noisy.</h2>
-        <p>The catalogue layer stays intentionally small so the data can be checked, refreshed and corrected quickly.</p>
+        <h2>{movies.length} names and dates, without the noise.</h2>
+        <p>Upcoming is only one view. Use the year and All filters above to browse the complete tracked catalogue while official-source verification grows.</p>
       </section>
 
       <footer>
