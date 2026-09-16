@@ -13,6 +13,10 @@ type MovieRow = {
   verification_status: "verified" | "supported" | "unconfirmed";
   release_date_source: string;
   release_source_name: string | null;
+  poster_url: string | null;
+  backdrop_url: string | null;
+  artwork_source: string | null;
+  artwork_source_url: string | null;
 };
 
 type StatsRow = {
@@ -62,7 +66,8 @@ const previewMovies = [
 
 const visibleMovieClause = "(m.wikidata_qid IS NULL OR m.title <> m.wikidata_qid)";
 const movieColumns = `m.id, m.wikidata_qid, m.title, m.native_title, m.language_name, m.country_code, m.release_date,
-  m.verification_status, m.release_date_source, s.source_name AS release_source_name`;
+  m.verification_status, m.release_date_source, s.source_name AS release_source_name,
+  m.poster_url, m.backdrop_url, m.artwork_source, m.artwork_source_url`;
 const movieSourceJoin = "LEFT JOIN source_channels s ON s.source_key = m.release_date_source";
 
 function json(data: unknown, status = 200, cacheControl = "public, max-age=60, s-maxage=300") {
@@ -298,6 +303,10 @@ export default {
         verificationStatus: movie.verification_status,
         releaseSource: movie.release_date_source,
         releaseSourceName: movie.release_source_name ?? undefined,
+        posterUrl: movie.poster_url ?? undefined,
+        backdropUrl: movie.backdrop_url ?? undefined,
+        artworkSource: movie.artwork_source ?? undefined,
+        artworkSourceUrl: movie.artwork_source_url ?? undefined,
       }));
 
       const latestUpdate = [statsResult?.latest_updated_at, sourcesResult?.latest_updated_at]
