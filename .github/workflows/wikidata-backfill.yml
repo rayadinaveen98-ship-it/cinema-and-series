@@ -6,10 +6,12 @@ on:
     paths:
       - "scripts/fetch_wikidata_backfill.py"
       - "scripts/fetch_mediawiki_backfill.py"
+      - "scripts/fetch_mediawiki_resilient.py"
       - "scripts/merge_catalogue_backfills.py"
       - "scripts/wikidata_to_sql.py"
       - "tests/test_wikidata_backfill.py"
       - "tests/test_mediawiki_backfill.py"
+      - "tests/test_fetch_mediawiki_resilient.py"
       - "tests/test_merge_catalogue_backfills.py"
       - ".github/workflows/wikidata-backfill.yml"
   schedule:
@@ -44,7 +46,7 @@ jobs:
 
       - name: Run catalogue backfill tests
         run: |
-          python -m unittest tests.test_wikidata_backfill tests.test_mediawiki_backfill tests.test_merge_catalogue_backfills -v
+          python -m unittest tests.test_wikidata_backfill tests.test_mediawiki_backfill tests.test_fetch_mediawiki_resilient tests.test_merge_catalogue_backfills -v
 
       - name: Choose backfill profile
         id: profile
@@ -78,6 +80,17 @@ jobs:
           primary_code=$?
           set -e
 
+          if [[ $primary_code -eq 0 && -s data/generated/wdqs-backfill.json ]]; then
+            python - <<'PY'
+          import json
+          from pathlib import Path
+          path = Path("data/generated/wdqs-backfill.json")
+          payload = json.loads(path.read_text(encoding="utf-8"))
+          payload["acquisition_path"] = "wdqs"
+          path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          PY
+          fi
+
           fallback_needed="true"
           if [[ $primary_code -eq 0 && -s data/generated/wdqs-backfill.json ]]; then
             fallback_needed=$(python - <<'PY'
@@ -100,9 +113,9 @@ jobs:
               # breadth first instead of repeating the same Indian shards.
               fallback_profile="global-recent"
             fi
-            echo "WDQS acquisition was unavailable or incomplete; adding MediaWiki profile: $fallback_profile"
+            echo "WDQS acquisition was unavailable or incomplete; adding resilient MediaWiki profile: $fallback_profile"
             set +e
-            python scripts/fetch_mediawiki_backfill.py \
+            python scripts/fetch_mediawiki_resilient.py \
               --profile "$fallback_profile" \
               --max-movies 5000 \
               --out data/generated/mediawiki-backfill.json
