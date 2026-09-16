@@ -25,8 +25,10 @@ OUT = Path("data/generated/wikipedia-year-catalogue.json")
 MAX_TITLES_PER_RUN = 4000
 CATEGORY_MEMBER_CAP = 140
 PAGEPROP_BATCH = 50
-REQUEST_DELAY_SECONDS = 0.08
-MAX_CATEGORY_FAILURES = 12
+REQUEST_DELAY_SECONDS = 0.50
+MAX_CONSECUTIVE_CATEGORY_FAILURES = 40
+FAILURE_COOLDOWN_EVERY = 5
+FAILURE_COOLDOWN_SECONDS = 8
 
 
 @dataclass(frozen=True)
@@ -46,14 +48,40 @@ def category_year(category: str) -> int:
     return int(match.group(1))
 
 
+def _interleave(values_a: list[base.Seed], values_b: list[base.Seed]) -> list[base.Seed]:
+    result: list[base.Seed] = []
+    maximum = max(len(values_a), len(values_b))
+    for index in range(maximum):
+        if index < len(values_a):
+            result.append(values_a[index])
+        if index < len(values_b):
+            result.append(values_b[index])
+    return result
+
+
 def ordered_seeds(profile: str) -> list[base.Seed]:
     seeds = base.build_seeds(profile)
-    # Interleave country/language groups inside each year so a capped run does
-    # not fill exclusively from one territory or language family.
-    return sorted(
-        seeds,
-        key=lambda seed: (-category_year(seed.category), seed.group.casefold(), seed.category.casefold()),
-    )
+    # Balance India-language discovery with global-country discovery inside each
+    # year. The previous alphabetical group order placed every country bucket
+    # ahead of every India-language bucket and could exhaust a throttled run
+    # before Telugu/Hindi/Tamil/etc. were ever attempted.
+    by_year: dict[int, list[base.Seed]] = {}
+    for seed in seeds:
+        by_year.setdefault(category_year(seed.category), []).append(seed)
+
+    ordered: list[base.Seed] = []
+    for year in sorted(by_year, reverse=True):
+        year_seeds = by_year[year]
+        india = sorted(
+            (seed for seed in year_seeds if seed.group.startswith("india-")),
+            key=lambda seed: seed.group.casefold(),
+        )
+        global_countries = sorted(
+            (seed for seed in year_seeds if not seed.group.startswith("india-")),
+            key=lambda seed: seed.group.casefold(),
+        )
+        ordered.extend(_interleave(india, global_countries))
+    return ordered
 
 
 def category_members(seed: base.Seed, cap: int = CATEGORY_MEMBER_CAP) -> list[Discovery]:
@@ -102,18 +130,23 @@ def category_members(seed: base.Seed, cap: int = CATEGORY_MEMBER_CAP) -> list[Di
 def discover(profile: str, maximum: int) -> tuple[dict[int, list[Discovery]], list[dict]]:
     by_page: dict[int, list[Discovery]] = {}
     reports: list[dict] = []
-    failures = 0
+    consecutive_failures = 0
     for seed in ordered_seeds(profile):
         if len(by_page) >= maximum:
             break
         try:
             rows = category_members(seed)
-            failures = 0
+            consecutive_failures = 0
             reports.append({"category": seed.category, "status": "ok", "pages": len(rows), "group": seed.group})
         except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as exc:
-            failures += 1
+            consecutive_failures += 1
             reports.append({"category": seed.category, "status": "deferred", "error": str(exc)[:180], "group": seed.group})
-            if failures >= MAX_CATEGORY_FAILURES:
+            # Wikimedia throttling can arrive in bursts. Back off periodically,
+            # then continue walking the seed map instead of losing every later
+            # language/country because one burst happened early in the run.
+            if consecutive_failures % FAILURE_COOLDOWN_EVERY == 0:
+                time.sleep(FAILURE_COOLDOWN_SECONDS)
+            if consecutive_failures >= MAX_CONSECUTIVE_CATEGORY_FAILURES:
                 break
             continue
         for row in rows:
