@@ -39,16 +39,36 @@ export default {
         return json({ movies: previewMovies, source: "preview", generatedAt: new Date().toISOString() });
       }
 
-      const from = url.searchParams.get("from") ?? new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10);
-      const to = url.searchParams.get("to") ?? new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 10);
+      const scope = url.searchParams.get("scope") ?? "upcoming";
+      const requestedYear = url.searchParams.get("year");
+      let result;
 
-      const result = await env.DB.prepare(
-        `SELECT id, wikidata_qid, title, native_title, language_name, release_date, verification_status
-         FROM movies
-         WHERE release_date BETWEEN ?1 AND ?2
-         ORDER BY release_date ASC, title COLLATE NOCASE ASC
-         LIMIT 250`,
-      ).bind(from, to).all<MovieRow>();
+      if (scope === "all") {
+        result = await env.DB.prepare(
+          `SELECT id, wikidata_qid, title, native_title, language_name, release_date, verification_status
+           FROM movies
+           ORDER BY release_date ASC, title COLLATE NOCASE ASC
+           LIMIT 1000`,
+        ).all<MovieRow>();
+      } else if (requestedYear && /^\d{4}$/.test(requestedYear)) {
+        result = await env.DB.prepare(
+          `SELECT id, wikidata_qid, title, native_title, language_name, release_date, verification_status
+           FROM movies
+           WHERE release_date BETWEEN ?1 AND ?2
+           ORDER BY release_date ASC, title COLLATE NOCASE ASC
+           LIMIT 1000`,
+        ).bind(`${requestedYear}-01-01`, `${requestedYear}-12-31`).all<MovieRow>();
+      } else {
+        const from = url.searchParams.get("from") ?? new Date().toISOString().slice(0, 10);
+        const to = url.searchParams.get("to") ?? new Date(Date.now() + 730 * 86400000).toISOString().slice(0, 10);
+        result = await env.DB.prepare(
+          `SELECT id, wikidata_qid, title, native_title, language_name, release_date, verification_status
+           FROM movies
+           WHERE release_date BETWEEN ?1 AND ?2
+           ORDER BY release_date ASC, title COLLATE NOCASE ASC
+           LIMIT 1000`,
+        ).bind(from, to).all<MovieRow>();
+      }
 
       const movies = result.results.map((movie) => ({
         id: movie.id,
