@@ -6,9 +6,11 @@ runtime dependency. The query intentionally orders newest dates first so future
 releases cannot be crowded out by older rows when the source result is capped.
 
 The public WDQS can throttle aggressively during incidents. We prefer the
-current main-graph endpoint, respect 429 cooldowns instead of hammering it, and
-fall back to the legacy public hostname for ordinary endpoint/network failures.
-If acquisition still fails, the workflow preserves the existing D1 catalogue.
+current main-graph endpoint, respect ordinary 429 cooldowns, and fall back to
+the legacy public hostname for ordinary endpoint/network failures. When WDQS
+asks for a cooldown longer than this scheduled job can safely accommodate, we
+defer acquisition immediately and preserve the existing D1 catalogue instead of
+sleeping until CI is cancelled.
 """
 from __future__ import annotations
 
@@ -30,7 +32,12 @@ USER_AGENT = "CinemaAndSeries/0.1 (public GitHub project; Wikidata acquisition)"
 INDIA_QID = "Q668"
 QUERY_LIMIT = 3000
 RATE_LIMIT_FALLBACK_SECONDS = 65
+MAX_INLINE_COOLDOWN_SECONDS = 90
 MAX_ATTEMPTS = 4
+
+
+class WikidataDeferred(RuntimeError):
+    """The public service asked us to defer this scheduled acquisition."""
 
 
 def tracked_years() -> list[int]:
@@ -78,12 +85,7 @@ def retry_after_seconds(error: urllib.error.HTTPError) -> int:
 
 
 def fetch_with_resilience() -> dict:
-    """Fetch while respecting public-service throttling.
-
-    A 429 means the service explicitly asked us to slow down, so wait at least
-    one minute before another request. Other endpoint/network failures may try
-    the alternate public hostname after a short backoff.
-    """
+    """Fetch while respecting public-service throttling without stalling CI."""
     last_error: Exception | None = None
     for attempt in range(MAX_ATTEMPTS):
         endpoint = ENDPOINTS[attempt % len(ENDPOINTS)]
@@ -93,6 +95,10 @@ def fetch_with_resilience() -> dict:
             last_error = exc
             if exc.code == 429:
                 delay = retry_after_seconds(exc)
+                if delay > MAX_INLINE_COOLDOWN_SECONDS:
+                    raise WikidataDeferred(
+                        f"WDQS requested a {delay}s cooldown via {endpoint}; deferring to a later scheduled refresh"
+                    ) from exc
                 print(
                     f"WDQS rate-limited request via {endpoint}; respecting {delay}s cooldown",
                     file=sys.stderr,
@@ -198,6 +204,9 @@ def main() -> int:
         )
         print(f"wrote {len(items)} unique film release candidates to {OUT}")
         return 0
+    except WikidataDeferred as exc:
+        print(f"Wikidata acquisition deferred: {exc}", file=sys.stderr)
+        return 1
     except Exception as exc:  # public source resilience
         print(f"Wikidata acquisition failed after rate-aware retries: {exc}", file=sys.stderr)
         return 1
