@@ -29,13 +29,14 @@ def slug(value: str) -> str:
 
 def canonical_title(value: str) -> str:
     """Return a conservative Latin-friendly identity key for title matching."""
-    return "".join(ch for ch in value.casefold() if ch.isalnum())
+    normalized = value.casefold().replace("&", "and")
+    return "".join(ch for ch in normalized if ch.isalnum())
 
 
 def sql_title_key(column: str = "title") -> str:
     """SQLite expression mirroring canonical_title for common title punctuation."""
-    expression = f"lower(trim({column}))"
-    for token in (" ", "-", "_", ".", ",", ":", ";", "!", "?", "'", '"', "&", "(", ")", "[", "]", "/", "\\"):
+    expression = f"replace(lower(trim({column})),'&','and')"
+    for token in (" ", "-", "_", ".", ",", ":", ";", "!", "?", "'", '"', "(", ")", "[", "]", "/", "\\"):
         quoted = token.replace("'", "''")
         expression = f"replace({expression},'{quoted}','')"
     return expression
