@@ -1,7 +1,23 @@
 {
   "updated_at": "2026-09-16",
-  "policy": "Canonical website identity remains in source_registry.json. Automatic monitor seeds must stay on the same normalized first-party host. Sources that cannot be crawled safely may be marked manual without removing them from the trusted registry.",
+  "policy": "Canonical website identity remains in source_registry.json. Automatic monitor seeds must stay on the same normalized first-party host. Sources that cannot be crawled safely may be marked manual without removing them from the trusted registry or disabling independent first-party channels such as YouTube.",
   "sources": {
+    "vyjayanthi_network": {
+      "mode": "manual",
+      "reason": "The official website repeatedly fails the GitHub Actions TLS handshake. Keep the canonical website for provenance and continue automated monitoring through the verified Vyjayanthi YouTube channel."
+    },
+    "sun_pictures": {
+      "mode": "manual",
+      "reason": "The official website certificate chain fails strict verification in GitHub Actions. Do not weaken TLS validation; keep the website for provenance and continue automated monitoring through the verified Sun Pictures YouTube channel."
+    },
+    "prithviraj_productions": {
+      "mode": "manual",
+      "reason": "The official website presents a self-signed certificate to the GitHub Actions crawler. Do not bypass certificate verification; retain provenance and continue automated monitoring through the verified Prithviraj Productions YouTube channel."
+    },
+    "yash_raj_films": {
+      "mode": "manual",
+      "reason": "The official Yash Raj Films robots policy disallows this crawler. Respect robots.txt, retain the website as first-party provenance, and continue automated monitoring through the verified YRF YouTube channel."
+    },
     "kvn_productions": {
       "mode": "automatic",
       "monitor_url": "https://www.kvnproductions.co.in/movies",
