@@ -23,6 +23,7 @@ type ApiResponse = {
   movies: Movie[];
   source: "d1" | "preview";
   generatedAt: string;
+  catalogueUpdatedAt?: string;
   stats?: CatalogueStats;
 };
 
@@ -37,6 +38,19 @@ const fallbackStats: CatalogueStats = { total: 4, verified: 1, supported: 1, unc
 
 function parseDate(value: string) {
   return new Date(`${value}T00:00:00+05:30`);
+}
+
+function dateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function addDaysKey(value: string, days: number) {
+  const date = parseDate(value);
+  date.setDate(date.getDate() + days);
+  return dateKey(date);
 }
 
 function formatDate(value: string) {
@@ -65,11 +79,20 @@ function dateParts(value: string) {
 }
 
 function todayKey() {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return dateKey(new Date());
+}
+
+function formatFreshness(value?: string) {
+  if (!value) return "syncing catalogue";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "catalogue live";
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    day: "2-digit",
+    month: "short",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function statusLabel(status: Movie["verificationStatus"]) {
@@ -80,6 +103,8 @@ function statusLabel(status: Movie["verificationStatus"]) {
 
 function periodLabel(period: string) {
   if (period === "upcoming") return "Upcoming releases";
+  if (period === "7d") return "Next 7 days";
+  if (period === "30d") return "Next 30 days";
   if (period === "all") return "All tracked releases";
   return `${period} releases`;
 }
@@ -94,6 +119,7 @@ export default function App() {
   const [movies, setMovies] = useState<Movie[]>(fallback);
   const [stats, setStats] = useState<CatalogueStats>(fallbackStats);
   const [source, setSource] = useState<ApiResponse["source"]>("preview");
+  const [catalogueUpdatedAt, setCatalogueUpdatedAt] = useState<string>();
   const [activeLanguage, setActiveLanguage] = useState("All");
   const [activePeriod, setActivePeriod] = useState("upcoming");
   const [officialOnly, setOfficialOnly] = useState(false);
@@ -112,6 +138,7 @@ export default function App() {
         if (data.movies.length) setMovies(data.movies);
         if (data.stats) setStats(data.stats);
         setSource(data.source);
+        setCatalogueUpdatedAt(data.catalogueUpdatedAt);
       })
       .catch(() => undefined)
       .finally(() => setLoading(false));
@@ -119,11 +146,21 @@ export default function App() {
   }, []);
 
   const today = todayKey();
+  const sevenDayEnd = addDaysKey(today, 6);
+  const thirtyDayEnd = addDaysKey(today, 29);
   const years = useMemo(
     () => Array.from(new Set(movies.map((movie) => movie.releaseDate.slice(0, 4)))).sort(),
     [movies],
   );
   const upcomingCount = useMemo(() => movies.filter((movie) => movie.releaseDate >= today).length, [movies, today]);
+  const sevenDayCount = useMemo(
+    () => movies.filter((movie) => movie.releaseDate >= today && movie.releaseDate <= sevenDayEnd).length,
+    [movies, sevenDayEnd, today],
+  );
+  const thirtyDayCount = useMemo(
+    () => movies.filter((movie) => movie.releaseDate >= today && movie.releaseDate <= thirtyDayEnd).length,
+    [movies, thirtyDayEnd, today],
+  );
   const yearCounts = useMemo(() => {
     const counts = new Map<string, number>();
     movies.forEach((movie) => counts.set(movie.releaseDate.slice(0, 4), (counts.get(movie.releaseDate.slice(0, 4)) ?? 0) + 1));
@@ -133,8 +170,10 @@ export default function App() {
   const periodMovies = useMemo(() => {
     if (activePeriod === "all") return movies;
     if (activePeriod === "upcoming") return movies.filter((movie) => movie.releaseDate >= today);
+    if (activePeriod === "7d") return movies.filter((movie) => movie.releaseDate >= today && movie.releaseDate <= sevenDayEnd);
+    if (activePeriod === "30d") return movies.filter((movie) => movie.releaseDate >= today && movie.releaseDate <= thirtyDayEnd);
     return movies.filter((movie) => movie.releaseDate.startsWith(`${activePeriod}-`));
-  }, [activePeriod, movies, today]);
+  }, [activePeriod, movies, sevenDayEnd, thirtyDayEnd, today]);
 
   const confidenceMovies = useMemo(
     () => officialOnly ? periodMovies.filter((movie) => movie.verificationStatus === "verified") : periodMovies,
@@ -185,7 +224,9 @@ export default function App() {
         </a>
         <div className="topbar-meta">
           <span className={`live-dot ${source === "d1" ? "is-live" : ""}`} />
-          {source === "d1" ? `${upcomingCount} upcoming · ${stats.verified} verified` : loading ? "Connecting…" : "Preview catalogue"}
+          {source === "d1"
+            ? `${stats.activeSources} official sources · updated ${formatFreshness(catalogueUpdatedAt)}`
+            : loading ? "Connecting…" : "Preview catalogue"}
         </div>
       </header>
 
@@ -196,7 +237,7 @@ export default function App() {
             <p className="eyebrow">Next verified signal</p>
             <h1>{hero?.title ?? "Cinema, beautifully timed."}</h1>
             {hero && <p className="hero-date">{formatDate(hero.releaseDate)}</p>}
-            <p className="hero-summary">A quiet, source-aware release calendar for Indian cinema. Open data builds the map; official studio evidence upgrades the dates that matter.</p>
+            <p className="hero-summary">A quiet, source-aware release calendar for Indian cinema. Open data builds the map; {stats.activeSources || "official"} first-party feeds strengthen the dates that matter.</p>
             <div className="hero-actions">
               <a href="#releases" className="primary-action">Browse the calendar</a>
               <span className={`verification-pill ${hero?.verificationStatus ?? "unconfirmed"}`}>{hero ? statusLabel(hero.verificationStatus) : "Tracking"}</span>
@@ -224,8 +265,8 @@ export default function App() {
         </div>
 
         <div className="signal-grid" aria-label="Catalogue status">
-          <div className="metric"><span>Tracked</span><strong>{stats.total}</strong><small>movie dates</small></div>
-          <div className="metric"><span>Upcoming</span><strong>{upcomingCount}</strong><small>from today</small></div>
+          <div className="metric"><span>Tracked</span><strong>{stats.total}</strong><small>curated dates</small></div>
+          <div className="metric"><span>Next 30 days</span><strong>{thirtyDayCount}</strong><small>near-term releases</small></div>
           <div className="metric accent"><span>Official</span><strong>{stats.verified}</strong><small>verified dates</small></div>
           <div className="metric"><span>Sources</span><strong>{stats.activeSources}</strong><small>first-party feeds</small></div>
         </div>
@@ -247,6 +288,12 @@ export default function App() {
         <div className="filter-row" aria-label="Choose release period and confidence">
           <button className={activePeriod === "upcoming" ? "chip active" : "chip"} onClick={() => setActivePeriod("upcoming")}>
             Upcoming · {upcomingCount}
+          </button>
+          <button className={activePeriod === "7d" ? "chip active" : "chip"} onClick={() => setActivePeriod("7d")}>
+            Next 7 days · {sevenDayCount}
+          </button>
+          <button className={activePeriod === "30d" ? "chip active" : "chip"} onClick={() => setActivePeriod("30d")}>
+            Next 30 days · {thirtyDayCount}
           </button>
           {years.map((year) => (
             <button key={year} className={activePeriod === year ? "chip active" : "chip"} onClick={() => setActivePeriod(year)}>
@@ -318,7 +365,7 @@ export default function App() {
             <div className="empty-state">
               <p className="eyebrow">No matching releases yet</p>
               <h2>Nothing in this slice.</h2>
-              <p>Try another year, language, confidence level, or search term while the source refresh continues to expand the calendar.</p>
+              <p>Try another date window, year, language, confidence level, or search term while the source refresh continues to expand the calendar.</p>
             </div>
           )}
         </div>
@@ -347,7 +394,7 @@ export default function App() {
 
       <footer>
         <span>Cinema & Series</span>
-        <span>India release desk · Fast V1</span>
+        <span>India release desk · {stats.activeSources || "growing"} official sources</span>
       </footer>
     </main>
   );
