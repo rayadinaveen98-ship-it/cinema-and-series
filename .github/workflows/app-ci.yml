@@ -27,3 +27,4 @@ jobs:
         with:
           python-version: "3.13"
       - run: python -m unittest discover -s tests -p "test_*.py" -v
+      - run: python scripts/catalogue_audit.py
