@@ -86,7 +86,7 @@ jobs:
                   try:
                       request = urllib.request.Request(
                           root + path,
-                          headers={"Accept": "application/json", "User-Agent": "CinemaAndSeries-LiveSmoke/1.0"},
+                          headers={"Accept": "application/json", "User-Agent": "CinemaAndSeries-LiveSmoke/1.1"},
                       )
                       with urllib.request.urlopen(request, timeout=20) as response:
                           if response.status != 200:
@@ -113,9 +113,23 @@ jobs:
               raise RuntimeError(f"official-source coverage regressed: {stats.get('activeSources')}")
           if not catalogue.get("catalogueUpdatedAt"):
               raise RuntimeError("catalogue freshness timestamp missing")
+
           leaked_qids = [movie for movie in movies if movie.get("wikidataQid") and movie.get("title") == movie.get("wikidataQid")]
           if leaked_qids:
               raise RuntimeError(f"unresolved Wikidata labels leaked into public catalogue: {leaked_qids[:3]}")
+
+          verified_movies = [movie for movie in movies if movie.get("verificationStatus") == "verified"]
+          if len(verified_movies) != int(stats.get("verified") or 0):
+              raise RuntimeError(
+                  f"verified movie count mismatch: api rows={len(verified_movies)} stats={stats.get('verified')}"
+              )
+          verified_without_source_names = [
+              movie for movie in verified_movies if not str(movie.get("releaseSourceName") or "").strip()
+          ]
+          if verified_without_source_names:
+              raise RuntimeError(
+                  f"verified dates missing human-readable first-party source names: {verified_without_source_names[:3]}"
+              )
 
           print(
               "live smoke passed:",
@@ -123,8 +137,10 @@ jobs:
                   {
                       "movies": len(movies),
                       "verified": int(stats.get("verified") or 0),
+                      "verifiedWithSourceName": len(verified_movies),
                       "activeSources": int(stats.get("activeSources") or 0),
                       "catalogueUpdatedAt": catalogue.get("catalogueUpdatedAt"),
+                      "verifiedSourceNames": sorted({movie.get("releaseSourceName") for movie in verified_movies}),
                   },
                   sort_keys=True,
               ),
