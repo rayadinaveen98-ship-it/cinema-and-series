@@ -1,6 +1,8 @@
 import sys
 import unittest
+import urllib.error
 from pathlib import Path
+from unittest import mock
 
 SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(SCRIPTS))
@@ -80,6 +82,28 @@ class SeriesLanguageEnrichmentTests(unittest.TestCase):
         self.assertIn("LOWER(language_name)='unknown'", sql)
         self.assertIn("language_source='wikidata:P364'", sql)
         self.assertNotIn("country_code", sql)
+
+    def test_wikidata_request_retries_429_with_retry_after_and_get(self):
+        rate_limit = urllib.error.HTTPError(
+            "https://www.wikidata.org/w/api.php",
+            429,
+            "Too Many Requests",
+            {"Retry-After": "7"},
+            None,
+        )
+        with mock.patch.object(
+            module.base,
+            "request_json",
+            side_effect=[rate_limit, {"entities": {}}],
+        ) as request_json, mock.patch.object(module.time, "sleep") as sleep:
+            payload = module.request_wikidata({"action": "wbgetentities", "ids": "Q1"})
+
+        self.assertEqual(payload, {"entities": {}})
+        self.assertEqual(request_json.call_count, 2)
+        called_params = request_json.call_args_list[0].args[1]
+        self.assertEqual(called_params["maxlag"], "5")
+        self.assertFalse(request_json.call_args_list[0].kwargs["post"])
+        sleep.assert_called_once_with(7)
 
 
 if __name__ == "__main__":
