@@ -1,0 +1,20 @@
+{
+  "updated_at": "2026-09-16",
+  "policy": "Canonical website identity remains in source_registry.json. Automatic monitor seeds must stay on the same normalized first-party host. Sources that cannot be crawled safely may be marked manual without removing them from the trusted registry.",
+  "sources": {
+    "kvn_productions": {
+      "mode": "automatic",
+      "monitor_url": "https://www.kvnproductions.co.in/movies",
+      "reason": "The canonical homepage exceeds the crawler size cap; the official movies page is a lighter same-host first-party seed."
+    },
+    "t_series": {
+      "mode": "automatic",
+      "monitor_url": "https://www.tseries.com/news",
+      "reason": "The canonical homepage can time out in CI; the official news page is a lighter same-host first-party seed with release announcements."
+    },
+    "zee_studios": {
+      "mode": "manual",
+      "reason": "The canonical Zee corporate movies page returns HTTP 403 to the GitHub Actions crawler. Keep it as first-party provenance and review Zee evidence manually until a safe same-host automated surface is confirmed."
+    }
+  }
+}

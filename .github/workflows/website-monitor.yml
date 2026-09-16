@@ -7,11 +7,13 @@ on:
     paths:
       - ".github/workflows/website-monitor.yml"
       - "scripts/website_monitor.py"
+      - "scripts/website_monitor_runner.py"
       - "scripts/filter_website_candidates.py"
       - "scripts/observation_sql.py"
       - "scripts/release_identity.py"
       - "scripts/cloudflare_bootstrap.py"
       - "data/official/source_registry.json"
+      - "data/official/website_monitor_config.json"
       - "data/official/releases.json"
       - "migrations/**"
   schedule:
@@ -35,7 +37,7 @@ jobs:
           python-version: "3.13"
 
       - name: Poll first-party studio websites
-        run: python scripts/website_monitor.py
+        run: python scripts/website_monitor_runner.py
 
       - name: Suppress already verified website signals
         run: python scripts/filter_website_candidates.py
