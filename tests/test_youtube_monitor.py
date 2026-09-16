@@ -1,5 +1,6 @@
 import importlib.util
 import unittest
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import patch
 
@@ -30,6 +31,33 @@ class YouTubeMonitorTests(unittest.TestCase):
     def test_multiple_dates_are_not_collapsed_to_single_candidate(self):
         dates = module.extract_release_dates("Releasing 15 October 2026. In cinemas 22 October 2026 overseas.")
         self.assertEqual(dates, ["2026-10-15", "2026-10-22"])
+
+    def test_filters_historical_catalogue_date_from_recent_upload(self):
+        now = datetime(2026, 9, 16, tzinfo=timezone.utc)
+        dates = module.filter_plausible_release_dates(
+            ["2017-05-12", "2026-10-15"],
+            "2026-09-16T06:30:20Z",
+            now=now,
+        )
+        self.assertEqual(dates, ["2026-10-15"])
+
+    def test_rejects_stale_upload_even_with_future_date(self):
+        now = datetime(2026, 9, 16, tzinfo=timezone.utc)
+        dates = module.filter_plausible_release_dates(
+            ["2027-06-11"],
+            "2026-01-01T00:00:00Z",
+            now=now,
+        )
+        self.assertEqual(dates, [])
+
+    def test_allows_small_post_release_lag_for_same_campaign(self):
+        now = datetime(2026, 9, 16, tzinfo=timezone.utc)
+        dates = module.filter_plausible_release_dates(
+            ["2026-09-12"],
+            "2026-09-16T06:30:20Z",
+            now=now,
+        )
+        self.assertEqual(dates, ["2026-09-12"])
 
     def test_sql_keeps_candidates_pending_review(self):
         sql = module.build_sql([
