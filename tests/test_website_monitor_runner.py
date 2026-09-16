@@ -95,10 +95,8 @@ class WebsiteMonitorRunnerTests(unittest.TestCase):
             plan_by_key["kvn_productions"],
             "https://www.kvnproductions.co.in/movies",
         )
-        self.assertEqual(
-            plan_by_key["t_series"],
-            "https://www.tseries.com/news",
-        )
+        self.assertIn("t_series", manual_keys)
+        self.assertNotIn("t_series", plan_by_key)
         self.assertIn("zee_studios", manual_keys)
         self.assertNotIn("zee_studios", plan_by_key)
 
