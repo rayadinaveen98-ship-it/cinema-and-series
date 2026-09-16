@@ -53,6 +53,15 @@ DATE_PATTERNS = [
     re.compile(r"\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?\s*,?\s*(20\d{2})\b", re.IGNORECASE),
     re.compile(r"\b(\d{1,2})[./-](\d{1,2})[./-](20\d{2})\b"),
 ]
+PARTIAL_DATE_PATTERNS = [
+    re.compile(r"\b(\d{1,2})(?:st|nd|rd|th)?\s+(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\b", re.IGNORECASE),
+    re.compile(r"\b(Jan(?:uary)?|Feb(?:ruary)?|Mar(?:ch)?|Apr(?:il)?|May|Jun(?:e)?|Jul(?:y)?|Aug(?:ust)?|Sep(?:t(?:ember)?)?|Oct(?:ober)?|Nov(?:ember)?|Dec(?:ember)?)\s+(\d{1,2})(?:st|nd|rd|th)?\b", re.IGNORECASE),
+]
+YEAR_TOKEN = re.compile(r"\b20\d{2}\b")
+YEAR_INFERENCE_PATTERNS = [
+    re.compile(r"\b(?:upcoming|coming|releasing|release(?:s|d)?|arriving)\s+(?:in\s+)?(20\d{2})\b", re.IGNORECASE),
+    re.compile(r"\b(20\d{2})\s+(?:release|releases|theatrical\s+release|film|movie)\b", re.IGNORECASE),
+]
 
 
 def api_get(resource: str, params: dict[str, str]) -> dict:
@@ -81,15 +90,56 @@ def parse_date(match: re.Match[str]) -> str | None:
         return None
 
 
+def parse_partial_date(match: re.Match[str], year: int) -> str | None:
+    groups = match.groups()
+    try:
+        if groups[0].isalpha():
+            month = MONTHS[groups[0].casefold()]
+            day = int(groups[1])
+        else:
+            day = int(groups[0])
+            month = MONTHS[groups[1].casefold()]
+        return datetime(year, month, day).date().isoformat()
+    except (KeyError, ValueError):
+        return None
+
+
 def _clean_excerpt(value: str) -> str:
     return " ".join(value.split()).strip()
 
 
-def extract_release_date_contexts(text: str) -> list[dict[str, str]]:
-    """Return explicit release dates with a short local evidence excerpt.
+def infer_release_year(text: str) -> tuple[int, str] | None:
+    """Infer one release year only from explicit future/release wording.
 
-    Multiple syntactic mentions of the same date collapse to one item. Excerpts
-    are deliberately short review aids rather than stored full descriptions.
+    A bare year, upload timestamp, copyright notice, or channel boilerplate is
+    never enough. The complete title+description must contain exactly one 20xx
+    year, and that same year must participate in wording such as "Upcoming
+    2026", "release 2026", or "2026 release". This deliberately rejects
+    ambiguous metadata that mentions multiple years.
+    """
+    all_years = {int(match.group(0)) for match in YEAR_TOKEN.finditer(text)}
+    if len(all_years) != 1:
+        return None
+    only_year = next(iter(all_years))
+
+    for pattern in YEAR_INFERENCE_PATTERNS:
+        for match in pattern.finditer(text):
+            matched_year = int(match.group(1))
+            if matched_year != only_year:
+                continue
+            start = max(0, match.start() - CONTEXT_RADIUS)
+            end = min(len(text), match.end() + CONTEXT_RADIUS)
+            return only_year, _clean_excerpt(text[start:end])
+    return None
+
+
+def extract_release_date_contexts(text: str) -> list[dict[str, str]]:
+    """Return explicit or safely completed release dates with evidence excerpts.
+
+    Full day-level dates are preferred. A month/day phrase without a year is
+    accepted only when ``infer_release_year`` can prove one unambiguous release
+    year from the same official upload metadata. Multiple syntactic mentions of
+    the same date collapse to one item.
     """
     contexts: dict[str, str] = {}
     for pattern in DATE_PATTERNS:
@@ -106,6 +156,27 @@ def extract_release_date_contexts(text: str) -> list[dict[str, str]]:
             previous = contexts.get(parsed)
             if previous is None or len(excerpt) < len(previous):
                 contexts[parsed] = excerpt
+
+    inferred = infer_release_year(text)
+    if inferred:
+        inferred_year, year_excerpt = inferred
+        for pattern in PARTIAL_DATE_PATTERNS:
+            for match in pattern.finditer(text):
+                start = max(0, match.start() - CONTEXT_RADIUS)
+                end = min(len(text), match.end() + CONTEXT_RADIUS)
+                window = text[start:end]
+                if not RELEASE_CONTEXT.search(window):
+                    continue
+                parsed = parse_partial_date(match, inferred_year)
+                if not parsed:
+                    continue
+                excerpt = _clean_excerpt(window)
+                if str(inferred_year) not in excerpt:
+                    excerpt = _clean_excerpt(f"{excerpt} | year context: {year_excerpt}")[:420]
+                previous = contexts.get(parsed)
+                if previous is None or len(excerpt) < len(previous):
+                    contexts[parsed] = excerpt
+
     return [{"date": value, "excerpt": contexts[value]} for value in sorted(contexts)]
 
 
@@ -338,7 +409,7 @@ def main() -> int:
         json.dumps(
             {
                 "generated_at": scan_time.isoformat(),
-                "policy": "official-channel observations only; recent non-response/review uploads with release dates that are still today-or-future become pending review candidates; short local date context is preserved for human review; never auto-verify",
+                "policy": "official-channel observations only; recent non-response/review uploads with explicit or safely completed day-level release dates that are still today-or-future become pending review candidates; yearless dates require one unambiguous release-year phrase in the same upload metadata; short local date context is preserved for human review; never auto-verify",
                 "channels_registered": len(sources),
                 "channels_checked": channels_checked,
                 "candidates": candidates,
