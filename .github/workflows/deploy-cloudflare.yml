@@ -109,7 +109,7 @@ jobs:
               raise RuntimeError(f"production catalogue is not backed by D1: {catalogue.get('source')}")
           if not movies:
               raise RuntimeError("production catalogue returned no movies")
-          if int(stats.get("activeSources") or 0) < 16:
+          if int(stats.get("activeSources") or 0) < 21:
               raise RuntimeError(f"official-source coverage regressed: {stats.get('activeSources')}")
           if not catalogue.get("catalogueUpdatedAt"):
               raise RuntimeError("catalogue freshness timestamp missing")
