@@ -1,0 +1,155 @@
+name: Catalogue Growth 15K
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/catalogue-growth-15k.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: catalogue-growth-15k
+  cancel-in-progress: false
+
+jobs:
+  grow:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      PRODUCTION_URL: https://cinema-and-series.rayadinaveen98.workers.dev
+      TARGET_TOTAL: "15000"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Validate Series Engine
+        run: python -m unittest tests.test_wikipedia_series_catalogue -v
+
+      - name: Check Cloudflare connection
+        shell: bash
+        run: |
+          if [[ -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "Cloudflare credentials are required for the production growth milestone."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Wrangler
+        run: npm install --no-audit --no-fund
+
+      - name: Bind production D1
+        run: python scripts/cloudflare_bootstrap.py
+
+      - name: Apply D1 migrations
+        run: npx wrangler d1 migrations apply cinema-and-series --remote
+
+      - name: Capture production baseline
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS series_titles FROM series_titles;"
+          npx wrangler d1 execute cinema-and-series --remote --command "WITH movie_total AS (SELECT (SELECT COUNT(*) FROM movies m WHERE m.wikidata_qid IS NULL OR m.title <> m.wikidata_qid) + (SELECT COUNT(*) FROM catalogue_titles ct WHERE ct.wikidata_qid IS NULL OR NOT EXISTS (SELECT 1 FROM movies mx WHERE mx.wikidata_qid=ct.wikidata_qid AND mx.title <> mx.wikidata_qid)) AS movies) SELECT movies, (SELECT COUNT(*) FROM series_titles) AS series, movies + (SELECT COUNT(*) FROM series_titles) AS combined FROM movie_total;"
+
+      - name: Acquire recent and India series batch
+        run: |
+          python scripts/fetch_wikipedia_series_catalogue.py \
+            --profile bootstrap \
+            --max-series 3500 \
+            --out data/generated/series-growth-bootstrap.json \
+            --sql-out data/generated/series-growth-bootstrap.sql
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("data/generated/series-growth-bootstrap.json").read_text(encoding="utf-8"))
+          rows = payload.get("series") or []
+          if not rows:
+              raise SystemExit("bootstrap growth batch produced no series")
+          if len(rows) > 3500:
+              raise SystemExit(f"bootstrap growth batch exceeded cap: {len(rows)}")
+          print(f"bootstrap growth batch validated: {len(rows)} rows")
+          PY
+
+      - name: Import recent and India series batch
+        run: npx wrangler d1 execute cinema-and-series --remote --file=data/generated/series-growth-bootstrap.sql
+
+      - name: Count after recent batch
+        run: npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS series_titles FROM series_titles;"
+
+      - name: Acquire historical series batch
+        run: |
+          python scripts/fetch_wikipedia_series_catalogue.py \
+            --profile all-historical \
+            --max-series 3500 \
+            --out data/generated/series-growth-historical.json \
+            --sql-out data/generated/series-growth-historical.sql
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("data/generated/series-growth-historical.json").read_text(encoding="utf-8"))
+          rows = payload.get("series") or []
+          if not rows:
+              raise SystemExit("historical growth batch produced no series")
+          if len(rows) > 3500:
+              raise SystemExit(f"historical growth batch exceeded cap: {len(rows)}")
+          print(f"historical growth batch validated: {len(rows)} rows")
+          PY
+
+      - name: Import historical series batch
+        run: npx wrangler d1 execute cinema-and-series --remote --file=data/generated/series-growth-historical.sql
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: catalogue-growth-15k-series-batches
+          path: |
+            data/generated/series-growth-bootstrap.json
+            data/generated/series-growth-bootstrap.sql
+            data/generated/series-growth-historical.json
+            data/generated/series-growth-historical.sql
+          retention-days: 14
+
+      - name: Verify 15K production milestone
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.request
+
+          root = os.environ["PRODUCTION_URL"].rstrip("/")
+          target = int(os.environ["TARGET_TOTAL"])
+          last_error = None
+          payload = None
+          for attempt in range(8):
+              try:
+                  request = urllib.request.Request(
+                      root + "/api/catalogue-stats",
+                      headers={"Accept": "application/json", "User-Agent": "CinemaAndSeries-GrowthMilestone/1.0"},
+                  )
+                  with urllib.request.urlopen(request, timeout=20) as response:
+                      payload = json.load(response)
+                  break
+              except Exception as exc:
+                  last_error = exc
+                  if attempt < 7:
+                      time.sleep(3)
+          if payload is None:
+              raise SystemExit(f"could not verify production catalogue stats: {last_error}")
+          if payload.get("source") != "d1":
+              raise SystemExit(f"production stats are not backed by D1: {payload}")
+          movies = int(payload.get("movies") or 0)
+          series = int(payload.get("series") or 0)
+          total = int(payload.get("total") or 0)
+          print("CATALOGUE_GROWTH_FINAL=" + json.dumps({"movies": movies, "series": series, "total": total, "target": target}, sort_keys=True))
+          if movies < 8000:
+              raise SystemExit(f"movie catalogue regressed below guardrail: {movies}")
+          if series < 5000:
+              raise SystemExit(f"series catalogue is not yet materially broad enough: {series}")
+          if total < target:
+              raise SystemExit(f"15K milestone not reached: total={total} target={target}")
+          PY
