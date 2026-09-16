@@ -1,6 +1,7 @@
 import unittest
 
 from scripts.fetch_wikidata import normalize
+from scripts.wikidata_to_sql import build_statements
 
 
 class WikidataNormalizationTests(unittest.TestCase):
@@ -59,6 +60,26 @@ class WikidataNormalizationTests(unittest.TestCase):
         }
         movies = normalize(payload)
         self.assertEqual(movies[0]["languages"], ["Tamil", "Telugu"])
+
+    def test_generated_sql_is_remote_d1_compatible(self):
+        statements = build_statements(
+            {
+                "movies": [
+                    {
+                        "wikidata_qid": "Q10",
+                        "title": "D1 Example",
+                        "release_date": "2026-09-18",
+                        "languages": ["Telugu"],
+                        "source_url": "https://www.wikidata.org/wiki/Q10",
+                    }
+                ]
+            }
+        )
+        sql = "\n".join(statements).upper()
+        self.assertEqual(len(statements), 2)
+        self.assertNotIn("BEGIN TRANSACTION", sql)
+        self.assertNotIn("COMMIT;", sql)
+        self.assertIn("ON CONFLICT", sql)
 
 
 if __name__ == "__main__":
