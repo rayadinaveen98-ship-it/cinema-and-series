@@ -1,0 +1,96 @@
+.release-radar-row {
+  position: relative;
+  padding-top: 4px;
+}
+
+.release-radar-row::before {
+  content: "";
+  position: absolute;
+  left: -4vw;
+  right: -4vw;
+  top: -18px;
+  height: 180px;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 18% 0%, rgba(229,9,20,.12), transparent 56%);
+}
+
+.radar-heading {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.radar-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 9px;
+  border: 1px solid rgba(229,9,20,.34);
+  border-radius: 999px;
+  color: #ff666e;
+  background: rgba(229,9,20,.08);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .11em;
+  text-transform: uppercase;
+}
+
+.radar-live::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e50914;
+  box-shadow: 0 0 10px rgba(229,9,20,.9);
+  animation: radarPulse 1.8s ease-in-out infinite;
+}
+
+.release-timing-chip {
+  position: absolute;
+  z-index: 7;
+  top: 40px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 0 8px;
+  border: 1px solid rgba(255,255,255,.13);
+  border-radius: 7px;
+  color: #fff;
+  background: rgba(8,8,8,.76);
+  box-shadow: 0 5px 18px rgba(0,0,0,.28);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  pointer-events: none;
+}
+
+.release-timing-chip.immediate {
+  border-color: rgba(229,9,20,.46);
+  background: rgba(183,5,14,.86);
+}
+
+.release-timing-chip.soon {
+  border-color: rgba(255,255,255,.2);
+  background: rgba(15,15,15,.84);
+}
+
+@keyframes radarPulse {
+  0%, 100% { opacity: .48; transform: scale(.86); }
+  50% { opacity: 1; transform: scale(1.08); }
+}
+
+@media (max-width: 680px) {
+  .release-radar-row::before { left: -18px; right: -18px; }
+  .radar-heading { gap: 8px; }
+  .radar-live { padding: 4px 8px; font-size: 8px; }
+  .release-timing-chip { top: 36px; left: 8px; min-height: 23px; font-size: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radar-live::before { animation: none; }
+}
