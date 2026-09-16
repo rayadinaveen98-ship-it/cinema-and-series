@@ -2,6 +2,30 @@
   "updated_at": "2026-09-16",
   "releases": [
     {
+      "title": "Mitti De Putt",
+      "wikidata_qid": null,
+      "language": "Punjabi",
+      "country_code": "IN",
+      "release_date": "2026-09-18",
+      "source_key": "dharma_productions",
+      "source_type": "official_website",
+      "source_title": "Dharma Productions — Upcoming: Mitti De Putt",
+      "source_url": "https://dharma-production.com/",
+      "verification_status": "verified"
+    },
+    {
+      "title": "UDTA TEER",
+      "wikidata_qid": null,
+      "language": "Punjabi",
+      "country_code": "IN",
+      "release_date": "2026-10-09",
+      "source_key": "dharma_productions",
+      "source_type": "official_website",
+      "source_title": "Dharma Productions — Upcoming: UDTA TEER",
+      "source_url": "https://dharma-production.com/",
+      "verification_status": "verified"
+    },
+    {
       "title": "Jailer 2",
       "wikidata_qid": "Q133255153",
       "language": "Tamil",
@@ -11,6 +35,18 @@
       "source_type": "official_website",
       "source_title": "Jailer 2 — Sun Pictures",
       "source_url": "https://www.sunpictures.in/movies/jailer2/",
+      "verification_status": "verified"
+    },
+    {
+      "title": "Naagzilla",
+      "wikidata_qid": null,
+      "language": "Hindi",
+      "country_code": "IN",
+      "release_date": "2027-02-12",
+      "source_key": "dharma_productions",
+      "source_type": "official_website",
+      "source_title": "Dharma Productions — Upcoming: Naagzilla",
+      "source_url": "https://dharma-production.com/",
       "verification_status": "verified"
     },
     {
