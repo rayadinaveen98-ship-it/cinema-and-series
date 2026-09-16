@@ -7,7 +7,9 @@ The engine is intentionally conservative:
 - deprecated claims are ignored;
 - one unambiguous language QID is required (a unique preferred claim wins);
 - ambiguous/missing claims remain unresolved;
-- generated SQL contains a defensive WHERE clause and records field provenance.
+- generated SQL contains a defensive WHERE clause and records field provenance;
+- optional sharding uses the numeric Wikidata QID, so partitions stay stable even
+  when earlier shards have already written resolved languages.
 
 No language is inferred from country, title, script, Wikipedia category, or cast.
 """
@@ -25,8 +27,6 @@ import fetch_mediawiki_backfill as base
 
 WIKIDATA_LANGUAGE_PROPERTY = "P364"
 MAX_SERIES_PER_RUN = 8000
-# Wikimedia public APIs should be treated as shared infrastructure. Keep batches
-# modest and deliberately pace requests rather than maximizing throughput.
 ENTITY_BATCH = 25
 LABEL_BATCH = 25
 REQUEST_DELAY_SECONDS = 0.75
@@ -42,6 +42,13 @@ def norm(value: object) -> str:
 
 def valid_qid(value: object) -> bool:
     return bool(QID_RE.fullmatch(str(value or "").strip()))
+
+
+def qid_number(value: object) -> int:
+    text = str(value or "").strip().upper()
+    if not valid_qid(text):
+        raise ValueError(f"invalid Wikidata QID: {value!r}")
+    return int(text[1:])
 
 
 def language_unknown(value: object) -> bool:
@@ -63,13 +70,28 @@ def load_d1_rows(path: str | Path) -> list[dict[str, Any]]:
     raise ValueError(f"{path}: unsupported D1 JSON shape")
 
 
-def select_candidates(rows: Iterable[Mapping[str, Any]], maximum: int) -> list[dict[str, Any]]:
-    candidates = [
-        dict(row)
-        for row in rows
-        if language_unknown(row.get("language_name")) and valid_qid(row.get("wikidata_qid"))
-    ]
-    candidates.sort(key=lambda row: (str(row.get("wikidata_qid")), str(row.get("id"))))
+def select_candidates(
+    rows: Iterable[Mapping[str, Any]],
+    maximum: int,
+    *,
+    shard_index: int = 0,
+    shard_count: int = 1,
+) -> list[dict[str, Any]]:
+    if shard_count < 1:
+        raise ValueError("shard_count must be at least 1")
+    if shard_index < 0 or shard_index >= shard_count:
+        raise ValueError(f"shard_index must be between 0 and {shard_count - 1}")
+
+    candidates = []
+    for row in rows:
+        qid = row.get("wikidata_qid")
+        if not language_unknown(row.get("language_name")) or not valid_qid(qid):
+            continue
+        if qid_number(qid) % shard_count != shard_index:
+            continue
+        candidates.append(dict(row))
+
+    candidates.sort(key=lambda row: (qid_number(row.get("wikidata_qid")), str(row.get("id"))))
     return candidates[:maximum]
 
 
@@ -87,13 +109,7 @@ def retry_after_seconds(exc: urllib.error.HTTPError) -> int:
 
 
 def request_wikidata(params: dict[str, str]) -> dict[str, Any]:
-    """Request Wikidata with cooperative pacing and bounded 429 backoff.
-
-    `wbgetentities` is read-only, so GET is preferred. `maxlag=5` asks Wikimedia
-    to shed this non-urgent job when replicas are under load. The outer retry is
-    deliberately more patient than the shared helper because this job can span
-    hundreds of bounded batches.
-    """
+    """Request Wikidata with cooperative pacing and bounded 429 backoff."""
     request_params = {**params, "maxlag": "5"}
     last_error: Exception | None = None
     for attempt in range(MAX_BATCH_RETRIES):
@@ -277,6 +293,8 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Enrich unknown SeriesRun language from explicit Wikidata P364 claims")
     parser.add_argument("--input", required=True, type=Path)
     parser.add_argument("--max-series", type=int, default=MAX_SERIES_PER_RUN)
+    parser.add_argument("--shard-index", type=int, default=0)
+    parser.add_argument("--shard-count", type=int, default=1)
     parser.add_argument("--out-json", type=Path, default=Path("data/generated/series-language-enrichment-v1.json"))
     parser.add_argument("--sql-out", type=Path, default=Path("data/generated/series-language-enrichment-v1.sql"))
     return parser.parse_args()
@@ -285,7 +303,12 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     maximum = max(1, min(MAX_SERIES_PER_RUN, args.max_series))
-    candidates = select_candidates(load_d1_rows(args.input), maximum)
+    candidates = select_candidates(
+        load_d1_rows(args.input),
+        maximum,
+        shard_index=args.shard_index,
+        shard_count=args.shard_count,
+    )
     qids = [str(row["wikidata_qid"]).upper() for row in candidates]
     entities = fetch_claim_entities(qids) if qids else {}
 
@@ -297,11 +320,15 @@ def main() -> int:
     labels = fetch_language_labels(language_qids) if language_qids else {}
 
     report = build_enrichment(candidates, entities, labels)
+    report["shard_index"] = args.shard_index
+    report["shard_count"] = args.shard_count
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.sql_out.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps(report, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     args.sql_out.write_text(build_sql(report), encoding="utf-8")
     print("SERIES_LANGUAGE_ENRICHMENT_V1=" + json.dumps({
+        "shard": args.shard_index,
+        "shard_count": args.shard_count,
         "candidates": report["candidate_count"],
         "updates": report["update_count"],
         "ambiguous": report["ambiguous_count"],
