@@ -72,6 +72,14 @@ function sourceLabel(source?: string) {
   if (source === "preview") return "Preview";
   return source.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
+function artworkSourceLabel(source?: string) {
+  if (!source) return "Generated title artwork";
+  if (source === "official_youtube") return "Official YouTube artwork";
+  if (source === "official_social") return "Official social artwork";
+  if (source === "official_website") return "Official website artwork";
+  if (source === "wikimedia_commons") return "Wikimedia Commons";
+  return sourceLabel(source);
+}
 function movieSourceLabel(movie?: Movie) { return movie?.releaseSourceName?.trim() || sourceLabel(movie?.releaseSource); }
 function statusLabel(status: Movie["verificationStatus"]) {
   if (status === "verified") return "Verified";
@@ -90,7 +98,7 @@ function hasArtwork(movie: Movie) { return Boolean(posterArtwork(movie)); }
 function PosterCard({ movie, onOpen, rank }: { movie: Movie; onOpen: (movie: Movie) => void; rank?: number }) {
   const artwork = posterArtwork(movie);
   return (
-    <button className="poster-button" onClick={() => onOpen(movie)} aria-label={`Open ${movie.title}`}>
+    <button className="poster-button" onClick={() => onOpen(movie)} aria-label={`Open details for ${movie.title}`}>
       {rank ? <span className="rank-number">{rank}</span> : null}
       <article className={`poster-card ${toneClass(movie)} ${artwork ? "has-artwork" : ""}`}>
         {artwork ? <img className="poster-artwork" src={artwork} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
@@ -102,7 +110,7 @@ function PosterCard({ movie, onOpen, rank }: { movie: Movie; onOpen: (movie: Mov
           <div><span>{yearOf(movie.releaseDate)}</span><span>•</span><span>{countryLabel(movie.countryCode)}</span></div>
         </div>
         <div className="poster-hover">
-          <span className="play-orb">▶</span>
+          <span className="play-orb">ⓘ</span>
           <strong>{formatDate(movie.releaseDate)}</strong>
           <small>{movieSourceLabel(movie)}</small>
         </div>
@@ -111,9 +119,74 @@ function PosterCard({ movie, onOpen, rank }: { movie: Movie; onOpen: (movie: Mov
   );
 }
 
+function MovieDetail({ movie, onClose, onFeature }: { movie: Movie; onClose: () => void; onFeature: (movie: Movie) => void }) {
+  const artwork = heroArtwork(movie);
+  const isVerified = movie.verificationStatus === "verified";
+  const nativeTitle = movie.nativeTitle?.trim() && movie.nativeTitle.trim().toLocaleLowerCase() !== movie.title.trim().toLocaleLowerCase()
+    ? movie.nativeTitle.trim()
+    : undefined;
+
+  return (
+    <div className="detail-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <section className={`detail-dialog ${toneClass(movie)}`} role="dialog" aria-modal="true" aria-labelledby="movie-detail-title">
+        <span className="detail-drag-handle" aria-hidden="true" />
+        <button className="detail-close" type="button" onClick={onClose} aria-label="Close movie details">×</button>
+        <div className="detail-visual">
+          <div className="detail-artwork-fallback" aria-hidden="true"><span>{movie.title.slice(0, 1)}</span></div>
+          {artwork ? <img className="detail-artwork" src={artwork} alt="" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
+          <div className="detail-title-block">
+            <div className="detail-eyebrow"><i /> Cinema & Series</div>
+            <h2 id="movie-detail-title">{movie.title}</h2>
+            {nativeTitle ? <p className="detail-native-title">{nativeTitle}</p> : null}
+          </div>
+        </div>
+        <div className="detail-body">
+          <div className="detail-primary">
+            <div className="detail-meta">
+              <b className={movie.verificationStatus}>{statusLabel(movie.verificationStatus)}</b>
+              <span className="dot">•</span><span>{formatDate(movie.releaseDate)}</span>
+              <span className="dot">•</span><span>{movie.language || "Unknown language"}</span>
+              <span className="dot">•</span><span>{countryLabel(movie.countryCode)}</span>
+            </div>
+            <p className="detail-summary">
+              {isVerified
+                ? `This release date is verified against first-party evidence from ${movieSourceLabel(movie)}.`
+                : movie.verificationStatus === "supported"
+                  ? `This date is supported by the catalogue evidence currently available. First-party confirmation is still being monitored.`
+                  : `This title is being tracked while stronger release evidence is collected. Treat the date as unconfirmed until verification improves.`}
+            </p>
+            <div className="detail-actions">
+              <button className="detail-feature" type="button" onClick={() => onFeature(movie)}><span>▶</span> Feature this title</button>
+              {movie.artworkSourceUrl ? <a className="detail-source-link" href={movie.artworkSourceUrl} target="_blank" rel="noreferrer noopener">Artwork source ↗</a> : null}
+            </div>
+          </div>
+          <aside className="detail-evidence" aria-label="Movie evidence summary">
+            <div className="detail-evidence-row">
+              <span>Release status</span>
+              <strong>{statusLabel(movie.verificationStatus)}</strong>
+              <small>{isVerified ? "First-party date confirmation captured" : "Evidence monitoring remains active"}</small>
+            </div>
+            <div className="detail-evidence-row">
+              <span>Release evidence</span>
+              <strong>{movieSourceLabel(movie)}</strong>
+              <small>{isVerified ? "Used to verify the listed release date" : "Current catalogue source"}</small>
+            </div>
+            <div className="detail-evidence-row">
+              <span>Visual provenance</span>
+              <strong>{artworkSourceLabel(movie.artworkSource)}</strong>
+              <small>{movie.artworkSource ? "Artwork provenance tracked separately from release verification" : "Fallback visual generated by the interface"}</small>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export default function App() {
   const [movies, setMovies] = useState<Movie[]>(fallback);
   const [hero, setHero] = useState<Movie>(fallback[0]);
+  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
   const [stats, setStats] = useState<CatalogueStats>(fallbackStats);
   const [facets, setFacets] = useState<CatalogueFacets>(fallbackFacets);
   const [pagination, setPagination] = useState<Pagination>(fallbackPagination);
@@ -137,6 +210,21 @@ export default function App() {
     const timer = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 240);
     return () => window.clearTimeout(timer);
   }, [searchQuery]);
+
+  useEffect(() => {
+    if (!selectedMovie) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSelectedMovie(null);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(".detail-close")?.focus());
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [selectedMovie]);
 
   function buildCatalogueUrl(offset: number) {
     const params = new URLSearchParams({ limit: "60", offset: String(offset) });
@@ -184,9 +272,11 @@ export default function App() {
     return () => controller.abort();
   }, [activeCountry, activeLanguage, activePeriod, debouncedSearch, officialOnly]);
 
-  function openMovie(movie: Movie) {
+  function openMovie(movie: Movie) { setSelectedMovie(movie); }
+  function featureMovie(movie: Movie) {
     setHero(movie);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+    setSelectedMovie(null);
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
   }
 
   function loadMore() {
@@ -237,7 +327,7 @@ export default function App() {
           <p>{hero.verificationStatus === "verified" ? `Release date confirmed through ${movieSourceLabel(hero)}.` : `Currently tracked through ${movieSourceLabel(hero)} while stronger release evidence is monitored.`} Explore a growing India-first, global movie catalogue.</p>
           <div className="hero-buttons">
             <a className="play-button" href="#browse"><span>▶</span> Browse catalogue</a>
-            <button className="info-button" onClick={() => setOfficialOnly((value) => !value)}><span>ⓘ</span> {officialOnly ? "Show all" : "Official only"}</button>
+            <button className="info-button" onClick={() => setSelectedMovie(hero)}><span>ⓘ</span> More info</button>
           </div>
         </div>
         <div className="hero-stats"><span>{stats.total.toLocaleString("en-IN")} TITLES</span><i /><span>{stats.activeSources} OFFICIAL SOURCES</span></div>
@@ -303,6 +393,8 @@ export default function App() {
       <nav className="mobile-nav" aria-label="Mobile navigation">
         <a href="#top"><span>⌂</span><small>Home</small></a><a href="#upcoming"><span>◷</span><small>Upcoming</small></a><button onClick={() => setSearchOpen(true)}><span>⌕</span><small>Search</small></button><a href="#browse"><span>▦</span><small>Browse</small></a>
       </nav>
+
+      {selectedMovie ? <MovieDetail movie={selectedMovie} onClose={() => setSelectedMovie(null)} onFeature={featureMovie} /> : null}
     </main>
   );
 }
