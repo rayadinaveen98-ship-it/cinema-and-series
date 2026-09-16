@@ -18,6 +18,12 @@ type StatsRow = {
   verified: number;
   supported: number;
   unconfirmed: number;
+  latest_updated_at: string | null;
+};
+
+type SourcesRow = {
+  count: number;
+  latest_updated_at: string | null;
 };
 
 const previewMovies = [
@@ -27,11 +33,18 @@ const previewMovies = [
   { id: "preview-4", title: "Coming Soon", language: "Kannada", releaseDate: "2026-10-02", verificationStatus: "unconfirmed", releaseSource: "preview" },
 ];
 
+const visibleMovieClause = "(wikidata_qid IS NULL OR title <> wikidata_qid)";
+
 function json(data: unknown, status = 200) {
   return Response.json(data, {
     status,
     headers: { "Cache-Control": "public, max-age=60, s-maxage=300" },
   });
+}
+
+function d1TimestampToIso(value: string | null | undefined) {
+  if (!value) return undefined;
+  return `${value.replace(" ", "T")}Z`;
 }
 
 export default {
@@ -44,10 +57,12 @@ export default {
 
     if (url.pathname === "/api/movies") {
       if (!env.DB) {
+        const now = new Date().toISOString();
         return json({
           movies: previewMovies,
           source: "preview",
-          generatedAt: new Date().toISOString(),
+          generatedAt: now,
+          catalogueUpdatedAt: now,
           stats: { total: previewMovies.length, verified: 1, supported: 1, unconfirmed: 2, activeSources: 0 },
         });
       }
@@ -62,6 +77,7 @@ export default {
         result = await env.DB.prepare(
           `SELECT ${columns}
            FROM movies
+           WHERE ${visibleMovieClause}
            ORDER BY release_date ASC, title COLLATE NOCASE ASC
            LIMIT 1000`,
         ).all<MovieRow>();
@@ -69,7 +85,8 @@ export default {
         result = await env.DB.prepare(
           `SELECT ${columns}
            FROM movies
-           WHERE release_date BETWEEN ?1 AND ?2
+           WHERE ${visibleMovieClause}
+             AND release_date BETWEEN ?1 AND ?2
            ORDER BY release_date ASC, title COLLATE NOCASE ASC
            LIMIT 1000`,
         ).bind(`${requestedYear}-01-01`, `${requestedYear}-12-31`).all<MovieRow>();
@@ -79,7 +96,8 @@ export default {
         result = await env.DB.prepare(
           `SELECT ${columns}
            FROM movies
-           WHERE release_date BETWEEN ?1 AND ?2
+           WHERE ${visibleMovieClause}
+             AND release_date BETWEEN ?1 AND ?2
            ORDER BY release_date ASC, title COLLATE NOCASE ASC
            LIMIT 1000`,
         ).bind(from, to).all<MovieRow>();
@@ -91,10 +109,14 @@ export default {
              COUNT(*) AS total,
              COALESCE(SUM(CASE WHEN verification_status='verified' THEN 1 ELSE 0 END), 0) AS verified,
              COALESCE(SUM(CASE WHEN verification_status='supported' THEN 1 ELSE 0 END), 0) AS supported,
-             COALESCE(SUM(CASE WHEN verification_status='unconfirmed' THEN 1 ELSE 0 END), 0) AS unconfirmed
-           FROM movies`,
+             COALESCE(SUM(CASE WHEN verification_status='unconfirmed' THEN 1 ELSE 0 END), 0) AS unconfirmed,
+             MAX(updated_at) AS latest_updated_at
+           FROM movies
+           WHERE ${visibleMovieClause}`,
         ).first<StatsRow>(),
-        env.DB.prepare("SELECT COUNT(*) AS count FROM source_channels WHERE active=1").first<{ count: number }>(),
+        env.DB.prepare(
+          "SELECT COUNT(*) AS count, MAX(updated_at) AS latest_updated_at FROM source_channels WHERE active=1",
+        ).first<SourcesRow>(),
       ]);
 
       const movies = result.results.map((movie) => ({
@@ -108,10 +130,16 @@ export default {
         releaseSource: movie.release_date_source,
       }));
 
+      const latestUpdate = [statsResult?.latest_updated_at, sourcesResult?.latest_updated_at]
+        .filter((value): value is string => Boolean(value))
+        .sort()
+        .at(-1);
+
       return json({
         movies,
         source: "d1",
         generatedAt: new Date().toISOString(),
+        catalogueUpdatedAt: d1TimestampToIso(latestUpdate),
         stats: {
           total: Number(statsResult?.total ?? movies.length),
           verified: Number(statsResult?.verified ?? 0),
