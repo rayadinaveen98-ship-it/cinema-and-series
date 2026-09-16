@@ -30,7 +30,7 @@ REQUEST_TIMEOUT_SECONDS = 10
 MAX_RELEASE_LEAD_DAYS = 1095
 MAX_RELEASE_LAG_DAYS = 1
 MAX_SOURCE_WORKERS = 5
-USER_AGENT = "CinemaAndSeries-OfficialWebsiteMonitor/1.1 (+https://github.com/rayadinaveen98-ship-it/cinema-and-series)"
+USER_AGENT = "CinemaAndSeries-OfficialWebsiteMonitor/1.2 (+https://github.com/rayadinaveen98-ship-it/cinema-and-series)"
 
 MONTHS = {
     "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
@@ -55,6 +55,18 @@ SKIP_LINK_CONTEXT = re.compile(
     r"\b(contact|privacy|terms|career|careers|jobs|about|login|register|press[- ]?kit)\b",
     re.IGNORECASE,
 )
+STRONG_LINK_CONTEXT = re.compile(
+    r"\b(release|releases|releasing|theatrical|cinema|cinemas|upcoming|slate|announcement|announces|date)\b",
+    re.IGNORECASE,
+)
+EDITORIAL_LINK_CONTEXT = re.compile(
+    r"\b(news|post|article|press|update|announcement|announces)\b",
+    re.IGNORECASE,
+)
+GENERIC_SECTION_LABELS = {
+    "movie", "movies", "film", "films", "news", "project", "projects",
+    "release", "releases", "upcoming", "cinema", "view all", "read more", "more",
+}
 
 
 class PageParser(HTMLParser):
@@ -195,23 +207,62 @@ def normalize_url(base_url: str, href: str) -> str | None:
     return clean.rstrip("/") or clean
 
 
+def link_relevance_score(url: str, anchor_text: str) -> int:
+    """Rank eligible first-party links so scarce crawl slots favor specific release evidence."""
+    parsed = urllib.parse.urlparse(url)
+    path = urllib.parse.unquote(parsed.path).casefold()
+    text = clean_text(anchor_text).casefold()
+    combined = clean_text(f"{path.replace('-', ' ').replace('_', ' ')} {text}")
+    segments = [segment for segment in path.split("/") if segment]
+    score = 0
+
+    if STRONG_LINK_CONTEXT.search(combined):
+        score += 10
+    if EDITORIAL_LINK_CONTEXT.search(combined):
+        score += 7
+    if re.search(r"\b(movie|movies|film|films|project|projects)\b", combined, re.IGNORECASE):
+        score += 4
+
+    # Specific article/project pages are more likely than top-level navigation
+    # shells to contain a day-level release statement.
+    score += min(max(len(segments) - 1, 0), 3) * 3
+    if len(text.split()) >= 4:
+        score += 3
+    if text and text not in GENERIC_SECTION_LABELS:
+        score += 2
+    if len(segments) == 1 and text in GENERIC_SECTION_LABELS:
+        score -= 5
+    if text in {"view all", "read more", "more"}:
+        score -= 3
+
+    return score
+
+
 def candidate_links(base_url: str, anchors: list[tuple[str, str]], limit: int = MAX_PAGES_PER_SOURCE - 1) -> list[str]:
-    candidates: list[str] = []
-    seen: set[str] = set()
-    for href, anchor_text in anchors:
+    """Return the highest-value eligible same-host links within the crawl budget.
+
+    The old implementation stopped after the first matching anchors in DOM
+    order. Navigation links could therefore consume every slot before a deeper
+    first-party release article appeared. We now inspect all eligible anchors,
+    retain the best score for duplicate URLs, and sort deterministically.
+    """
+    ranked: dict[str, tuple[int, int]] = {}
+    for index, (href, anchor_text) in enumerate(anchors):
         combined = f"{href} {anchor_text}"
         if SKIP_LINK_CONTEXT.search(combined):
             continue
         if not LINK_CONTEXT.search(combined):
             continue
         normalized = normalize_url(base_url, href)
-        if not normalized or normalized in seen:
+        if not normalized:
             continue
-        seen.add(normalized)
-        candidates.append(normalized)
-        if len(candidates) >= limit:
-            break
-    return candidates
+        score = link_relevance_score(normalized, anchor_text)
+        previous = ranked.get(normalized)
+        if previous is None or score > previous[0]:
+            ranked[normalized] = (score, index)
+
+    ordered = sorted(ranked.items(), key=lambda item: (-item[1][0], item[1][1], item[0]))
+    return [url for url, _ in ordered[:limit]]
 
 
 def load_robots(base_url: str) -> urllib.robotparser.RobotFileParser | None:

@@ -33,7 +33,7 @@ class WebsiteMonitorTests(unittest.TestCase):
         )
         self.assertEqual(dates, [])
 
-    def test_candidate_links_stay_on_same_host_and_release_sections(self):
+    def test_candidate_links_stay_on_same_host_and_prioritize_specific_pages(self):
         links = module.candidate_links(
             "https://studio.example/",
             [
@@ -46,8 +46,40 @@ class WebsiteMonitorTests(unittest.TestCase):
         )
         self.assertEqual(
             links,
-            ["https://studio.example/movies", "https://studio.example/news/latest-film"],
+            ["https://studio.example/news/latest-film", "https://studio.example/movies"],
         )
+
+    def test_candidate_links_rank_late_specific_release_article_above_generic_navigation(self):
+        links = module.candidate_links(
+            "https://studio.example/",
+            [
+                ("/movies", "Movies"),
+                ("/news", "News"),
+                ("/projects", "Projects"),
+                ("/releases", "Releases"),
+                (
+                    "/news/example-film-release-date-announcement",
+                    "Example Film theatrical release date announcement",
+                ),
+            ],
+            limit=4,
+        )
+        self.assertEqual(links[0], "https://studio.example/news/example-film-release-date-announcement")
+        self.assertIn("https://studio.example/releases", links)
+        self.assertEqual(len(links), 4)
+
+    def test_candidate_links_keep_best_score_for_duplicate_url(self):
+        links = module.candidate_links(
+            "https://studio.example/",
+            [
+                ("/news/example-film", "Read more"),
+                ("/movies", "Movies"),
+                ("/news/example-film", "Example Film release date announced for cinemas"),
+            ],
+            limit=2,
+        )
+        self.assertEqual(links[0], "https://studio.example/news/example-film")
+        self.assertEqual(links.count("https://studio.example/news/example-film"), 1)
 
     def test_page_parser_and_observation_remain_pending_review(self):
         parser = module.PageParser()
