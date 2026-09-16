@@ -210,6 +210,26 @@
       "youtube_handle": "@NadiadwalaGrandson",
       "languages": ["Hindi"],
       "active": true
+    },
+    {
+      "key": "red_chillies_entertainment",
+      "name": "Red Chillies Entertainment",
+      "source_type": "production_house",
+      "website_url": "https://www.redchillies.com/",
+      "youtube_channel_id": "UCjJKg01HAP01xCLVhDmnLhw",
+      "youtube_handle": "@RedChilliesEntertainment",
+      "languages": ["Hindi"],
+      "active": true
+    },
+    {
+      "key": "prime_focus_studios",
+      "name": "Prime Focus Studios",
+      "source_type": "production_house",
+      "website_url": "https://www.primefocusstudios.com/",
+      "youtube_channel_id": null,
+      "youtube_handle": null,
+      "languages": ["Hindi", "Tamil", "Telugu", "Malayalam", "Kannada"],
+      "active": true
     }
   ]
 }
