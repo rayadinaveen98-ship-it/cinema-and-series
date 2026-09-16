@@ -9,6 +9,7 @@ on:
       - "scripts/fetch_wikidata.py"
       - "scripts/wikidata_to_sql.py"
       - "scripts/official_to_sql.py"
+      - "scripts/catalogue_audit.py"
       - "scripts/cloudflare_bootstrap.py"
       - "data/official/**"
       - "migrations/**"
@@ -37,10 +38,6 @@ jobs:
         if: steps.wikidata.outcome == 'success'
         run: python -m json.tool data/generated/wikidata-india.json >/dev/null
 
-      - name: Build Wikidata D1 SQL
-        if: steps.wikidata.outcome == 'success'
-        run: python scripts/wikidata_to_sql.py
-
       - name: Report Wikidata degradation
         if: steps.wikidata.outcome != 'success'
         run: echo "Wikidata acquisition is temporarily unavailable; preserving the existing D1 catalogue and continuing with first-party sources."
@@ -49,6 +46,13 @@ jobs:
         run: |
           python -m json.tool data/official/source_registry.json >/dev/null
           python -m json.tool data/official/releases.json >/dev/null
+
+      - name: Audit catalogue quality
+        run: python scripts/catalogue_audit.py
+
+      - name: Build Wikidata D1 SQL
+        if: steps.wikidata.outcome == 'success'
+        run: python scripts/wikidata_to_sql.py
 
       - name: Build official-source D1 SQL
         run: python scripts/official_to_sql.py
