@@ -32,6 +32,7 @@ LABEL_BATCH = 25
 REQUEST_DELAY_SECONDS = 0.75
 MAX_BATCH_RETRIES = 6
 MAX_BACKOFF_SECONDS = 45
+TRANSIENT_MEDIAWIKI_ERRORS = {"maxlag", "ratelimited"}
 UNKNOWN = {"", "unknown", "xx", "und", "n/a", "na", "none", "null"}
 QID_RE = re.compile(r"^Q\d+$", re.IGNORECASE)
 
@@ -108,13 +109,45 @@ def retry_after_seconds(exc: urllib.error.HTTPError) -> int:
         return 0
 
 
+def mediawiki_retry_delay(error: Mapping[str, Any], attempt: int) -> int:
+    """Return a bounded retry delay for an HTTP-200 MediaWiki transient error."""
+    exponential = min(MAX_BACKOFF_SECONDS, 2 ** (attempt + 2))
+    lag = error.get("lag")
+    try:
+        lag_delay = max(1, int(float(lag)) + 1) if lag is not None else 0
+    except (TypeError, ValueError):
+        lag_delay = 0
+    return min(MAX_BACKOFF_SECONDS, max(exponential, lag_delay))
+
+
 def request_wikidata(params: dict[str, str]) -> dict[str, Any]:
-    """Request Wikidata with cooperative pacing and bounded 429 backoff."""
+    """Request Wikidata with cooperative pacing and bounded transient backoff.
+
+    MediaWiki can return throttling/server-load errors inside an HTTP-200 JSON
+    payload. Those must never be interpreted as an empty entity response because
+    doing so would silently misclassify metadata as genuinely missing.
+    """
     request_params = {**params, "maxlag": "5"}
     last_error: Exception | None = None
     for attempt in range(MAX_BATCH_RETRIES):
         try:
-            return base.request_json(base.WIKIDATA_API, request_params, post=False)
+            payload = base.request_json(base.WIKIDATA_API, request_params, post=False)
+            api_error = payload.get("error") if isinstance(payload, Mapping) else None
+            if isinstance(api_error, Mapping):
+                code = str(api_error.get("code") or "unknown").strip().casefold()
+                info = str(api_error.get("info") or "").strip()
+                if code in TRANSIENT_MEDIAWIKI_ERRORS:
+                    if attempt + 1 >= MAX_BATCH_RETRIES:
+                        raise RuntimeError(
+                            f"Wikidata transient API error persisted after {MAX_BATCH_RETRIES} attempts: "
+                            f"{code}: {info}"
+                        )
+                    time.sleep(mediawiki_retry_delay(api_error, attempt))
+                    continue
+                raise RuntimeError(f"Wikidata API error {code}: {info}")
+            if not isinstance(payload, dict):
+                raise RuntimeError("Wikidata API returned a non-object JSON payload")
+            return payload
         except urllib.error.HTTPError as exc:
             last_error = exc
             if exc.code != 429:
