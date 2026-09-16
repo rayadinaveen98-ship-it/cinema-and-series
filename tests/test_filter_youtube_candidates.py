@@ -72,6 +72,10 @@ class YouTubeCandidateFilterTests(unittest.TestCase):
                 "video_title": "Dragon | Release Update",
                 "candidate_dates": ["2026-12-24", "2027-01-08"],
                 "candidate_release_date": None,
+                "date_contexts": [
+                    {"date": "2026-12-24", "excerpt": "Dragon releases 24 December 2026."},
+                    {"date": "2027-01-08", "excerpt": "Dragon new date 8 January 2027 in cinemas."},
+                ],
             }
         ]
         filtered, suppressed = module.filter_candidates(
@@ -81,6 +85,10 @@ class YouTubeCandidateFilterTests(unittest.TestCase):
         self.assertEqual(suppressed, 1)
         self.assertEqual(filtered[0]["candidate_dates"], ["2027-01-08"])
         self.assertEqual(filtered[0]["candidate_release_date"], "2027-01-08")
+        self.assertEqual(
+            filtered[0]["date_contexts"],
+            [{"date": "2027-01-08", "excerpt": "Dragon new date 8 January 2027 in cinemas."}],
+        )
 
     def test_missing_movie_identity_is_kept_for_review(self):
         candidate = {
@@ -88,6 +96,9 @@ class YouTubeCandidateFilterTests(unittest.TestCase):
             "video_title": "Big Release Date Announcement",
             "candidate_dates": ["2026-12-24"],
             "candidate_release_date": "2026-12-24",
+            "date_contexts": [
+                {"date": "2026-12-24", "excerpt": "Big release in cinemas 24 December 2026."}
+            ],
         }
         filtered, suppressed = module.filter_candidates(
             [candidate],
