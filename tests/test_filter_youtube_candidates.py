@@ -13,15 +13,17 @@ spec.loader.exec_module(module)
 
 
 class YouTubeCandidateFilterTests(unittest.TestCase):
-    def test_verified_dates_are_indexed_by_source(self):
+    def test_verified_titles_are_indexed_by_source_and_date(self):
         payload = {
             "releases": [
                 {
+                    "title": "KING",
                     "source_key": "red_chillies_entertainment",
                     "release_date": "2026-12-24",
                     "verification_status": "verified",
                 },
                 {
+                    "title": "Other",
                     "source_key": "other",
                     "release_date": "2027-01-01",
                     "verification_status": "unconfirmed",
@@ -29,40 +31,70 @@ class YouTubeCandidateFilterTests(unittest.TestCase):
             ]
         }
         self.assertEqual(
-            module.known_dates_by_source(payload),
-            {"red_chillies_entertainment": {"2026-12-24"}},
+            module.verified_titles_by_source_date(payload),
+            {"red_chillies_entertainment": {"2026-12-24": {"KING"}}},
         )
 
-    def test_fully_known_candidate_is_removed(self):
+    def test_fully_known_same_movie_candidate_is_removed(self):
         candidates = [
             {
                 "source_key": "red_chillies_entertainment",
+                "video_title": "KING | Shah Rukh Khan | Release Date Announcement",
                 "candidate_dates": ["2026-12-24"],
                 "candidate_release_date": "2026-12-24",
             }
         ]
         filtered, suppressed = module.filter_candidates(
             candidates,
-            {"red_chillies_entertainment": {"2026-12-24"}},
+            {"red_chillies_entertainment": {"2026-12-24": {"KING"}}},
         )
         self.assertEqual(filtered, [])
         self.assertEqual(suppressed, 1)
 
-    def test_mixed_candidate_keeps_only_new_date(self):
+    def test_same_source_and_date_different_movie_is_not_removed(self):
+        candidate = {
+            "source_key": "red_chillies_entertainment",
+            "video_title": "Another Film | In Cinemas 24 December 2026",
+            "candidate_dates": ["2026-12-24"],
+            "candidate_release_date": "2026-12-24",
+        }
+        filtered, suppressed = module.filter_candidates(
+            [candidate],
+            {"red_chillies_entertainment": {"2026-12-24": {"KING"}}},
+        )
+        self.assertEqual(filtered, [candidate])
+        self.assertEqual(suppressed, 0)
+
+    def test_mixed_candidate_keeps_only_new_date_for_same_movie(self):
         candidates = [
             {
                 "source_key": "studio",
+                "video_title": "Dragon | Release Update",
                 "candidate_dates": ["2026-12-24", "2027-01-08"],
                 "candidate_release_date": None,
             }
         ]
         filtered, suppressed = module.filter_candidates(
             candidates,
-            {"studio": {"2026-12-24"}},
+            {"studio": {"2026-12-24": {"Dragon"}}},
         )
         self.assertEqual(suppressed, 1)
         self.assertEqual(filtered[0]["candidate_dates"], ["2027-01-08"])
         self.assertEqual(filtered[0]["candidate_release_date"], "2027-01-08")
+
+    def test_missing_movie_identity_is_kept_for_review(self):
+        candidate = {
+            "source_key": "studio",
+            "video_title": "Big Release Date Announcement",
+            "candidate_dates": ["2026-12-24"],
+            "candidate_release_date": "2026-12-24",
+        }
+        filtered, suppressed = module.filter_candidates(
+            [candidate],
+            {"studio": {"2026-12-24": {"Dragon"}}},
+        )
+        self.assertEqual(filtered, [candidate])
+        self.assertEqual(suppressed, 0)
 
 
 if __name__ == "__main__":

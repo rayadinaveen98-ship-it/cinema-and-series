@@ -2,43 +2,39 @@
 """Remove already-curated first-party dates from YouTube monitor candidates.
 
 Official channels may repeat a release date across teasers, reminders, shorts,
-and date-announcement videos. Once the same source/date is already curated in
-``data/official/releases.json``, surfacing it again as pending review is noise.
-This step keeps genuinely new dates, suppresses known verified occurrences,
-and regenerates the D1 SQL only for retained observations.
+and date-announcement videos. Dedupe must remain identity-safe: a date is
+suppressed only when the same first-party source already has that date verified
+for a movie title explicitly named in the candidate. Source + date alone is not
+enough because one studio can release different movies on the same day.
 """
 from __future__ import annotations
 
 import json
 from pathlib import Path
 
+from release_identity import candidate_matches_verified_release, verified_titles_by_source_date
 from youtube_monitor import build_sql, sources_for_candidates
 
 CANDIDATES = Path("data/generated/youtube-release-candidates.json")
 RELEASES = Path("data/official/releases.json")
 REGISTRY = Path("data/official/source_registry.json")
 OUT_SQL = Path("data/generated/youtube-candidates-upsert.sql")
+IDENTITY_FIELDS = ("video_title",)
 
 
-def known_dates_by_source(releases_payload: dict) -> dict[str, set[str]]:
-    known: dict[str, set[str]] = {}
-    for release in releases_payload.get("releases", []):
-        if release.get("verification_status") != "verified":
-            continue
-        source_key = release.get("source_key")
-        release_date = release.get("release_date")
-        if source_key and release_date:
-            known.setdefault(source_key, set()).add(release_date)
-    return known
-
-
-def filter_candidates(candidates: list[dict], known: dict[str, set[str]]) -> tuple[list[dict], int]:
+def filter_candidates(
+    candidates: list[dict],
+    known: dict[str, dict[str, set[str]]],
+) -> tuple[list[dict], int]:
     filtered: list[dict] = []
     suppressed_dates = 0
     for candidate in candidates:
-        existing = known.get(candidate.get("source_key", ""), set())
         original_dates = list(candidate.get("candidate_dates") or [])
-        remaining_dates = [value for value in original_dates if value not in existing]
+        remaining_dates = [
+            value
+            for value in original_dates
+            if not candidate_matches_verified_release(candidate, value, known, IDENTITY_FIELDS)
+        ]
         suppressed_dates += len(original_dates) - len(remaining_dates)
         if not remaining_dates:
             continue
@@ -56,13 +52,14 @@ def main() -> int:
 
     filtered, suppressed_dates = filter_candidates(
         candidates_payload.get("candidates", []),
-        known_dates_by_source(releases_payload),
+        verified_titles_by_source_date(releases_payload),
     )
     candidates_payload["candidates"] = filtered
     candidates_payload["suppressed_known_verified_dates"] = suppressed_dates
     candidates_payload["policy"] = (
         "official-channel observations only; future-facing release signals become pending review; "
-        "dates already verified from the same source are suppressed; never auto-verify"
+        "a date is suppressed only when the same source/date candidate explicitly names the same verified movie; "
+        "never auto-verify"
     )
     CANDIDATES.write_text(json.dumps(candidates_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -75,8 +72,8 @@ def main() -> int:
         encoding="utf-8",
     )
     print(
-        f"youtube candidate dedupe kept {len(filtered)} observation(s) and suppressed "
-        f"{suppressed_dates} already-verified date occurrence(s)"
+        f"youtube identity-safe dedupe kept {len(filtered)} observation(s) and suppressed "
+        f"{suppressed_dates} already-verified same-movie date occurrence(s)"
     )
     return 0
 
