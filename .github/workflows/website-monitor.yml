@@ -1,0 +1,81 @@
+name: Official Website Monitor
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/website-monitor.yml"
+      - "scripts/website_monitor.py"
+      - "scripts/cloudflare_bootstrap.py"
+      - "data/official/source_registry.json"
+      - "migrations/**"
+  schedule:
+    - cron: "47 */6 * * *"
+
+concurrency:
+  group: official-website-monitor
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Poll first-party studio websites
+        run: python scripts/website_monitor.py
+
+      - name: Validate website candidate payload
+        run: python -m json.tool data/generated/website-release-candidates.json >/dev/null
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: official-website-release-candidates
+          path: data/generated/website-release-candidates.json
+          retention-days: 14
+
+      - name: Check Cloudflare connection
+        id: cloudflare
+        shell: bash
+        run: |
+          if [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Cloudflare credentials unavailable; website candidate artifact kept but D1 queue sync skipped."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.cloudflare.outputs.ready == 'true'
+        with:
+          node-version: 22
+
+      - name: Install Wrangler
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: npm install --no-audit --no-fund
+
+      - name: Bind D1
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: python scripts/cloudflare_bootstrap.py
+
+      - name: Apply D1 migrations
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: npx wrangler d1 migrations apply cinema-and-series --remote
+
+      - name: Sync website review candidates to D1
+        if: steps.cloudflare.outputs.ready == 'true'
+        shell: bash
+        run: |
+          if [[ -s data/generated/website-candidates-upsert.sql ]]; then
+            npx wrangler d1 execute cinema-and-series --remote --file=data/generated/website-candidates-upsert.sql
+          else
+            echo "No release-date candidates detected on monitored first-party websites."
+          fi
