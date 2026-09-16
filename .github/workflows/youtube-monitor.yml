@@ -8,6 +8,7 @@ on:
       - ".github/workflows/youtube-monitor.yml"
       - "scripts/youtube_monitor.py"
       - "scripts/filter_youtube_candidates.py"
+      - "scripts/release_identity.py"
       - "scripts/cloudflare_bootstrap.py"
       - "data/official/source_registry.json"
       - "data/official/releases.json"
