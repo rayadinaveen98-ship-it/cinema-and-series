@@ -290,6 +290,16 @@
       "youtube_handle": "@tseries",
       "languages": ["Hindi", "Telugu", "Tamil", "Malayalam", "Kannada", "Punjabi"],
       "active": true
+    },
+    {
+      "key": "jio_studios",
+      "name": "Jio Studios",
+      "source_type": "studio_distributor",
+      "website_url": null,
+      "youtube_channel_id": "UCcXQd6kHKm0b41x8zMVMmMg",
+      "youtube_handle": "@JioStudios",
+      "languages": ["Hindi", "Marathi", "Tamil", "Telugu", "Malayalam", "Punjabi", "Gujarati"],
+      "active": true
     }
   ]
 }
