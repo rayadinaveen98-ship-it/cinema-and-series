@@ -72,6 +72,26 @@
       "active": true
     },
     {
+      "key": "uv_creations",
+      "name": "UV Creations",
+      "source_type": "production_house",
+      "website_url": null,
+      "youtube_channel_id": "UCmse5JbKneJqVyerfhDVYvQ",
+      "youtube_handle": "@UVCreations",
+      "languages": ["Telugu", "Tamil", "Hindi"],
+      "active": true
+    },
+    {
+      "key": "suresh_productions",
+      "name": "Suresh Productions",
+      "source_type": "production_house",
+      "website_url": null,
+      "youtube_channel_id": "UCU0PnZqMDQ0uvwacGzCX3NA",
+      "youtube_handle": "@sureshproductions",
+      "languages": ["Telugu", "Tamil", "Hindi"],
+      "active": true
+    },
+    {
       "key": "sun_pictures",
       "name": "Sun Pictures",
       "source_type": "production_house",
@@ -102,6 +122,16 @@
       "active": true
     },
     {
+      "key": "lyca_productions",
+      "name": "Lyca Productions",
+      "source_type": "studio_distributor",
+      "website_url": "https://lycaproductions.in/",
+      "youtube_channel_id": null,
+      "youtube_handle": "@lycaproductions",
+      "languages": ["Tamil", "Telugu", "Hindi", "Malayalam", "Kannada"],
+      "active": true
+    },
+    {
       "key": "prithviraj_productions",
       "name": "Prithviraj Productions",
       "source_type": "production_house",
@@ -109,6 +139,26 @@
       "youtube_channel_id": "UCH1Gszpy-NmA6ZXZaxhnlwA",
       "youtube_handle": "@PrithvirajProductions",
       "languages": ["Malayalam", "Tamil", "Telugu", "Hindi"],
+      "active": true
+    },
+    {
+      "key": "aashirvad_cinemas",
+      "name": "Aashirvad Cinemas",
+      "source_type": "production_house",
+      "website_url": "https://aashirvadcinemas.com/",
+      "youtube_channel_id": "UC_J44kyEsEB8LPlhfm2Xb4g",
+      "youtube_handle": "@AashirvadCinemasOfficial",
+      "languages": ["Malayalam", "Tamil", "Telugu", "Hindi"],
+      "active": true
+    },
+    {
+      "key": "paramvah_studios",
+      "name": "Paramvah Studios",
+      "source_type": "production_house",
+      "website_url": "https://paramvah.com/",
+      "youtube_channel_id": "UCvBaJ5MfXVKfSiKP2beaNvw",
+      "youtube_handle": "@ParamvahStudiosOfficial",
+      "languages": ["Kannada", "Malayalam", "Tamil", "Telugu", "Hindi"],
       "active": true
     },
     {
