@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 type Movie = {
   id: string;
@@ -13,19 +13,11 @@ type Movie = {
   releaseSourceName?: string;
 };
 
-type CatalogueStats = {
-  total: number;
-  verified: number;
-  supported: number;
-  unconfirmed: number;
-  activeSources: number;
-};
-
+type CatalogueStats = { total: number; verified: number; supported: number; unconfirmed: number; activeSources: number };
 type FacetValue = { value: string; count: number };
 type CatalogueFacets = { years: FacetValue[]; languages: FacetValue[]; countries: FacetValue[] };
 type Pagination = { limit: number; offset: number; total: number; hasMore: boolean };
 type PeriodCounts = { upcoming: number; next7Days: number; next30Days: number };
-
 type ApiResponse = {
   movies: Movie[];
   source: "d1" | "preview";
@@ -38,136 +30,86 @@ type ApiResponse = {
 };
 
 const fallback: Movie[] = [
-  { id: "preview-1", title: "A Film in Production", language: "Telugu", countryCode: "IN", releaseDate: "2026-09-18", verificationStatus: "unconfirmed", releaseSource: "preview" },
-  { id: "preview-2", title: "Festival Premiere", language: "Malayalam", countryCode: "IN", releaseDate: "2026-09-19", verificationStatus: "supported", releaseSource: "preview" },
-  { id: "preview-3", title: "Theatrical Release", language: "Tamil", countryCode: "IN", releaseDate: "2026-09-25", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
-  { id: "preview-4", title: "Coming Soon", language: "Kannada", countryCode: "IN", releaseDate: "2026-10-02", verificationStatus: "unconfirmed", releaseSource: "preview" },
+  { id: "preview-1", title: "RANABAALI", language: "Telugu", countryCode: "IN", releaseDate: "2026-10-16", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
+  { id: "preview-2", title: "KING", language: "Hindi", countryCode: "IN", releaseDate: "2026-12-24", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
+  { id: "preview-3", title: "Jailer 2", language: "Tamil", countryCode: "IN", releaseDate: "2026-10-15", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
+  { id: "preview-4", title: "Spirit", language: "Telugu", countryCode: "IN", releaseDate: "2027-03-05", verificationStatus: "supported", releaseSource: "preview" },
 ];
-
-const fallbackStats: CatalogueStats = { total: 4, verified: 1, supported: 1, unconfirmed: 2, activeSources: 0 };
+const fallbackStats: CatalogueStats = { total: 4, verified: 3, supported: 1, unconfirmed: 0, activeSources: 0 };
 const fallbackFacets: CatalogueFacets = {
-  years: [{ value: "2026", count: 4 }],
-  languages: [
-    { value: "Kannada", count: 1 },
-    { value: "Malayalam", count: 1 },
-    { value: "Tamil", count: 1 },
-    { value: "Telugu", count: 1 },
-  ],
+  years: [{ value: "2026", count: 3 }, { value: "2027", count: 1 }],
+  languages: [{ value: "Telugu", count: 2 }, { value: "Hindi", count: 1 }, { value: "Tamil", count: 1 }],
   countries: [{ value: "IN", count: 4 }],
 };
 const fallbackPagination: Pagination = { limit: 60, offset: 0, total: 4, hasMore: false };
-const fallbackPeriods: PeriodCounts = { upcoming: 4, next7Days: 1, next30Days: 4 };
+const fallbackPeriods: PeriodCounts = { upcoming: 4, next7Days: 0, next30Days: 2 };
 
 const countryNames: Record<string, string> = {
-  IN: "India", US: "United States", GB: "United Kingdom", KR: "South Korea", JP: "Japan",
-  FR: "France", DE: "Germany", IT: "Italy", ES: "Spain", CN: "China", HK: "Hong Kong",
-  TW: "Taiwan", CA: "Canada", AU: "Australia", NZ: "New Zealand", BR: "Brazil", MX: "Mexico",
-  AR: "Argentina", TR: "Turkey", IR: "Iran", PK: "Pakistan", BD: "Bangladesh", LK: "Sri Lanka",
+  IN: "India", US: "United States", GB: "United Kingdom", KR: "South Korea", JP: "Japan", FR: "France", DE: "Germany",
+  IT: "Italy", ES: "Spain", CN: "China", HK: "Hong Kong", TW: "Taiwan", CA: "Canada", AU: "Australia", NZ: "New Zealand",
+  BR: "Brazil", MX: "Mexico", AR: "Argentina", TR: "Turkey", IR: "Iran", PK: "Pakistan", BD: "Bangladesh", LK: "Sri Lanka",
   NP: "Nepal", ID: "Indonesia", TH: "Thailand", PH: "Philippines", NG: "Nigeria", EG: "Egypt",
 };
 
-function parseDate(value: string) {
-  return new Date(`${value}T00:00:00+05:30`);
-}
-
+function parseDate(value: string) { return new Date(`${value}T00:00:00+05:30`); }
 function dateKey(date: Date) {
-  const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Kolkata",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date).map(({ type, value }) => [type, value]),
-  );
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" })
+    .formatToParts(date).map(({ type, value }) => [type, value]));
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
-
-function addDaysKey(value: string, days: number) {
-  return dateKey(new Date(parseDate(value).getTime() + days * 86_400_000));
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "long", year: "numeric" }).format(parseDate(value));
-}
-
-function shortDate(value: string) {
-  return new Intl.DateTimeFormat("en-IN", { day: "2-digit", month: "short" }).format(parseDate(value));
-}
-
-function monthLabel(value: string) {
-  return new Intl.DateTimeFormat("en-IN", { month: "long", year: "numeric" }).format(parseDate(value));
-}
-
-function monthKey(value: string) {
-  return value.slice(0, 7);
-}
-
-function dateParts(value: string) {
-  const date = parseDate(value);
-  return {
-    day: new Intl.DateTimeFormat("en-IN", { day: "2-digit" }).format(date),
-    month: new Intl.DateTimeFormat("en-IN", { month: "short" }).format(date).toUpperCase(),
-    year: new Intl.DateTimeFormat("en-IN", { year: "numeric" }).format(date),
-  };
-}
-
-function todayKey() {
-  return dateKey(new Date());
-}
-
-function formatFreshness(value?: string) {
-  if (!value) return "syncing catalogue";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "catalogue live";
-  return new Intl.DateTimeFormat("en-IN", {
-    timeZone: "Asia/Kolkata",
-    day: "2-digit",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-  }).format(date);
-}
-
-function statusLabel(status: Movie["verificationStatus"]) {
-  if (status === "verified") return "Officially verified";
-  if (status === "supported") return "Supported date";
-  return "Open-data tracking";
-}
-
-function periodLabel(period: string) {
-  if (period === "upcoming") return "Upcoming releases";
-  if (period === "7d") return "Next 7 days";
-  if (period === "30d") return "Next 30 days";
-  if (period === "all") return "All tracked films";
-  return `${period} releases`;
-}
-
+function addDaysKey(value: string, days: number) { return dateKey(new Date(parseDate(value).getTime() + days * 86_400_000)); }
+function todayKey() { return dateKey(new Date()); }
+function formatDate(value: string) { return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(parseDate(value)); }
+function yearOf(value: string) { return value.slice(0, 4); }
+function countryLabel(code?: string) { return !code ? "Global" : countryNames[code] ?? code; }
 function sourceLabel(source?: string) {
-  if (!source || source === "wikidata") return "Wikidata candidate";
-  if (source === "preview") return "Preview source";
+  if (!source || source === "wikidata") return "Wikidata";
   if (source === "official") return "Official source";
-  return source.split("_").map((word) => word[0]?.toUpperCase() + word.slice(1)).join(" ");
+  if (source === "preview") return "Preview";
+  return source.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
+}
+function movieSourceLabel(movie?: Movie) { return movie?.releaseSourceName?.trim() || sourceLabel(movie?.releaseSource); }
+function statusLabel(status: Movie["verificationStatus"]) {
+  if (status === "verified") return "Verified";
+  if (status === "supported") return "Supported";
+  return "Tracking";
+}
+function toneClass(movie: Movie) {
+  let total = 0;
+  for (const char of movie.title) total += char.charCodeAt(0);
+  return `tone-${total % 8}`;
 }
 
-function movieSourceLabel(movie?: Movie) {
-  if (!movie) return "Source pending";
-  return movie.releaseSourceName?.trim() || sourceLabel(movie.releaseSource);
-}
-
-function countryLabel(code?: string) {
-  if (!code) return "Country pending";
-  return countryNames[code] ?? code;
+function PosterCard({ movie, onOpen, rank }: { movie: Movie; onOpen: (movie: Movie) => void; rank?: number }) {
+  return (
+    <button className="poster-button" onClick={() => onOpen(movie)} aria-label={`Open ${movie.title}`}>
+      {rank ? <span className="rank-number">{rank}</span> : null}
+      <article className={`poster-card ${toneClass(movie)}`}>
+        <div className="poster-grain" />
+        <div className="poster-status"><span className={movie.verificationStatus} />{statusLabel(movie.verificationStatus)}</div>
+        <div className="poster-copy">
+          <p>{movie.language || "Cinema"}</p>
+          <h3>{movie.title}</h3>
+          <div><span>{yearOf(movie.releaseDate)}</span><span>•</span><span>{countryLabel(movie.countryCode)}</span></div>
+        </div>
+        <div className="poster-hover">
+          <span className="play-orb">▶</span>
+          <strong>{formatDate(movie.releaseDate)}</strong>
+          <small>{movieSourceLabel(movie)}</small>
+        </div>
+      </article>
+    </button>
+  );
 }
 
 export default function App() {
   const [movies, setMovies] = useState<Movie[]>(fallback);
-  const [hero, setHero] = useState<Movie | undefined>(fallback[2]);
+  const [hero, setHero] = useState<Movie>(fallback[0]);
   const [stats, setStats] = useState<CatalogueStats>(fallbackStats);
   const [facets, setFacets] = useState<CatalogueFacets>(fallbackFacets);
   const [pagination, setPagination] = useState<Pagination>(fallbackPagination);
   const [periodCounts, setPeriodCounts] = useState<PeriodCounts>(fallbackPeriods);
   const [source, setSource] = useState<ApiResponse["source"]>("preview");
-  const [catalogueUpdatedAt, setCatalogueUpdatedAt] = useState<string>();
   const [activeLanguage, setActiveLanguage] = useState("All");
   const [activeCountry, setActiveCountry] = useState("All");
   const [activePeriod, setActivePeriod] = useState("upcoming");
@@ -176,24 +118,22 @@ export default function App() {
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const today = todayKey();
   const sevenDayEnd = addDaysKey(today, 6);
   const thirtyDayEnd = addDaysKey(today, 29);
 
   useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 250);
+    const timer = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 240);
     return () => window.clearTimeout(timer);
   }, [searchQuery]);
 
   function buildCatalogueUrl(offset: number) {
     const params = new URLSearchParams({ limit: "60", offset: String(offset) });
-    if (activePeriod === "all") {
-      params.set("scope", "all");
-    } else if (/^\d{4}$/.test(activePeriod)) {
-      params.set("scope", "all");
-      params.set("year", activePeriod);
-    } else {
+    if (activePeriod === "all") params.set("scope", "all");
+    else if (/^\d{4}$/.test(activePeriod)) { params.set("scope", "all"); params.set("year", activePeriod); }
+    else {
       params.set("scope", "upcoming");
       params.set("from", today);
       if (activePeriod === "7d") params.set("to", sevenDayEnd);
@@ -204,7 +144,7 @@ export default function App() {
     if (activeLanguage !== "All") params.set("language", activeLanguage);
     if (activeCountry !== "All") params.set("country", activeCountry);
     if (officialOnly) params.set("official", "1");
-    return `/api/movies?${params.toString()}`;
+    return `/api/movies?${params}`;
   }
 
   function applyResponse(data: ApiResponse, append: boolean) {
@@ -214,10 +154,7 @@ export default function App() {
     if (data.pagination) setPagination(data.pagination);
     if (data.periodCounts) setPeriodCounts(data.periodCounts);
     setSource(data.source);
-    setCatalogueUpdatedAt(data.catalogueUpdatedAt);
-
-    const isDefaultUpcoming = activePeriod === "upcoming" && activeLanguage === "All" && activeCountry === "All" && !officialOnly && !debouncedSearch;
-    if (isDefaultUpcoming && data.movies.length) {
+    if (!append && !debouncedSearch && activeLanguage === "All" && activeCountry === "All" && data.movies.length) {
       setHero(data.movies.find((movie) => movie.verificationStatus === "verified") ?? data.movies[0]);
     }
   }
@@ -226,234 +163,128 @@ export default function App() {
     const controller = new AbortController();
     setLoading(true);
     fetch(buildCatalogueUrl(0), { signal: controller.signal })
-      .then((response) => {
-        if (!response.ok) throw new Error("Movie API unavailable");
-        return response.json() as Promise<ApiResponse>;
-      })
+      .then((response) => { if (!response.ok) throw new Error("Movie API unavailable"); return response.json() as Promise<ApiResponse>; })
       .then((data) => applyResponse(data, false))
       .catch(() => undefined)
       .finally(() => setLoading(false));
     return () => controller.abort();
   }, [activeCountry, activeLanguage, activePeriod, debouncedSearch, officialOnly]);
 
-  const years = useMemo(() => facets.years.slice(0, 25), [facets.years]);
-  const languages = useMemo(() => ["All", ...facets.languages.slice(0, 24).map((item) => item.value)], [facets.languages]);
-  const countries = useMemo(() => ["All", ...facets.countries.slice(0, 20).map((item) => item.value)], [facets.countries]);
-  const yearCounts = useMemo(() => new Map(facets.years.map((item) => [item.value, item.count])), [facets.years]);
-
-  useEffect(() => {
-    if (activeLanguage !== "All" && !facets.languages.some((item) => item.value === activeLanguage)) setActiveLanguage("All");
-  }, [activeLanguage, facets.languages]);
-
-  useEffect(() => {
-    if (activeCountry !== "All" && !facets.countries.some((item) => item.value === activeCountry)) setActiveCountry("All");
-  }, [activeCountry, facets.countries]);
+  function openMovie(movie: Movie) {
+    setHero(movie);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   function loadMore() {
     if (loadingMore || !pagination.hasMore) return;
     setLoadingMore(true);
     fetch(buildCatalogueUrl(movies.length))
-      .then((response) => {
-        if (!response.ok) throw new Error("Movie API unavailable");
-        return response.json() as Promise<ApiResponse>;
-      })
+      .then((response) => { if (!response.ok) throw new Error("Movie API unavailable"); return response.json() as Promise<ApiResponse>; })
       .then((data) => applyResponse(data, true))
       .catch(() => undefined)
       .finally(() => setLoadingMore(false));
   }
 
-  const heroParts = hero ? dateParts(hero.releaseDate) : null;
+  const verified = useMemo(() => movies.filter((movie) => movie.verificationStatus === "verified"), [movies]);
+  const arriving = useMemo(() => [...movies].sort((a, b) => a.releaseDate.localeCompare(b.releaseDate)), [movies]);
+  const featured = verified.length ? verified : arriving;
+  const languages = useMemo(() => ["All", ...facets.languages.slice(0, 16).map((item) => item.value)], [facets.languages]);
+  const countries = useMemo(() => ["All", ...facets.countries.slice(0, 12).map((item) => item.value)], [facets.countries]);
+  const years = useMemo(() => facets.years.slice(0, 10), [facets.years]);
 
   return (
-    <main className="page-shell">
-      <div className="ambient ambient-one" />
-      <div className="ambient ambient-two" />
-
-      <header className="topbar">
-        <a className="brand" href="/" aria-label="Cinema and Series home">
-          <span className="brand-mark">C</span>
-          <span>Cinema <em>&</em> Series</span>
-        </a>
-        <div className="topbar-meta">
-          <span className={`live-dot ${source === "d1" ? "is-live" : ""}`} />
-          {source === "d1"
-            ? `${stats.activeSources} official sources · updated ${formatFreshness(catalogueUpdatedAt)}`
-            : loading ? "Connecting…" : "Preview catalogue"}
+    <main className="stream-app">
+      <header className="stream-nav">
+        <a className="stream-brand" href="#top"><span>CINEMA</span><b>& SERIES</b></a>
+        <nav className="desktop-nav" aria-label="Primary navigation">
+          <a className="active" href="#top">Home</a><a href="#upcoming">Upcoming</a><a href="#browse">Browse</a>
+        </nav>
+        <div className="nav-actions">
+          <button className="icon-button" onClick={() => setSearchOpen((value) => !value)} aria-label="Toggle search">⌕</button>
+          <button className={`verified-nav ${officialOnly ? "active" : ""}`} onClick={() => setOfficialOnly((value) => !value)}>✓ Verified</button>
+          <span className={`service-dot ${source === "d1" ? "live" : ""}`} title={source === "d1" ? "Live catalogue" : "Preview catalogue"} />
         </div>
       </header>
 
-      <section className="hero">
-        <div className="hero-kicker">INDIA-FIRST · GLOBAL CATALOGUE</div>
-        <div className="hero-grid">
-          <div className="hero-copy">
-            <p className="eyebrow">Next verified signal</p>
-            <h1>{hero?.title ?? "Cinema, beautifully timed."}</h1>
-            {hero && <p className="hero-date">{formatDate(hero.releaseDate)}</p>}
-            <p className="hero-summary">A global movie catalogue with an India-first release desk. Open data builds breadth across countries and languages; {stats.activeSources || "official"} first-party feeds strengthen upcoming dates that matter.</p>
-            <div className="hero-actions">
-              <a href="#releases" className="primary-action">Browse the catalogue</a>
-              <span className={`verification-pill ${hero?.verificationStatus ?? "unconfirmed"}`}>{hero ? statusLabel(hero.verificationStatus) : "Tracking"}</span>
-            </div>
+      <section id="top" className={`stream-hero ${toneClass(hero)}`}>
+        <div className="hero-art"><div className="hero-orb" /><div className="hero-lines" /><span className="hero-monogram">{hero.title.slice(0, 1)}</span></div>
+        <div className="hero-vignette" />
+        <div className="stream-hero-copy">
+          <div className="series-label"><span>N</span> FEATURED RELEASE</div>
+          <h1>{hero.title}</h1>
+          <div className="hero-meta">
+            <strong className={hero.verificationStatus}>{statusLabel(hero.verificationStatus)}</strong>
+            <span>{formatDate(hero.releaseDate)}</span><span>{hero.language || "Cinema"}</span><span>{countryLabel(hero.countryCode)}</span>
           </div>
+          <p>{hero.verificationStatus === "verified" ? `Release date confirmed through ${movieSourceLabel(hero)}.` : `Currently tracked through ${movieSourceLabel(hero)} while stronger release evidence is monitored.`} Explore a growing India-first, global movie catalogue.</p>
+          <div className="hero-buttons">
+            <a className="play-button" href="#browse"><span>▶</span> Browse catalogue</a>
+            <button className="info-button" onClick={() => setOfficialOnly((value) => !value)}><span>ⓘ</span> {officialOnly ? "Show all" : "Official only"}</button>
+          </div>
+        </div>
+        <div className="hero-stats"><span>{stats.total.toLocaleString("en-IN")} TITLES</span><i /><span>{stats.activeSources} OFFICIAL SOURCES</span></div>
+      </section>
 
-          <div className="release-signal" aria-label={hero ? `Next tracked release: ${hero.title}` : "Release calendar"}>
-            <div className="signal-topline">
-              <span>Next signal</span>
-              <span className={`signal-status ${hero?.verificationStatus ?? "unconfirmed"}`}>
-                {hero?.verificationStatus === "verified" ? "Official" : "Tracking"}
-              </span>
-            </div>
-            <div className="signal-date">
-              <span>{heroParts?.day ?? "--"}</span>
-              <div><strong>{heroParts?.month ?? "---"}</strong><small>{heroParts?.year ?? "----"}</small></div>
-            </div>
-            <div className="signal-rule" />
-            <p className="signal-title">{hero?.title ?? "Release date pending"}</p>
-            <div className="signal-meta">
-              <span>{hero ? `${hero.language || "Language pending"} · ${countryLabel(hero.countryCode)}` : "Metadata pending"}</span>
-              <span>{hero?.verificationStatus === "verified" ? `Official · ${movieSourceLabel(hero)}` : movieSourceLabel(hero)}</span>
-            </div>
+      <div className={`search-panel ${searchOpen || searchQuery ? "open" : ""}`}>
+        <span>⌕</span><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Titles, languages, countries…" aria-label="Search catalogue" />
+        {searchQuery && <button onClick={() => setSearchQuery("")}>Clear</button>}
+      </div>
+
+      <section className="content-stage">
+        <div className="stream-row first-row">
+          <div className="row-heading"><h2>Verified releases</h2><span>{stats.verified} official dates</span></div>
+          <div className="poster-rail rank-rail">
+            {featured.slice(0, 10).map((movie, index) => <PosterCard key={movie.id} movie={movie} onOpen={openMovie} rank={index + 1} />)}
           </div>
         </div>
 
-        <div className="signal-grid" aria-label="Catalogue status">
-          <div className="metric"><span>Tracked</span><strong>{stats.total}</strong><small>movie titles</small></div>
-          <div className="metric"><span>Next 30 days</span><strong>{periodCounts.next30Days}</strong><small>near-term releases</small></div>
-          <div className="metric accent"><span>Official</span><strong>{stats.verified}</strong><small>verified dates</small></div>
-          <div className="metric"><span>Sources</span><strong>{stats.activeSources}</strong><small>first-party feeds</small></div>
-        </div>
-      </section>
-
-      <section className="catalogue-dock" aria-label="Catalogue controls">
-        <div className="search-wrap">
-          <span aria-hidden="true">⌕</span>
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search the full movie catalogue…"
-            aria-label="Search movie titles"
-          />
-          {searchQuery && <button onClick={() => setSearchQuery("")} aria-label="Clear search">Clear</button>}
-        </div>
-
-        <div className="filter-row" aria-label="Choose release period and confidence">
-          <button className={activePeriod === "upcoming" ? "chip active" : "chip"} onClick={() => setActivePeriod("upcoming")}>
-            Upcoming · {periodCounts.upcoming}
-          </button>
-          <button className={activePeriod === "7d" ? "chip active" : "chip"} onClick={() => setActivePeriod("7d")}>
-            Next 7 days · {periodCounts.next7Days}
-          </button>
-          <button className={activePeriod === "30d" ? "chip active" : "chip"} onClick={() => setActivePeriod("30d")}>
-            Next 30 days · {periodCounts.next30Days}
-          </button>
-          {years.map(({ value: year, count }) => (
-            <button key={year} className={activePeriod === year ? "chip active" : "chip"} onClick={() => setActivePeriod(year)}>
-              {year} · {count ?? yearCounts.get(year) ?? 0}
-            </button>
-          ))}
-          <button className={activePeriod === "all" ? "chip active" : "chip"} onClick={() => setActivePeriod("all")}>
-            All · {stats.total}
-          </button>
-          <button className={officialOnly ? "chip active" : "chip"} onClick={() => setOfficialOnly((value) => !value)}>
-            Official only · {stats.verified}
-          </button>
-        </div>
-
-        <div className="filter-row language-row" aria-label="Filter by language">
-          {languages.map((language) => (
-            <button key={language} className={language === activeLanguage ? "chip active" : "chip"} onClick={() => setActiveLanguage(language)}>
-              {language}
-            </button>
-          ))}
-        </div>
-
-        <div className="filter-row language-row" aria-label="Filter by country">
-          {countries.map((country) => (
-            <button key={country} className={country === activeCountry ? "chip active" : "chip"} onClick={() => setActiveCountry(country)}>
-              {country === "All" ? "All countries" : countryLabel(country)}
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section id="releases" className="release-section">
-        <div className="section-heading">
-          <div>
-            <p className="eyebrow">Catalogue desk</p>
-            <h2>{searchQuery ? `Results for “${searchQuery}”` : officialOnly ? `Official · ${periodLabel(activePeriod)}` : periodLabel(activePeriod)}</h2>
+        <div id="upcoming" className="stream-row">
+          <div className="row-heading"><h2>Coming soon</h2><span>{periodCounts.upcoming} tracked</span></div>
+          <div className="poster-rail">
+            {arriving.slice(0, 14).map((movie) => <PosterCard key={movie.id} movie={movie} onOpen={openMovie} />)}
           </div>
-          <p>{pagination.total} matching · {stats.verified} officially verified</p>
         </div>
 
-        <div className="release-list">
-          {movies.map((movie, index) => {
-            const newMonth = index === 0 || monthKey(movie.releaseDate) !== monthKey(movies[index - 1].releaseDate);
-            return (
-              <Fragment key={movie.id}>
-                {newMonth && (
-                  <div className="month-divider">
-                    <span>{monthLabel(movie.releaseDate)}</span>
-                    <span>catalogue slice</span>
-                  </div>
-                )}
-                <article className={`release-card ${movie.verificationStatus === "verified" ? "is-verified" : ""}`}>
-                  <div className="date-block">
-                    <span>{shortDate(movie.releaseDate).split(" ")[0]}</span>
-                    <small>{shortDate(movie.releaseDate).split(" ")[1]}</small>
-                  </div>
-                  <div className="card-copy">
-                    <div className="card-topline">
-                      <span>{movie.language || "Language pending"} · {countryLabel(movie.countryCode)}</span>
-                      <span className={`status ${movie.verificationStatus}`}>{statusLabel(movie.verificationStatus)}</span>
-                    </div>
-                    <h3>{movie.title}</h3>
-                    {movie.nativeTitle && movie.nativeTitle !== movie.title && <p className="native-title">{movie.nativeTitle}</p>}
-                    <p className="source-line">
-                      {movie.verificationStatus === "verified" ? `Official source · ${movieSourceLabel(movie)}` : `Discovery source · ${movieSourceLabel(movie)}`}
-                    </p>
-                  </div>
-                  <div className="card-index">{String(index + 1).padStart(2, "0")}</div>
-                </article>
-              </Fragment>
-            );
-          })}
+        <div className="stream-row">
+          <div className="row-heading"><h2>Browse by language</h2><span>India-first discovery</span></div>
+          <div className="genre-rail">
+            {facets.languages.slice(0, 12).map((item, index) => (
+              <button key={item.value} className={`language-tile tile-${index % 6}`} onClick={() => { setActiveLanguage(item.value); document.querySelector("#browse")?.scrollIntoView({ behavior: "smooth" }); }}>
+                <span>{item.value}</span><small>{item.count} titles</small><b>→</b>
+              </button>
+            ))}
+          </div>
+        </div>
 
-          {!movies.length && !loading && (
-            <div className="empty-state">
-              <p className="eyebrow">No matching films yet</p>
-              <h2>Nothing in this slice.</h2>
-              <p>Try another date window, year, language, country, confidence level, or search term while the catalogue backfill continues.</p>
+        <section id="browse" className="browse-section">
+          <div className="browse-heading"><div><p>EXPLORE THE CATALOGUE</p><h2>{debouncedSearch ? `Results for “${debouncedSearch}”` : activeLanguage !== "All" ? `${activeLanguage} cinema` : activeCountry !== "All" ? `${countryLabel(activeCountry)} cinema` : "More to discover"}</h2></div><span>{pagination.total} matching titles</span></div>
+          <div className="filter-deck">
+            <div className="filter-strip">
+              <button className={activePeriod === "upcoming" ? "active" : ""} onClick={() => setActivePeriod("upcoming")}>Upcoming</button>
+              <button className={activePeriod === "30d" ? "active" : ""} onClick={() => setActivePeriod("30d")}>Next 30 days</button>
+              {years.map(({ value }) => <button key={value} className={activePeriod === value ? "active" : ""} onClick={() => setActivePeriod(value)}>{value}</button>)}
+              <button className={activePeriod === "all" ? "active" : ""} onClick={() => setActivePeriod("all")}>All years</button>
             </div>
-          )}
-        </div>
-
-        {pagination.hasMore && (
-          <button className="load-more" onClick={loadMore} disabled={loadingMore}>
-            {loadingMore ? "Loading…" : "Show 60 more"} <span>{Math.max(0, pagination.total - movies.length)} remaining</span>
-          </button>
-        )}
-      </section>
-
-      <section className="calendar-banner">
-        <div>
-          <p className="eyebrow">Two-layer data model</p>
-          <h2>Open data gives us breadth. Official evidence gives us confidence.</h2>
-        </div>
-        <div className="banner-copy">
-          <p>Wikidata expands the catalogue across languages, countries and film history. Studio websites and verified official channels remain the higher-trust layer for upcoming release dates, while conflicting evidence stays preserved instead of disappearing.</p>
-          <div className="confidence-key">
-            <span><i className="key-dot verified" /> Official</span>
-            <span><i className="key-dot supported" /> Supported</span>
-            <span><i className="key-dot unconfirmed" /> Tracking</span>
+            <div className="filter-strip muted-filter">
+              {languages.map((language) => <button key={language} className={activeLanguage === language ? "active" : ""} onClick={() => setActiveLanguage(language)}>{language}</button>)}
+            </div>
+            <div className="filter-strip muted-filter country-filter">
+              {countries.map((country) => <button key={country} className={activeCountry === country ? "active" : ""} onClick={() => setActiveCountry(country)}>{country === "All" ? "All countries" : countryLabel(country)}</button>)}
+            </div>
           </div>
-        </div>
+
+          {loading && <div className="skeleton-grid">{Array.from({ length: 12 }).map((_, index) => <div className="skeleton-card" key={index} />)}</div>}
+          {!loading && movies.length > 0 && <div className="catalogue-grid">{movies.map((movie) => <PosterCard key={movie.id} movie={movie} onOpen={openMovie} />)}</div>}
+          {!loading && !movies.length && <div className="empty"><span>⌕</span><h3>No titles in this slice</h3><p>Try another year, language, country or confidence filter.</p></div>}
+          {pagination.hasMore && <button className="load-more" onClick={loadMore} disabled={loadingMore}>{loadingMore ? "Loading…" : `Load more · ${Math.max(0, pagination.total - movies.length)} left`}</button>}
+        </section>
       </section>
 
-      <footer>
-        <span>Cinema & Series</span>
-        <span>Global catalogue · India-first release desk · {stats.activeSources || "growing"} official sources</span>
-      </footer>
+      <footer className="stream-footer"><div className="stream-brand"><span>CINEMA</span><b>& SERIES</b></div><p>India-first release intelligence · global cinema catalogue</p><small>{stats.total.toLocaleString("en-IN")} titles · {facets.languages.length} languages · {stats.activeSources} official sources</small></footer>
+
+      <nav className="mobile-nav" aria-label="Mobile navigation">
+        <a href="#top"><span>⌂</span><small>Home</small></a><a href="#upcoming"><span>◷</span><small>Upcoming</small></a><button onClick={() => setSearchOpen(true)}><span>⌕</span><small>Search</small></button><a href="#browse"><span>▦</span><small>Browse</small></a>
+      </nav>
     </main>
   );
 }
