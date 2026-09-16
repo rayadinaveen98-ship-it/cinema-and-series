@@ -129,6 +129,10 @@ def esc(value: str) -> str:
     return value.replace("'", "''")
 
 
+def sql_value(value: str | None) -> str:
+    return "NULL" if value is None else f"'{esc(value)}'"
+
+
 def _uploads_from_channel(channel: dict) -> str | None:
     return channel.get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads")
 
@@ -217,8 +221,27 @@ def fetch_latest_uploads(
     return candidates
 
 
-def build_sql(candidates: list[dict]) -> str:
+def build_sql(candidates: list[dict], sources: list[dict] | None = None) -> str:
+    """Build an idempotent, FK-safe sync batch.
+
+    Source rows are upserted first so a registry change and the YouTube monitor
+    can run concurrently without source_observations failing its foreign key.
+    """
     statements: list[str] = []
+
+    for source in sources or []:
+        statements.append(
+            "INSERT INTO source_channels "
+            "(source_key, source_name, source_type, website_url, youtube_channel_id, youtube_handle, active, updated_at) "
+            f"VALUES ('{esc(source['key'])}','{esc(source['name'])}','{esc(source.get('source_type') or 'official_channel')}',"
+            f"{sql_value(source.get('website_url'))},{sql_value(source.get('youtube_channel_id'))},{sql_value(source.get('youtube_handle'))},"
+            f"{1 if source.get('active', True) else 0},CURRENT_TIMESTAMP) "
+            "ON CONFLICT(source_key) DO UPDATE SET "
+            "source_name=excluded.source_name, source_type=excluded.source_type, website_url=excluded.website_url, "
+            "youtube_channel_id=excluded.youtube_channel_id, youtube_handle=excluded.youtube_handle, "
+            "active=excluded.active, updated_at=CURRENT_TIMESTAMP;"
+        )
+
     for candidate in candidates:
         candidate_dates = json.dumps(candidate["candidate_dates"], ensure_ascii=False)
         date_value = "NULL" if not candidate.get("candidate_release_date") else f"'{esc(candidate['candidate_release_date'])}'"
@@ -282,7 +305,7 @@ def main() -> int:
         ) + "\n",
         encoding="utf-8",
     )
-    OUT_SQL.write_text(build_sql(candidates), encoding="utf-8")
+    OUT_SQL.write_text(build_sql(candidates, sources), encoding="utf-8")
     print(f"checked {channels_checked}/{len(sources)} official channels and found {len(candidates)} release-date candidates")
     return 0
 
