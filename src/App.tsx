@@ -9,6 +9,7 @@ type Movie = {
   releaseDate: string;
   verificationStatus: "verified" | "supported" | "unconfirmed";
   releaseSource?: string;
+  releaseSourceName?: string;
 };
 
 type CatalogueStats = {
@@ -30,7 +31,7 @@ type ApiResponse = {
 const fallback: Movie[] = [
   { id: "preview-1", title: "A Film in Production", language: "Telugu", releaseDate: "2026-09-18", verificationStatus: "unconfirmed", releaseSource: "preview" },
   { id: "preview-2", title: "Festival Premiere", language: "Malayalam", releaseDate: "2026-09-19", verificationStatus: "supported", releaseSource: "preview" },
-  { id: "preview-3", title: "Theatrical Release", language: "Tamil", releaseDate: "2026-09-25", verificationStatus: "verified", releaseSource: "official" },
+  { id: "preview-3", title: "Theatrical Release", language: "Tamil", releaseDate: "2026-09-25", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
   { id: "preview-4", title: "Coming Soon", language: "Kannada", releaseDate: "2026-10-02", verificationStatus: "unconfirmed", releaseSource: "preview" },
 ];
 
@@ -115,7 +116,13 @@ function periodLabel(period: string) {
 function sourceLabel(source?: string) {
   if (!source || source === "wikidata") return "Wikidata candidate";
   if (source === "preview") return "Preview source";
+  if (source === "official") return "Official source";
   return source.split("_").map((word) => word[0]?.toUpperCase() + word.slice(1)).join(" ");
+}
+
+function movieSourceLabel(movie?: Movie) {
+  if (!movie) return "Source pending";
+  return movie.releaseSourceName?.trim() || sourceLabel(movie.releaseSource);
 }
 
 export default function App() {
@@ -262,7 +269,7 @@ export default function App() {
             <p className="signal-title">{hero?.title ?? "Release date pending"}</p>
             <div className="signal-meta">
               <span>{hero?.language || "Language pending"}</span>
-              <span>{sourceLabel(hero?.releaseSource)}</span>
+              <span>{hero?.verificationStatus === "verified" ? `Official · ${movieSourceLabel(hero)}` : movieSourceLabel(hero)}</span>
             </div>
           </div>
         </div>
@@ -356,7 +363,9 @@ export default function App() {
                     </div>
                     <h3>{movie.title}</h3>
                     {movie.nativeTitle && movie.nativeTitle !== movie.title && <p className="native-title">{movie.nativeTitle}</p>}
-                    <p className="source-line">{sourceLabel(movie.releaseSource)}</p>
+                    <p className="source-line">
+                      {movie.verificationStatus === "verified" ? `Official source · ${movieSourceLabel(movie)}` : `Discovery source · ${movieSourceLabel(movie)}`}
+                    </p>
                   </div>
                   <div className="card-index">{String(index + 1).padStart(2, "0")}</div>
                 </article>
