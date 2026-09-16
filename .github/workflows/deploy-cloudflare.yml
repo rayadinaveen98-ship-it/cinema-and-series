@@ -1,3 +1,4 @@
+# Production bootstrap trigger after Cloudflare credentials were configured.
 name: Deploy Fast V1 to Cloudflare
 
 on:
