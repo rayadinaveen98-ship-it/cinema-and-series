@@ -9,6 +9,7 @@ on:
       - "scripts/fetch_wikidata.py"
       - "scripts/wikidata_to_sql.py"
       - "scripts/official_to_sql.py"
+      - "scripts/artwork_refresh.py"
       - "scripts/catalogue_audit.py"
       - "scripts/cloudflare_bootstrap.py"
       - "data/official/**"
@@ -57,6 +58,11 @@ jobs:
       - name: Build official-source D1 SQL
         run: python scripts/official_to_sql.py
 
+      - name: Build artwork D1 SQL
+        run: |
+          python scripts/artwork_refresh.py
+          python -m json.tool data/generated/artwork-report.json >/dev/null
+
       - uses: actions/upload-artifact@v4
         with:
           name: cinema-series-source-refresh
@@ -100,3 +106,7 @@ jobs:
       - name: Sync official sources and verified dates to D1
         if: steps.cloudflare.outputs.ready == 'true'
         run: npx wrangler d1 execute cinema-and-series --remote --file=data/generated/official-upsert.sql
+
+      - name: Sync artwork to D1
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: npx wrangler d1 execute cinema-and-series --remote --file=data/generated/artwork-upsert.sql
