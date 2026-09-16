@@ -1,0 +1,160 @@
+name: Series Catalogue
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/fetch_wikipedia_series_catalogue.py"
+      - "tests/test_wikipedia_series_catalogue.py"
+      - "migrations/0018_series_catalogue.sql"
+      - ".github/workflows/series-catalogue.yml"
+  schedule:
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: Series catalogue profile
+        required: true
+        default: bootstrap
+        type: choice
+        options:
+          - bootstrap
+          - india
+          - global-recent
+          - rotate
+          - all-historical
+      max_series:
+        description: Maximum series to import this run (hard capped at 3500)
+        required: true
+        default: "2500"
+        type: string
+
+concurrency:
+  group: series-catalogue
+  cancel-in-progress: false
+
+jobs:
+  catalogue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Run Series Engine tests
+        run: python -m unittest tests.test_wikipedia_series_catalogue -v
+
+      - name: Choose acquisition profile
+        id: profile
+        shell: bash
+        run: |
+          profile="rotate"
+          max_series="1200"
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            profile="bootstrap"
+            max_series="2500"
+          elif [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            profile="${{ github.event.inputs.profile }}"
+            max_series="${{ github.event.inputs.max_series }}"
+          fi
+          if ! [[ "$max_series" =~ ^[0-9]+$ ]]; then max_series="2500"; fi
+          if (( max_series < 1 )); then max_series=1; fi
+          if (( max_series > 3500 )); then max_series=3500; fi
+          echo "profile=$profile" >> "$GITHUB_OUTPUT"
+          echo "max_series=$max_series" >> "$GITHUB_OUTPUT"
+          echo "Series catalogue: profile=$profile cap=$max_series"
+
+      - name: Acquire SeriesRun catalogue
+        run: |
+          python scripts/fetch_wikipedia_series_catalogue.py \
+            --profile "${{ steps.profile.outputs.profile }}" \
+            --max-series "${{ steps.profile.outputs.max_series }}" \
+            --out data/generated/wikipedia-series-catalogue.json \
+            --sql-out data/generated/wikipedia-series-catalogue-upsert.sql
+          python -m json.tool data/generated/wikipedia-series-catalogue.json >/dev/null
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("data/generated/wikipedia-series-catalogue.json").read_text(encoding="utf-8"))
+          rows = payload.get("series") or []
+          if not rows:
+              raise SystemExit("Series catalogue produced no titles")
+          if len(rows) > 3500:
+              raise SystemExit(f"series catalogue exceeded safety cap: {len(rows)}")
+          allowed = {"series", "web_series", "miniseries", "anthology", "unknown"}
+          malformed = [row for row in rows if not row.get("id") or not row.get("title") or not row.get("wikipedia_page_id") or row.get("series_kind") not in allowed]
+          if malformed:
+              raise SystemExit(f"malformed series rows: {malformed[:3]}")
+          invented_dates = [row for row in rows if row.get("release_date") or row.get("air_date")]
+          if invented_dates:
+              raise SystemExit(f"Series discovery must not invent exact dates: {invented_dates[:3]}")
+          qids = sum(1 for row in rows if row.get("wikidata_qid"))
+          years = sum(1 for row in rows if row.get("first_air_year") is not None)
+          countries = sorted({row.get("country_code") for row in rows if row.get("country_code")})
+          languages = sorted({row.get("language") for row in rows if row.get("language")})
+          kinds = sorted({row.get("series_kind") for row in rows})
+          print(f"validated {len(rows)} SeriesRuns; qids={qids}; explicit-first-air-year={years}; countries={len(countries)}; languages={len(languages)}; kinds={kinds}")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wikipedia-series-catalogue
+          path: |
+            data/generated/wikipedia-series-catalogue.json
+            data/generated/wikipedia-series-catalogue-upsert.sql
+          retention-days: 14
+
+      - name: Check Cloudflare connection
+        id: cloudflare
+        shell: bash
+        run: |
+          if [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Cloudflare credentials unavailable; series artifact retained but D1 import skipped."
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.cloudflare.outputs.ready == 'true'
+        with:
+          node-version: 22
+
+      - name: Install Wrangler
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: npm install --no-audit --no-fund
+
+      - name: Bind production D1
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: python scripts/cloudflare_bootstrap.py
+
+      - name: Apply D1 migrations
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: npx wrangler d1 migrations apply cinema-and-series --remote
+
+      - name: Counts before series import
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS series_titles FROM series_titles;"
+          npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS exact_day_movies FROM movies WHERE wikidata_qid IS NULL OR title <> wikidata_qid;"
+          npx wrangler d1 execute cinema-and-series --remote --command "SELECT (SELECT COUNT(*) FROM movies m WHERE m.wikidata_qid IS NULL OR m.title <> m.wikidata_qid) + (SELECT COUNT(*) FROM catalogue_titles ct WHERE ct.wikidata_qid IS NULL OR NOT EXISTS (SELECT 1 FROM movies mx WHERE mx.wikidata_qid=ct.wikidata_qid AND mx.title <> mx.wikidata_qid)) AS movie_catalogue_titles;"
+
+      - name: Import SeriesRun catalogue
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: npx wrangler d1 execute cinema-and-series --remote --file=data/generated/wikipedia-series-catalogue-upsert.sql
+
+      - name: Verify production series growth
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS series_titles FROM series_titles;"
+          npx wrangler d1 execute cinema-and-series --remote --command "SELECT series_kind, COUNT(*) AS titles FROM series_titles GROUP BY series_kind ORDER BY titles DESC;"
+          npx wrangler d1 execute cinema-and-series --remote --command "SELECT country_code, COUNT(*) AS titles FROM series_titles GROUP BY country_code ORDER BY titles DESC LIMIT 25;"
+          npx wrangler d1 execute cinema-and-series --remote --command "SELECT language_name, COUNT(*) AS titles FROM series_titles GROUP BY language_name ORDER BY titles DESC LIMIT 20;"
+          npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS with_first_air_year FROM series_titles WHERE first_air_year IS NOT NULL;"
+          npx wrangler d1 execute cinema-and-series --remote --command "SELECT (SELECT COUNT(*) FROM movies m WHERE m.wikidata_qid IS NULL OR m.title <> m.wikidata_qid) + (SELECT COUNT(*) FROM catalogue_titles ct WHERE ct.wikidata_qid IS NULL OR NOT EXISTS (SELECT 1 FROM movies mx WHERE mx.wikidata_qid=ct.wikidata_qid AND mx.title <> mx.wikidata_qid)) AS movie_catalogue_titles;"
