@@ -22,6 +22,7 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      PRODUCTION_URL: https://cinema-and-series.rayadinaveen98.workers.dev
     steps:
       - uses: actions/checkout@v4
 
@@ -66,3 +67,66 @@ jobs:
       - name: Deploy Worker and static assets
         if: steps.cloudflare.outputs.ready == 'true'
         run: npx wrangler deploy
+
+      - name: Verify live Worker and catalogue
+        if: steps.cloudflare.outputs.ready == 'true'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          import urllib.request
+
+          root = os.environ["PRODUCTION_URL"].rstrip("/")
+
+          def get_json(path: str):
+              last_error = None
+              for attempt in range(6):
+                  try:
+                      request = urllib.request.Request(
+                          root + path,
+                          headers={"Accept": "application/json", "User-Agent": "CinemaAndSeries-LiveSmoke/1.0"},
+                      )
+                      with urllib.request.urlopen(request, timeout=20) as response:
+                          if response.status != 200:
+                              raise RuntimeError(f"{path} returned HTTP {response.status}")
+                          return json.load(response)
+                  except Exception as exc:
+                      last_error = exc
+                      if attempt < 5:
+                          time.sleep(3)
+              raise RuntimeError(f"live smoke failed for {path}: {last_error}")
+
+          health = get_json("/api/health")
+          if health.get("ok") is not True or health.get("database") is not True:
+              raise RuntimeError(f"unhealthy production Worker: {health}")
+
+          catalogue = get_json("/api/movies?scope=all")
+          movies = catalogue.get("movies") or []
+          stats = catalogue.get("stats") or {}
+          if catalogue.get("source") != "d1":
+              raise RuntimeError(f"production catalogue is not backed by D1: {catalogue.get('source')}")
+          if not movies:
+              raise RuntimeError("production catalogue returned no movies")
+          if int(stats.get("activeSources") or 0) < 16:
+              raise RuntimeError(f"official-source coverage regressed: {stats.get('activeSources')}")
+          if not catalogue.get("catalogueUpdatedAt"):
+              raise RuntimeError("catalogue freshness timestamp missing")
+          leaked_qids = [movie for movie in movies if movie.get("wikidataQid") and movie.get("title") == movie.get("wikidataQid")]
+          if leaked_qids:
+              raise RuntimeError(f"unresolved Wikidata labels leaked into public catalogue: {leaked_qids[:3]}")
+
+          print(
+              "live smoke passed:",
+              json.dumps(
+                  {
+                      "movies": len(movies),
+                      "verified": int(stats.get("verified") or 0),
+                      "activeSources": int(stats.get("activeSources") or 0),
+                      "catalogueUpdatedAt": catalogue.get("catalogueUpdatedAt"),
+                  },
+                  sort_keys=True,
+              ),
+          )
+          PY
