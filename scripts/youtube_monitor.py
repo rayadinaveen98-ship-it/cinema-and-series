@@ -4,7 +4,8 @@
 The monitor intentionally does not auto-verify dates. It uses the official
 YouTube Data API to read each registered channel's uploads playlist, extracts
 explicit date phrases only when release-oriented context is present, and emits
-reviewable candidates for D1.
+reviewable candidates for D1. Sources may be registered by stable channel ID or
+by an official @handle; handle-only entries are resolved through channels.list.
 """
 from __future__ import annotations
 
@@ -83,20 +84,54 @@ def esc(value: str) -> str:
     return value.replace("'", "''")
 
 
-def fetch_upload_playlists(sources: list[dict]) -> dict[str, str]:
-    ids = [source["youtube_channel_id"] for source in sources if source.get("youtube_channel_id")]
-    playlists: dict[str, str] = {}
+def _uploads_from_channel(channel: dict) -> str | None:
+    return channel.get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads")
+
+
+def resolve_upload_playlists(sources: list[dict]) -> dict[str, dict[str, str]]:
+    """Return source_key -> {channel_id, uploads_playlist_id}.
+
+    Known channel IDs are resolved in batches. Handle-only sources use
+    channels.list(forHandle=...), which is the official API path and avoids
+    guessing opaque channel IDs.
+    """
+    resolved: dict[str, dict[str, str]] = {}
+    by_channel_id = {
+        source["youtube_channel_id"]: source
+        for source in sources
+        if source.get("youtube_channel_id")
+    }
+    ids = list(by_channel_id)
+
     for offset in range(0, len(ids), 50):
         chunk = ids[offset:offset + 50]
         payload = api_get("channels", {"part": "contentDetails", "id": ",".join(chunk), "maxResults": "50"})
         for channel in payload.get("items", []):
-            uploads = channel.get("contentDetails", {}).get("relatedPlaylists", {}).get("uploads")
-            if uploads:
-                playlists[channel["id"]] = uploads
-    return playlists
+            channel_id = channel.get("id")
+            uploads = _uploads_from_channel(channel)
+            source = by_channel_id.get(channel_id)
+            if source and channel_id and uploads:
+                resolved[source["key"]] = {"channel_id": channel_id, "uploads_playlist_id": uploads}
+
+    for source in sources:
+        if source["key"] in resolved or source.get("youtube_channel_id") or not source.get("youtube_handle"):
+            continue
+        handle = source["youtube_handle"].lstrip("@")
+        payload = api_get("channels", {"part": "contentDetails", "forHandle": handle, "maxResults": "1"})
+        items = payload.get("items", [])
+        if not items:
+            print(f"warning: YouTube handle could not be resolved for {source['name']}: @{handle}", file=sys.stderr)
+            continue
+        channel = items[0]
+        channel_id = channel.get("id")
+        uploads = _uploads_from_channel(channel)
+        if channel_id and uploads:
+            resolved[source["key"]] = {"channel_id": channel_id, "uploads_playlist_id": uploads}
+
+    return resolved
 
 
-def fetch_latest_uploads(source: dict, playlist_id: str) -> list[dict]:
+def fetch_latest_uploads(source: dict, channel_id: str, playlist_id: str) -> list[dict]:
     payload = api_get(
         "playlistItems",
         {"part": "snippet,contentDetails", "playlistId": playlist_id, "maxResults": "12"},
@@ -115,7 +150,7 @@ def fetch_latest_uploads(source: dict, playlist_id: str) -> list[dict]:
         candidates.append({
             "source_key": source["key"],
             "source_name": source["name"],
-            "channel_id": source["youtube_channel_id"],
+            "channel_id": channel_id,
             "video_id": video_id,
             "video_url": f"https://www.youtube.com/watch?v={video_id}",
             "video_title": title,
@@ -153,15 +188,20 @@ def main() -> int:
         return 0
 
     registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
-    sources = [source for source in registry.get("sources", []) if source.get("active") and source.get("youtube_channel_id")]
-    playlists = fetch_upload_playlists(sources)
+    sources = [
+        source for source in registry.get("sources", [])
+        if source.get("active") and (source.get("youtube_channel_id") or source.get("youtube_handle"))
+    ]
+    resolved = resolve_upload_playlists(sources)
     candidates: list[dict] = []
+    channels_checked = 0
     for source in sources:
-        playlist_id = playlists.get(source["youtube_channel_id"])
-        if not playlist_id:
+        channel = resolved.get(source["key"])
+        if not channel:
             print(f"warning: uploads playlist not found for {source['name']}", file=sys.stderr)
             continue
-        candidates.extend(fetch_latest_uploads(source, playlist_id))
+        channels_checked += 1
+        candidates.extend(fetch_latest_uploads(source, channel["channel_id"], channel["uploads_playlist_id"]))
 
     candidates.sort(key=lambda item: (item.get("published_at") or "", item["source_key"], item["video_id"]), reverse=True)
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
@@ -170,7 +210,8 @@ def main() -> int:
             {
                 "generated_at": datetime.now(timezone.utc).isoformat(),
                 "policy": "official-channel observations only; explicit release-context dates become pending review candidates; never auto-verify",
-                "channels_checked": len(sources),
+                "channels_registered": len(sources),
+                "channels_checked": channels_checked,
                 "candidates": candidates,
             },
             ensure_ascii=False,
@@ -179,7 +220,7 @@ def main() -> int:
         encoding="utf-8",
     )
     OUT_SQL.write_text(build_sql(candidates), encoding="utf-8")
-    print(f"checked {len(sources)} official channels and found {len(candidates)} release-date candidates")
+    print(f"checked {channels_checked}/{len(sources)} official channels and found {len(candidates)} release-date candidates")
     return 0
 
 
