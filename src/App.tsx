@@ -11,6 +11,10 @@ type Movie = {
   verificationStatus: "verified" | "supported" | "unconfirmed";
   releaseSource?: string;
   releaseSourceName?: string;
+  posterUrl?: string;
+  backdropUrl?: string;
+  artworkSource?: string;
+  artworkSourceUrl?: string;
 };
 
 type CatalogueStats = { total: number; verified: number; supported: number; unconfirmed: number; activeSources: number };
@@ -79,12 +83,17 @@ function toneClass(movie: Movie) {
   for (const char of movie.title) total += char.charCodeAt(0);
   return `tone-${total % 8}`;
 }
+function posterArtwork(movie: Movie) { return movie.posterUrl || movie.backdropUrl; }
+function heroArtwork(movie: Movie) { return movie.backdropUrl || movie.posterUrl; }
+function hasArtwork(movie: Movie) { return Boolean(posterArtwork(movie)); }
 
 function PosterCard({ movie, onOpen, rank }: { movie: Movie; onOpen: (movie: Movie) => void; rank?: number }) {
+  const artwork = posterArtwork(movie);
   return (
     <button className="poster-button" onClick={() => onOpen(movie)} aria-label={`Open ${movie.title}`}>
       {rank ? <span className="rank-number">{rank}</span> : null}
-      <article className={`poster-card ${toneClass(movie)}`}>
+      <article className={`poster-card ${toneClass(movie)} ${artwork ? "has-artwork" : ""}`}>
+        {artwork ? <img className="poster-artwork" src={artwork} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
         <div className="poster-grain" />
         <div className="poster-status"><span className={movie.verificationStatus} />{statusLabel(movie.verificationStatus)}</div>
         <div className="poster-copy">
@@ -155,7 +164,12 @@ export default function App() {
     if (data.periodCounts) setPeriodCounts(data.periodCounts);
     setSource(data.source);
     if (!append && !debouncedSearch && activeLanguage === "All" && activeCountry === "All" && data.movies.length) {
-      setHero(data.movies.find((movie) => movie.verificationStatus === "verified") ?? data.movies[0]);
+      setHero(
+        data.movies.find((movie) => movie.verificationStatus === "verified" && hasArtwork(movie))
+        ?? data.movies.find((movie) => movie.verificationStatus === "verified")
+        ?? data.movies.find(hasArtwork)
+        ?? data.movies[0],
+      );
     }
   }
 
@@ -191,6 +205,7 @@ export default function App() {
   const languages = useMemo(() => ["All", ...facets.languages.slice(0, 16).map((item) => item.value)], [facets.languages]);
   const countries = useMemo(() => ["All", ...facets.countries.slice(0, 12).map((item) => item.value)], [facets.countries]);
   const years = useMemo(() => facets.years.slice(0, 10), [facets.years]);
+  const activeHeroArtwork = heroArtwork(hero);
 
   return (
     <main className="stream-app">
@@ -206,8 +221,11 @@ export default function App() {
         </div>
       </header>
 
-      <section id="top" className={`stream-hero ${toneClass(hero)}`}>
-        <div className="hero-art"><div className="hero-orb" /><div className="hero-lines" /><span className="hero-monogram">{hero.title.slice(0, 1)}</span></div>
+      <section id="top" className={`stream-hero ${toneClass(hero)} ${activeHeroArtwork ? "has-artwork" : ""}`}>
+        <div className="hero-art">
+          {activeHeroArtwork ? <img className="hero-backdrop" src={activeHeroArtwork} alt="" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
+          <div className="hero-orb" /><div className="hero-lines" /><span className="hero-monogram">{hero.title.slice(0, 1)}</span>
+        </div>
         <div className="hero-vignette" />
         <div className="stream-hero-copy">
           <div className="series-label"><span>N</span> FEATURED RELEASE</div>
