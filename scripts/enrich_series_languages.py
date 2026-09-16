@@ -25,10 +25,13 @@ import fetch_mediawiki_backfill as base
 
 WIKIDATA_LANGUAGE_PROPERTY = "P364"
 MAX_SERIES_PER_RUN = 8000
-ENTITY_BATCH = 40
-LABEL_BATCH = 50
-REQUEST_DELAY_SECONDS = 0.08
-MAX_BATCH_RETRIES = 3
+# Wikimedia public APIs should be treated as shared infrastructure. Keep batches
+# modest and deliberately pace requests rather than maximizing throughput.
+ENTITY_BATCH = 25
+LABEL_BATCH = 25
+REQUEST_DELAY_SECONDS = 0.75
+MAX_BATCH_RETRIES = 6
+MAX_BACKOFF_SECONDS = 45
 UNKNOWN = {"", "unknown", "xx", "und", "n/a", "na", "none", "null"}
 QID_RE = re.compile(r"^Q\d+$", re.IGNORECASE)
 
@@ -75,16 +78,41 @@ def chunks(values: list[str], size: int) -> Iterable[list[str]]:
         yield values[start : start + size]
 
 
+def retry_after_seconds(exc: urllib.error.HTTPError) -> int:
+    raw = exc.headers.get("Retry-After") if exc.headers else None
+    try:
+        return max(1, int(raw)) if raw else 0
+    except (TypeError, ValueError):
+        return 0
+
+
 def request_wikidata(params: dict[str, str]) -> dict[str, Any]:
+    """Request Wikidata with cooperative pacing and bounded 429 backoff.
+
+    `wbgetentities` is read-only, so GET is preferred. `maxlag=5` asks Wikimedia
+    to shed this non-urgent job when replicas are under load. The outer retry is
+    deliberately more patient than the shared helper because this job can span
+    hundreds of bounded batches.
+    """
+    request_params = {**params, "maxlag": "5"}
     last_error: Exception | None = None
     for attempt in range(MAX_BATCH_RETRIES):
         try:
-            return base.request_json(base.WIKIDATA_API, params, post=True)
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError, OSError) as exc:
+            return base.request_json(base.WIKIDATA_API, request_params, post=False)
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code != 429:
+                raise
+            if attempt + 1 >= MAX_BATCH_RETRIES:
+                raise
+            exponential = min(MAX_BACKOFF_SECONDS, 2 ** (attempt + 2))
+            delay = min(MAX_BACKOFF_SECONDS, max(retry_after_seconds(exc), exponential))
+            time.sleep(delay)
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
             last_error = exc
             if attempt + 1 >= MAX_BATCH_RETRIES:
                 raise
-            time.sleep(2 ** attempt)
+            time.sleep(min(MAX_BACKOFF_SECONDS, 2 ** (attempt + 2)))
     raise RuntimeError(f"unreachable Wikidata request failure: {last_error}")
 
 
