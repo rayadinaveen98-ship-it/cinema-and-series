@@ -53,8 +53,9 @@ jobs:
       - name: Bind production D1
         run: python scripts/cloudflare_bootstrap.py
 
-      - name: Apply D1 migrations
-        run: npx wrangler d1 migrations apply cinema-and-series --remote
+      - name: Capture current production language baseline
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS total_series, SUM(CASE WHEN language_name IS NOT NULL AND TRIM(language_name)<>'' AND LOWER(language_name)<>'unknown' THEN 1 ELSE 0 END) AS language_known FROM series_titles;"
 
       - name: Capture unknown-language SeriesRun candidates
         shell: bash
@@ -93,7 +94,28 @@ jobs:
           }, sort_keys=True))
           PY
 
+      - name: Preserve dry-run artifact before any production write
+        uses: actions/upload-artifact@v4
+        with:
+          name: series-language-enrichment-v1-analysis
+          path: |
+            data/generated/series-language-candidates.json
+            data/generated/series-language-enrichment-v1.json
+            data/generated/series-language-enrichment-v1.sql
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Explain write gate on push runs
+        if: github.event_name != 'workflow_dispatch'
+        run: |
+          echo "Read-only analysis complete. Production writes are intentionally gated to workflow_dispatch so a D1 quota exhaustion cannot discard the analysis result."
+
+      - name: Apply D1 migrations
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        run: npx wrangler d1 migrations apply cinema-and-series --remote
+
       - name: Apply provenance-safe language updates
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         shell: bash
         run: |
           if grep -q '^UPDATE series_titles' data/generated/series-language-enrichment-v1.sql; then
@@ -103,14 +125,16 @@ jobs:
           fi
 
       - name: Verify production language coverage
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
         run: |
           npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS total_series, SUM(CASE WHEN language_name IS NOT NULL AND TRIM(language_name)<>'' AND LOWER(language_name)<>'unknown' THEN 1 ELSE 0 END) AS language_known, SUM(CASE WHEN language_source IS NOT NULL AND TRIM(language_source)<>'' THEN 1 ELSE 0 END) AS language_with_provenance FROM series_titles;"
           npx wrangler d1 execute cinema-and-series --remote --command "SELECT language_name, COUNT(*) AS titles FROM series_titles WHERE language_name IS NOT NULL AND TRIM(language_name)<>'' AND LOWER(language_name)<>'unknown' GROUP BY language_name ORDER BY titles DESC LIMIT 30;"
 
-      - uses: actions/upload-artifact@v4
-        if: always()
+      - name: Preserve post-write artifact
+        if: always() && github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
         with:
-          name: series-language-enrichment-v1
+          name: series-language-enrichment-v1-write
           path: |
             data/generated/series-language-candidates.json
             data/generated/series-language-enrichment-v1.json
