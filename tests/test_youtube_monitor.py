@@ -1,6 +1,7 @@
 import importlib.util
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "youtube_monitor.py"
 spec = importlib.util.spec_from_file_location("youtube_monitor", MODULE_PATH)
@@ -45,6 +46,33 @@ class YouTubeMonitorTests(unittest.TestCase):
         self.assertIn("pending_review", sql)
         self.assertNotIn("verification_status", sql)
         self.assertIn("ON CONFLICT(source_key, external_id) DO UPDATE", sql)
+
+    def test_handle_only_source_resolves_through_official_channels_api(self):
+        source = {
+            "key": "dharma_productions",
+            "name": "Dharma Productions",
+            "youtube_channel_id": None,
+            "youtube_handle": "@DharmaMovies",
+        }
+        payload = {
+            "items": [
+                {
+                    "id": "UC-resolved",
+                    "contentDetails": {"relatedPlaylists": {"uploads": "UU-resolved"}},
+                }
+            ]
+        }
+        with patch.object(module, "api_get", return_value=payload) as mocked:
+            resolved = module.resolve_upload_playlists([source])
+
+        self.assertEqual(
+            resolved["dharma_productions"],
+            {"channel_id": "UC-resolved", "uploads_playlist_id": "UU-resolved"},
+        )
+        mocked.assert_called_once_with(
+            "channels",
+            {"part": "contentDetails", "forHandle": "DharmaMovies", "maxResults": "1"},
+        )
 
 
 if __name__ == "__main__":
