@@ -50,6 +50,15 @@ class YouTubeMonitorTests(unittest.TestCase):
         )
         self.assertEqual(dates, [])
 
+    def test_rejects_release_date_that_has_already_passed_at_scan_time(self):
+        now = datetime(2026, 9, 16, tzinfo=timezone.utc)
+        dates = module.filter_plausible_release_dates(
+            ["2026-09-04"],
+            "2026-08-04T05:30:37Z",
+            now=now,
+        )
+        self.assertEqual(dates, [])
+
     def test_rejects_post_release_promo_date(self):
         now = datetime(2026, 9, 16, tzinfo=timezone.utc)
         dates = module.filter_plausible_release_dates(
@@ -67,6 +76,15 @@ class YouTubeMonitorTests(unittest.TestCase):
             now=now,
         )
         self.assertEqual(dates, ["2026-09-16"])
+
+    def test_keeps_future_release_signal_from_recent_announcement(self):
+        now = datetime(2026, 9, 16, tzinfo=timezone.utc)
+        dates = module.filter_plausible_release_dates(
+            ["2026-10-15"],
+            "2026-08-20T06:30:20Z",
+            now=now,
+        )
+        self.assertEqual(dates, ["2026-10-15"])
 
     def test_rejects_public_response_promo_title(self):
         self.assertTrue(module.is_low_value_promo("Korean Kanakaraju Public Response | Varun Tej"))
@@ -115,6 +133,20 @@ class YouTubeMonitorTests(unittest.TestCase):
         self.assertLess(source_pos, observation_pos)
         self.assertIn("@ExcelMovies", sql)
         self.assertIn("pending_review", sql)
+
+    def test_empty_candidate_queue_selects_no_sources_and_builds_no_sql(self):
+        source = {"key": "excel_entertainment", "name": "Excel Entertainment"}
+        selected = module.sources_for_candidates([], [source])
+        self.assertEqual(selected, [])
+        self.assertEqual(module.build_sql([], selected), "")
+
+    def test_candidate_queue_selects_only_matching_sources(self):
+        sources = [
+            {"key": "one", "name": "One"},
+            {"key": "two", "name": "Two"},
+        ]
+        selected = module.sources_for_candidates([{"source_key": "two"}], sources)
+        self.assertEqual([source["key"] for source in selected], ["two"])
 
     def test_handle_only_source_resolves_through_official_channels_api(self):
         source = {
