@@ -2,9 +2,10 @@
 """Convert curated first-party release evidence into idempotent D1 upserts.
 
 Official evidence is allowed to promote a movie to verified and replace the
-public display release date. Matching prefers Wikidata QID when available,
-otherwise a case-insensitive title match is reused before creating a stable
-`official-*` movie row.
+public display release date. Matching prefers Wikidata QID when available.
+Without a QID we conservatively reuse an existing movie only when its
+punctuation-insensitive title, language, and release-year window agree; this
+avoids merging unrelated remakes that happen to share a title.
 """
 from __future__ import annotations
 
@@ -26,8 +27,40 @@ def slug(value: str) -> str:
     return normalized or "movie"
 
 
+def canonical_title(value: str) -> str:
+    """Return a conservative Latin-friendly identity key for title matching."""
+    return "".join(ch for ch in value.casefold() if ch.isalnum())
+
+
+def sql_title_key(column: str = "title") -> str:
+    """SQLite expression mirroring canonical_title for common title punctuation."""
+    expression = f"lower(trim({column}))"
+    for token in (" ", "-", "_", ".", ",", ":", ";", "!", "?", "'", '"', "&", "(", ")", "[", "]", "/", "\\"):
+        quoted = token.replace("'", "''")
+        expression = f"replace({expression},'{quoted}','')"
+    return expression
+
+
 def q(value: str | None) -> str:
     return "NULL" if value is None else f"'{esc(value)}'"
+
+
+def identity_clause(title: str, language: str, release_date: str) -> str:
+    """Build a collision-resistant fallback identity predicate.
+
+    Title-only matching is unsafe for Indian cinema because remakes and reused
+    titles are common. We therefore combine a normalized title with language
+    and a one-year date tolerance. Unknown language remains eligible so an
+    official source can enrich sparse open-data rows.
+    """
+    key = esc(canonical_title(title))
+    language_escaped = esc(language)
+    release_year = int(release_date[:4])
+    return (
+        f"{sql_title_key('title')}='{key}' "
+        f"AND (language_name COLLATE NOCASE='{language_escaped}' OR language_name='Unknown' OR language_name IS NULL) "
+        f"AND CAST(substr(release_date,1,4) AS INTEGER) BETWEEN {release_year - 1} AND {release_year + 1}"
+    )
 
 
 def build_statements(releases_payload: dict, sources_payload: dict) -> list[str]:
@@ -56,7 +89,7 @@ def build_statements(releases_payload: dict, sources_payload: dict) -> list[str]
         source_title = esc(movie.get("source_title") or movie["title"])
         source_url = esc(movie["source_url"])
         qid = movie.get("wikidata_qid")
-        preferred_id = f"wd-{qid}" if qid else f"official-{slug(movie['title'])}"
+        preferred_id = f"wd-{qid}" if qid else f"official-{slug(movie['title'])}-{release_date[:4]}-{slug(movie.get('language') or 'unknown')}"
 
         if qid:
             qid_escaped = esc(qid)
@@ -68,27 +101,28 @@ def build_statements(releases_payload: dict, sources_payload: dict) -> list[str]
                 "country_code=excluded.country_code, release_date=excluded.release_date, verification_status='verified', "
                 "release_date_source=excluded.release_date_source, updated_at=CURRENT_TIMESTAMP;"
             )
+            match_clause = f"wikidata_qid='{qid_escaped}'"
         else:
+            fallback_identity = identity_clause(movie["title"], movie.get("language") or "Unknown", movie["release_date"])
             statements.append(
                 "UPDATE movies SET "
                 f"release_date='{release_date}', verification_status='verified', release_date_source='{source_key}', "
                 f"language_name=CASE WHEN language_name='Unknown' THEN '{language}' ELSE language_name END, updated_at=CURRENT_TIMESTAMP "
-                f"WHERE id=(SELECT id FROM movies WHERE title COLLATE NOCASE='{title}' LIMIT 1);"
+                f"WHERE id=(SELECT id FROM movies WHERE {fallback_identity} "
+                "ORDER BY verification_status='verified' DESC, wikidata_qid IS NOT NULL DESC LIMIT 1);"
             )
             statements.append(
                 "INSERT INTO movies (id, title, language_name, country_code, release_date, verification_status, release_date_source, updated_at) "
                 f"SELECT '{esc(preferred_id)}','{title}','{language}','{country_code}','{release_date}','verified','{source_key}',CURRENT_TIMESTAMP "
-                f"WHERE NOT EXISTS (SELECT 1 FROM movies WHERE title COLLATE NOCASE='{title}');"
+                f"WHERE NOT EXISTS (SELECT 1 FROM movies WHERE {fallback_identity});"
             )
+            match_clause = fallback_identity
 
-        match_clause = (
-            f"wikidata_qid='{esc(qid)}'" if qid else f"title COLLATE NOCASE='{title}'"
-        )
         statements.append(
             "INSERT OR IGNORE INTO release_evidence "
             "(movie_id, claimed_release_date, source_type, source_url, source_title, is_official) "
             f"SELECT id,'{release_date}','{source_type}','{source_url}','{source_title}',1 "
-            f"FROM movies WHERE {match_clause} ORDER BY verification_status='verified' DESC LIMIT 1;"
+            f"FROM movies WHERE {match_clause} ORDER BY verification_status='verified' DESC, wikidata_qid IS NOT NULL DESC LIMIT 1;"
         )
 
     return statements
