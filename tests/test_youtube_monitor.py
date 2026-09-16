@@ -24,6 +24,35 @@ class YouTubeMonitorTests(unittest.TestCase):
         text = "Worldwide release 11/06/2027"
         self.assertEqual(module.extract_release_dates(text), ["2027-06-11"])
 
+    def test_infers_year_for_yearless_month_day_from_unique_upcoming_year(self):
+        text = (
+            "RANABAALI is an Upcoming 2026 PAN India Movie. "
+            "The savage's oath begins now. RANABAALI In Theatres From October 16th!!"
+        )
+        contexts = module.extract_release_date_contexts(text)
+        self.assertEqual([item["date"] for item in contexts], ["2026-10-16"])
+        self.assertIn("October 16th", contexts[0]["excerpt"])
+        self.assertIn("2026", contexts[0]["excerpt"])
+
+    def test_infers_year_for_yearless_day_month_from_unique_release_year(self):
+        text = "Official 2027 release announcement. In cinemas from 11th June."
+        self.assertEqual(module.extract_release_dates(text), ["2027-06-11"])
+
+    def test_does_not_infer_yearless_date_without_release_year_phrase(self):
+        text = "Official teaser. In theatres October 16th."
+        self.assertEqual(module.extract_release_dates(text), [])
+
+    def test_does_not_infer_yearless_date_when_multiple_years_are_present(self):
+        text = (
+            "Upcoming 2026 film inspired by the 2024 story. "
+            "In theatres October 16th."
+        )
+        self.assertEqual(module.extract_release_dates(text), [])
+
+    def test_does_not_infer_from_bare_or_copyright_year(self):
+        text = "Copyright 2026 Studio. In theatres October 16th."
+        self.assertEqual(module.extract_release_dates(text), [])
+
     def test_release_context_preserves_short_review_excerpt(self):
         text = (
             "Main Na Raha Mera teaser. Watch now. "
@@ -134,6 +163,30 @@ class YouTubeMonitorTests(unittest.TestCase):
             )
         self.assertEqual(candidates[0]["candidate_dates"], ["2026-10-23"])
         self.assertEqual([item["date"] for item in candidates[0]["date_contexts"]], ["2026-10-23"])
+
+    def test_fetch_candidate_supports_split_year_and_day_metadata(self):
+        source = {"key": "studio", "name": "Studio"}
+        payload = {
+            "items": [
+                {
+                    "snippet": {
+                        "title": "Example Film teaser",
+                        "description": "Upcoming 2026 PAN India Movie. In Theatres From October 16th.",
+                        "publishedAt": "2026-09-09T06:30:20Z",
+                    },
+                    "contentDetails": {"videoId": "split123"},
+                }
+            ]
+        }
+        with patch.object(module, "api_get", return_value=payload):
+            candidates = module.fetch_latest_uploads(
+                source,
+                "UC-studio",
+                "UU-studio",
+                now=datetime(2026, 9, 16, tzinfo=timezone.utc),
+            )
+        self.assertEqual(candidates[0]["candidate_dates"], ["2026-10-16"])
+        self.assertEqual(candidates[0]["candidate_release_date"], "2026-10-16")
 
     def test_sql_keeps_candidates_pending_review(self):
         sql = module.build_sql([
