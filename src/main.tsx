@@ -7,6 +7,7 @@ import "./styles.css";
 import "./artwork.css";
 import "./detail.css";
 import "./series.css";
+import "./stream-cleanup.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
