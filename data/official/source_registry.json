@@ -230,6 +230,56 @@
       "youtube_handle": null,
       "languages": ["Hindi", "Tamil", "Telugu", "Malayalam", "Kannada"],
       "active": true
+    },
+    {
+      "key": "dvv_entertainments",
+      "name": "DVV Entertainments",
+      "source_type": "production_house",
+      "website_url": null,
+      "youtube_channel_id": "UCumU_6FNxfHXTmeeFCYz6Yw",
+      "youtube_handle": "@DVVMovies",
+      "languages": ["Telugu", "Hindi", "Tamil"],
+      "active": true
+    },
+    {
+      "key": "seven_screen_studio",
+      "name": "Seven Screen Studio",
+      "source_type": "studio_distributor",
+      "website_url": "https://7screenstudio.com/",
+      "youtube_channel_id": "UCVQOvjbw_Fjjscg1d4Y-LVQ",
+      "youtube_handle": "@sevenscreenstudio9662",
+      "languages": ["Tamil", "Telugu"],
+      "active": true
+    },
+    {
+      "key": "dream_warrior_pictures",
+      "name": "Dream Warrior Pictures",
+      "source_type": "studio_distributor",
+      "website_url": "https://www.dwp.in/",
+      "youtube_channel_id": null,
+      "youtube_handle": null,
+      "languages": ["Tamil", "Telugu", "Malayalam"],
+      "active": true
+    },
+    {
+      "key": "kvn_productions",
+      "name": "KVN Productions",
+      "source_type": "studio_distributor",
+      "website_url": "https://www.kvnproductions.co.in/",
+      "youtube_channel_id": null,
+      "youtube_handle": "@kvnproductionsofficial",
+      "languages": ["Kannada", "Tamil", "Telugu", "Hindi"],
+      "active": true
+    },
+    {
+      "key": "mammootty_kampany",
+      "name": "Mammootty Kampany",
+      "source_type": "production_house",
+      "website_url": null,
+      "youtube_channel_id": "UC6wkoCUd5gIYTDK6YUfI7Rw",
+      "youtube_handle": "@MammoottyKampany",
+      "languages": ["Malayalam"],
+      "active": true
     }
   ]
 }
