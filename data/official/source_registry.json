@@ -350,6 +350,16 @@
       "youtube_handle": null,
       "languages": ["Hindi", "Marathi"],
       "active": true
+    },
+    {
+      "key": "amazon_mgm_studios_india",
+      "name": "Amazon MGM Studios India",
+      "source_type": "studio_distributor",
+      "website_url": null,
+      "youtube_channel_id": "UC03toXvCn0s3wMmE5zq4ttw",
+      "youtube_handle": "@AmazonMGMStudios_IN",
+      "languages": ["Hindi"],
+      "active": true
     }
   ]
 }
