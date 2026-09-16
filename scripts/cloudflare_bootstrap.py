@@ -5,67 +5,81 @@ Required environment variables:
 - CLOUDFLARE_ACCOUNT_ID
 - CLOUDFLARE_API_TOKEN
 
-This file is intended for CI. It never prints the token.
+This CI bootstrap intentionally delegates D1 control-plane operations to Wrangler,
+Cloudflare's supported CLI, rather than reimplementing the REST API. It never
+prints either secret.
 """
 from __future__ import annotations
 
 import json
 import os
+import re
+import subprocess
 import sys
-import urllib.parse
-import urllib.request
 from pathlib import Path
 
 ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip()
 TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
 DB_NAME = "cinema-and-series"
-API_ROOT = "https://api.cloudflare.com/client/v4"
 WRANGLER = Path("wrangler.jsonc")
 
 
-def api(method: str, path: str, body: dict | None = None) -> dict:
-    payload = None if body is None else json.dumps(body).encode("utf-8")
-    request = urllib.request.Request(
-        f"{API_ROOT}{path}",
-        data=payload,
-        method=method,
-        headers={
-            "Authorization": f"Bearer {TOKEN}",
-            "Content-Type": "application/json",
-            "User-Agent": "CinemaAndSeries-CI/0.1",
-        },
+def run_wrangler(*args: str) -> str:
+    completed = subprocess.run(
+        ["npx", "wrangler", *args],
+        check=False,
+        text=True,
+        capture_output=True,
+        env=os.environ.copy(),
     )
-    with urllib.request.urlopen(request, timeout=30) as response:
-        result = json.load(response)
-    if not result.get("success"):
-        raise RuntimeError(f"Cloudflare API error: {result.get('errors')}")
-    return result
+    if completed.returncode != 0:
+        details = "\n".join(
+            part.strip() for part in (completed.stdout, completed.stderr) if part.strip()
+        )
+        raise RuntimeError(
+            f"Wrangler {' '.join(args)} failed with exit code {completed.returncode}:\n{details}"
+        )
+    return completed.stdout.strip()
+
+
+def validate_credentials_shape() -> None:
+    if not ACCOUNT_ID or not TOKEN:
+        raise RuntimeError("Missing CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_API_TOKEN")
+    if not re.fullmatch(r"[0-9a-fA-F]{32}", ACCOUNT_ID):
+        raise RuntimeError(
+            "CLOUDFLARE_ACCOUNT_ID is not a 32-character Cloudflare account identifier"
+        )
+
+
+def list_databases() -> list[dict]:
+    raw = run_wrangler("d1", "list", "--json")
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise RuntimeError(f"Wrangler returned invalid JSON for d1 list: {raw[:500]}") from exc
+    if not isinstance(parsed, list):
+        raise RuntimeError("Unexpected Wrangler d1 list response shape")
+    return parsed
 
 
 def resolve_database_id() -> str:
-    query = urllib.parse.urlencode({"name": DB_NAME, "per_page": 100})
-    listed = api("GET", f"/accounts/{ACCOUNT_ID}/d1/database?{query}").get("result") or []
-    exact = [item for item in listed if item.get("name") == DB_NAME]
-    if exact:
-        db_id = exact[0].get("uuid")
-        if not db_id:
-            raise RuntimeError("Existing D1 database did not include a UUID")
-        print(f"Using existing D1 database: {DB_NAME}")
-        return db_id
+    databases = list_databases()
+    exact = [item for item in databases if item.get("name") == DB_NAME]
+    if not exact:
+        print(f"No D1 database named {DB_NAME}; creating it in APAC")
+        run_wrangler("d1", "create", DB_NAME, "--location=apac")
+        databases = list_databases()
+        exact = [item for item in databases if item.get("name") == DB_NAME]
 
-    created = api(
-        "POST",
-        f"/accounts/{ACCOUNT_ID}/d1/database",
-        {
-            "name": DB_NAME,
-            "primary_location_hint": "apac",
-        },
-    ).get("result") or {}
-    db_id = created.get("uuid")
+    if not exact:
+        raise RuntimeError(f"D1 database {DB_NAME} was not found after creation")
+
+    db_id = exact[0].get("uuid") or exact[0].get("id")
     if not db_id:
-        raise RuntimeError("D1 create response did not include a UUID")
-    print(f"Created D1 database: {DB_NAME}")
-    return db_id
+        raise RuntimeError("D1 database record did not include a UUID")
+
+    print(f"Using D1 database: {DB_NAME}")
+    return str(db_id)
 
 
 def bind_database(db_id: str) -> None:
@@ -83,10 +97,8 @@ def bind_database(db_id: str) -> None:
 
 
 def main() -> int:
-    if not ACCOUNT_ID or not TOKEN:
-        print("Missing CLOUDFLARE_ACCOUNT_ID or CLOUDFLARE_API_TOKEN", file=sys.stderr)
-        return 2
     try:
+        validate_credentials_shape()
         bind_database(resolve_database_id())
         return 0
     except Exception as exc:
