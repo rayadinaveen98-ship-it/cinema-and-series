@@ -4,24 +4,33 @@
 WDQS is used only as a scheduled acquisition tool, never as a live application
 runtime dependency. The query intentionally orders newest dates first so future
 releases cannot be crowded out by older rows when the source result is capped.
-This keeps acquisition to one request, which is also friendlier to WDQS during
-periods of aggressive rate limiting.
+
+The public WDQS can throttle aggressively during incidents. We prefer the
+current main-graph endpoint, respect 429 cooldowns instead of hammering it, and
+fall back to the legacy public hostname for ordinary endpoint/network failures.
+If acquisition still fails, the workflow preserves the existing D1 catalogue.
 """
 from __future__ import annotations
 
 import json
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import date
 from pathlib import Path
 
-ENDPOINT = "https://query.wikidata.org/sparql"
+ENDPOINTS = (
+    "https://query-main.wikidata.org/sparql",
+    "https://query.wikidata.org/sparql",
+)
 OUT = Path("data/generated/wikidata-india.json")
 USER_AGENT = "CinemaAndSeries/0.1 (public GitHub project; Wikidata acquisition)"
 INDIA_QID = "Q668"
 QUERY_LIMIT = 3000
+RATE_LIMIT_FALLBACK_SECONDS = 65
+MAX_ATTEMPTS = 4
 
 
 def tracked_years() -> list[int]:
@@ -48,14 +57,57 @@ ORDER BY DESC(?date) ?item
 LIMIT {QUERY_LIMIT}'''
 
 
-def fetch() -> dict:
+def fetch(endpoint: str = ENDPOINTS[0]) -> dict:
     params = urllib.parse.urlencode({"query": query_text(), "format": "json"})
     request = urllib.request.Request(
-        f"{ENDPOINT}?{params}",
+        f"{endpoint}?{params}",
         headers={"User-Agent": USER_AGENT, "Accept": "application/sparql-results+json"},
     )
     with urllib.request.urlopen(request, timeout=60) as response:
         return json.load(response)
+
+
+def retry_after_seconds(error: urllib.error.HTTPError) -> int:
+    raw = error.headers.get("Retry-After") if error.headers else None
+    if raw:
+        try:
+            return max(RATE_LIMIT_FALLBACK_SECONDS, int(raw))
+        except ValueError:
+            pass
+    return RATE_LIMIT_FALLBACK_SECONDS
+
+
+def fetch_with_resilience() -> dict:
+    """Fetch while respecting public-service throttling.
+
+    A 429 means the service explicitly asked us to slow down, so wait at least
+    one minute before another request. Other endpoint/network failures may try
+    the alternate public hostname after a short backoff.
+    """
+    last_error: Exception | None = None
+    for attempt in range(MAX_ATTEMPTS):
+        endpoint = ENDPOINTS[attempt % len(ENDPOINTS)]
+        try:
+            return fetch(endpoint)
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if exc.code == 429:
+                delay = retry_after_seconds(exc)
+                print(
+                    f"WDQS rate-limited request via {endpoint}; respecting {delay}s cooldown",
+                    file=sys.stderr,
+                )
+                if attempt + 1 < MAX_ATTEMPTS:
+                    time.sleep(delay)
+                continue
+            if attempt + 1 < MAX_ATTEMPTS:
+                time.sleep(min(8, 2 ** attempt))
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            last_error = exc
+            if attempt + 1 < MAX_ATTEMPTS:
+                time.sleep(min(8, 2 ** attempt))
+    assert last_error is not None
+    raise last_error
 
 
 def _qid(url: str | None) -> str | None:
@@ -128,31 +180,27 @@ def normalize(payload: dict) -> list[dict]:
 
 def main() -> int:
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    last_error: Exception | None = None
-    for attempt in range(4):
-        try:
-            items = normalize(fetch())
-            OUT.write_text(
-                json.dumps(
-                    {
-                        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                        "selection_policy": "single-request newest-first Wikidata acquisition; prefer India-qualified P577; otherwise latest day-precision candidate; all remain unconfirmed until stronger evidence",
-                        "tracked_years": tracked_years(),
-                        "movies": items,
-                    },
-                    indent=2,
-                    ensure_ascii=False,
-                )
-                + "\n",
-                encoding="utf-8",
+    try:
+        items = normalize(fetch_with_resilience())
+        OUT.write_text(
+            json.dumps(
+                {
+                    "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "selection_policy": "scheduled Wikidata acquisition; prefer India-qualified P577; otherwise latest day-precision candidate; all remain unconfirmed until stronger evidence",
+                    "tracked_years": tracked_years(),
+                    "movies": items,
+                },
+                indent=2,
+                ensure_ascii=False,
             )
-            print(f"wrote {len(items)} unique film release candidates to {OUT}")
-            return 0
-        except Exception as exc:  # network/source resilience
-            last_error = exc
-            time.sleep(2**attempt)
-    print(f"Wikidata acquisition failed after retries: {last_error}", file=sys.stderr)
-    return 1
+            + "\n",
+            encoding="utf-8",
+        )
+        print(f"wrote {len(items)} unique film release candidates to {OUT}")
+        return 0
+    except Exception as exc:  # public source resilience
+        print(f"Wikidata acquisition failed after rate-aware retries: {exc}", file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
