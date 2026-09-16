@@ -5,15 +5,17 @@ on:
     branches: [main]
     paths:
       - "scripts/fetch_wikidata_backfill.py"
+      - "scripts/fetch_mediawiki_backfill.py"
       - "scripts/wikidata_to_sql.py"
       - "tests/test_wikidata_backfill.py"
+      - "tests/test_mediawiki_backfill.py"
       - ".github/workflows/wikidata-backfill.yml"
   schedule:
     - cron: "23 3 * * *"
   workflow_dispatch:
     inputs:
       profile:
-        description: Wikidata backfill profile
+        description: Catalogue backfill profile
         required: true
         default: bootstrap
         type: choice
@@ -51,26 +53,47 @@ jobs:
           echo "profile=$profile" >> "$GITHUB_OUTPUT"
           echo "Catalogue backfill profile: $profile"
 
-      - name: Fetch sharded Wikidata catalogue
-        id: wikidata
+      - name: Acquire broad Wikimedia catalogue
+        id: wikimedia
         shell: bash
         run: |
+          rm -f data/generated/wikidata-backfill.json
           set +e
           python scripts/fetch_wikidata_backfill.py \
             --profile "${{ steps.profile.outputs.profile }}" \
             --max-movies 5000 \
             --out data/generated/wikidata-backfill.json
-          code=$?
+          primary_code=$?
           set -e
-          if [[ $code -eq 0 && -s data/generated/wikidata-backfill.json ]]; then
+
+          acquisition="wdqs"
+          if [[ $primary_code -ne 0 || ! -s data/generated/wikidata-backfill.json ]]; then
+            echo "WDQS backfill unavailable; falling back to normal Wikimedia Action APIs."
+            rm -f data/generated/wikidata-backfill.json
+            set +e
+            python scripts/fetch_mediawiki_backfill.py \
+              --profile "${{ steps.profile.outputs.profile }}" \
+              --max-movies 5000 \
+              --out data/generated/wikidata-backfill.json
+            fallback_code=$?
+            set -e
+            acquisition="mediawiki"
+          else
+            fallback_code=0
+          fi
+
+          if [[ -s data/generated/wikidata-backfill.json && $fallback_code -eq 0 ]]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "acquisition=$acquisition" >> "$GITHUB_OUTPUT"
+            echo "Catalogue acquisition path: $acquisition"
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Wikidata backfill deferred; existing D1 catalogue remains unchanged."
+            echo "acquisition=deferred" >> "$GITHUB_OUTPUT"
+            echo "All Wikimedia backfill paths deferred; existing D1 catalogue remains unchanged."
           fi
 
       - name: Validate backfill payload and build SQL
-        if: steps.wikidata.outputs.ready == 'true'
+        if: steps.wikimedia.outputs.ready == 'true'
         shell: bash
         run: |
           python -m json.tool data/generated/wikidata-backfill.json >/dev/null
@@ -94,7 +117,12 @@ jobs:
           ]
           if malformed:
               raise SystemExit(f"malformed backfill movies: {malformed[:3]}")
-          print(f"validated {len(movies)} backfill movies")
+          print(
+              "validated",
+              len(movies),
+              "backfill movies via",
+              payload.get("acquisition_path", "wdqs"),
+          )
           for shard in payload.get("shards") or []:
               print(
                   "shard",
@@ -104,22 +132,36 @@ jobs:
                   "bindings", shard.get("raw_bindings"),
                   "possibly_truncated", shard.get("possibly_truncated"),
               )
+          categories = payload.get("category_report") or []
+          if categories:
+              populated = [row for row in categories if row.get("status") == "ok" and int(row.get("pages") or 0) > 0]
+              deferred = [row for row in categories if row.get("status") == "deferred"]
+              print(
+                  "mediawiki categories:",
+                  len(categories),
+                  "checked,",
+                  len(populated),
+                  "populated,",
+                  len(deferred),
+                  "deferred",
+              )
+              print("sample populated categories:", [(row.get("category"), row.get("pages")) for row in populated[:12]])
           PY
           python scripts/wikidata_to_sql.py \
             --src data/generated/wikidata-backfill.json \
             --out data/generated/wikidata-backfill-upsert.sql
 
       - uses: actions/upload-artifact@v4
-        if: steps.wikidata.outputs.ready == 'true'
+        if: steps.wikimedia.outputs.ready == 'true'
         with:
-          name: wikidata-catalogue-backfill
+          name: wikimedia-catalogue-backfill
           path: |
             data/generated/wikidata-backfill.json
             data/generated/wikidata-backfill-upsert.sql
           retention-days: 14
 
       - name: Check Cloudflare connection
-        if: steps.wikidata.outputs.ready == 'true'
+        if: steps.wikimedia.outputs.ready == 'true'
         id: cloudflare
         shell: bash
         run: |
@@ -131,28 +173,28 @@ jobs:
           fi
 
       - uses: actions/setup-node@v4
-        if: steps.wikidata.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
+        if: steps.wikimedia.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
         with:
           node-version: 22
 
       - name: Install Wrangler
-        if: steps.wikidata.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
+        if: steps.wikimedia.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
         run: npm install --no-audit --no-fund
 
       - name: Bind production D1
-        if: steps.wikidata.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
+        if: steps.wikimedia.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
         run: python scripts/cloudflare_bootstrap.py
 
       - name: Apply D1 migrations
-        if: steps.wikidata.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
+        if: steps.wikimedia.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
         run: npx wrangler d1 migrations apply cinema-and-series --remote
 
       - name: Catalogue count before backfill
-        if: steps.wikidata.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
+        if: steps.wikimedia.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
         run: npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS movie_count FROM movies WHERE wikidata_qid IS NULL OR title <> wikidata_qid;"
 
       - name: Import historical/global backfill
-        if: steps.wikidata.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
+        if: steps.wikimedia.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
         shell: bash
         run: |
           if [[ -s data/generated/wikidata-backfill-upsert.sql ]]; then
@@ -162,7 +204,7 @@ jobs:
           fi
 
       - name: Catalogue count after backfill
-        if: steps.wikidata.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
+        if: steps.wikimedia.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
         run: |
           npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS movie_count, COUNT(DISTINCT country_code) AS countries, COUNT(DISTINCT language_name) AS languages FROM movies WHERE wikidata_qid IS NULL OR title <> wikidata_qid;"
           npx wrangler d1 execute cinema-and-series --remote --command "SELECT country_code, COUNT(*) AS movies FROM movies WHERE wikidata_qid IS NOT NULL AND title <> wikidata_qid GROUP BY country_code ORDER BY movies DESC LIMIT 20;"
