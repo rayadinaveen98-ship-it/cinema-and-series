@@ -50,14 +50,23 @@ class YouTubeMonitorTests(unittest.TestCase):
         )
         self.assertEqual(dates, [])
 
-    def test_allows_small_post_release_lag_for_same_campaign(self):
+    def test_rejects_post_release_promo_date(self):
         now = datetime(2026, 9, 16, tzinfo=timezone.utc)
         dates = module.filter_plausible_release_dates(
             ["2026-09-12"],
             "2026-09-16T06:30:20Z",
             now=now,
         )
-        self.assertEqual(dates, ["2026-09-12"])
+        self.assertEqual(dates, [])
+
+    def test_keeps_same_day_release_signal(self):
+        now = datetime(2026, 9, 16, tzinfo=timezone.utc)
+        dates = module.filter_plausible_release_dates(
+            ["2026-09-16"],
+            "2026-09-16T06:30:20Z",
+            now=now,
+        )
+        self.assertEqual(dates, ["2026-09-16"])
 
     def test_sql_keeps_candidates_pending_review(self):
         sql = module.build_sql([
