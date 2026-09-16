@@ -32,6 +32,16 @@
       "active": true
     },
     {
+      "key": "vyjayanthi_network",
+      "name": "Vyjayanthi Network",
+      "source_type": "production_house",
+      "website_url": null,
+      "youtube_channel_id": "UC70pKToywlxOGdgIvz8gYqA",
+      "youtube_handle": "@VyjayanthiNetwork",
+      "languages": ["Telugu", "Tamil", "Hindi", "Malayalam", "Kannada"],
+      "active": true
+    },
+    {
       "key": "sun_pictures",
       "name": "Sun Pictures",
       "source_type": "production_house",
@@ -39,6 +49,26 @@
       "youtube_channel_id": "UC17vzygnkDJ2wLlcU4pE-Qg",
       "youtube_handle": "@SunPicturesOffl",
       "languages": ["Tamil", "Telugu"],
+      "active": true
+    },
+    {
+      "key": "red_giant_movies",
+      "name": "Red Giant Movies",
+      "source_type": "studio_distributor",
+      "website_url": "https://www.redgiantmovies.in/",
+      "youtube_channel_id": "UCciiOyy3uemzbp6_gSMcSwA",
+      "youtube_handle": "@RedGiantMovies",
+      "languages": ["Tamil", "Telugu", "Malayalam", "Kannada"],
+      "active": true
+    },
+    {
+      "key": "dharma_productions",
+      "name": "Dharma Productions",
+      "source_type": "studio_distributor",
+      "website_url": "https://dharma-production.com/",
+      "youtube_channel_id": null,
+      "youtube_handle": "@DharmaMovies",
+      "languages": ["Hindi", "Punjabi"],
       "active": true
     },
     {
