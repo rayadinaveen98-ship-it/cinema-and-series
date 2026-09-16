@@ -2,14 +2,16 @@ interface Env {
   DB?: D1Database;
 }
 
-type MovieRow = {
+type CatalogueRow = {
   id: string;
   wikidata_qid: string | null;
   title: string;
   native_title: string | null;
   language_name: string;
   country_code: string;
-  release_date: string;
+  release_date: string | null;
+  release_year: number;
+  date_precision: "day" | "year";
   verification_status: "verified" | "supported" | "unconfirmed";
   release_date_source: string;
   release_source_name: string | null;
@@ -17,6 +19,7 @@ type MovieRow = {
   backdrop_url: string | null;
   artwork_source: string | null;
   artwork_source_url: string | null;
+  updated_at: string | null;
 };
 
 type StatsRow = {
@@ -58,17 +61,65 @@ type ObservationRow = {
 };
 
 const previewMovies = [
-  { id: "preview-1", title: "A Film in Production", language: "Telugu", countryCode: "IN", releaseDate: "2026-09-18", verificationStatus: "unconfirmed", releaseSource: "preview" },
-  { id: "preview-2", title: "Festival Premiere", language: "Malayalam", countryCode: "IN", releaseDate: "2026-09-19", verificationStatus: "supported", releaseSource: "preview" },
-  { id: "preview-3", title: "Theatrical Release", language: "Tamil", countryCode: "IN", releaseDate: "2026-09-25", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
-  { id: "preview-4", title: "Coming Soon", language: "Kannada", countryCode: "IN", releaseDate: "2026-10-02", verificationStatus: "unconfirmed", releaseSource: "preview" },
+  { id: "preview-1", title: "A Film in Production", language: "Telugu", countryCode: "IN", releaseDate: "2026-09-18", releaseYear: 2026, datePrecision: "day", verificationStatus: "unconfirmed", releaseSource: "preview" },
+  { id: "preview-2", title: "Festival Premiere", language: "Malayalam", countryCode: "IN", releaseDate: "2026-09-19", releaseYear: 2026, datePrecision: "day", verificationStatus: "supported", releaseSource: "preview" },
+  { id: "preview-3", title: "Theatrical Release", language: "Tamil", countryCode: "IN", releaseDate: "2026-09-25", releaseYear: 2026, datePrecision: "day", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
+  { id: "preview-4", title: "Coming Soon", language: "Kannada", countryCode: "IN", releaseDate: "2026-10-02", releaseYear: 2026, datePrecision: "day", verificationStatus: "unconfirmed", releaseSource: "preview" },
 ];
 
 const visibleMovieClause = "(m.wikidata_qid IS NULL OR m.title <> m.wikidata_qid)";
-const movieColumns = `m.id, m.wikidata_qid, m.title, m.native_title, m.language_name, m.country_code, m.release_date,
-  m.verification_status, m.release_date_source, s.source_name AS release_source_name,
-  m.poster_url, m.backdrop_url, m.artwork_source, m.artwork_source_url`;
-const movieSourceJoin = "LEFT JOIN source_channels s ON s.source_key = m.release_date_source";
+const combinedCatalogueCte = `WITH combined_catalogue AS (
+  SELECT
+    m.id,
+    m.wikidata_qid,
+    m.title,
+    m.native_title,
+    m.language_name,
+    m.country_code,
+    m.release_date,
+    CAST(substr(m.release_date, 1, 4) AS INTEGER) AS release_year,
+    'day' AS date_precision,
+    m.verification_status,
+    m.release_date_source,
+    s.source_name AS release_source_name,
+    m.poster_url,
+    m.backdrop_url,
+    m.artwork_source,
+    m.artwork_source_url,
+    m.updated_at
+  FROM movies m
+  LEFT JOIN source_channels s ON s.source_key = m.release_date_source
+  WHERE ${visibleMovieClause}
+
+  UNION ALL
+
+  SELECT
+    ct.id,
+    ct.wikidata_qid,
+    ct.title,
+    NULL AS native_title,
+    ct.language_name,
+    ct.country_code,
+    NULL AS release_date,
+    ct.release_year,
+    'year' AS date_precision,
+    ct.verification_status,
+    'wikipedia' AS release_date_source,
+    'English Wikipedia category' AS release_source_name,
+    NULL AS poster_url,
+    NULL AS backdrop_url,
+    NULL AS artwork_source,
+    NULL AS artwork_source_url,
+    ct.updated_at
+  FROM catalogue_titles ct
+  WHERE ct.wikidata_qid IS NULL
+     OR NOT EXISTS (
+       SELECT 1
+       FROM movies mx
+       WHERE mx.wikidata_qid = ct.wikidata_qid
+         AND mx.title <> mx.wikidata_qid
+     )
+)`;
 
 function json(data: unknown, status = 200, cacheControl = "public, max-age=60, s-maxage=300") {
   return Response.json(data, {
@@ -206,7 +257,7 @@ export default {
       const offset = boundedInteger(url.searchParams.get("offset"), 0, 0, 100_000);
       const today = indiaDateKey();
 
-      const conditions: string[] = [visibleMovieClause];
+      const conditions: string[] = ["1=1"];
       const bindings: (string | number)[] = [];
       const bind = (value: string | number) => {
         bindings.push(value);
@@ -214,74 +265,79 @@ export default {
       };
 
       if (requestedYear && /^\d{4}$/.test(requestedYear)) {
-        const start = `${requestedYear}-01-01`;
-        const end = `${requestedYear}-12-31`;
-        conditions.push(`m.release_date BETWEEN ${bind(start)} AND ${bind(end)}`);
+        conditions.push(`c.release_year = ${bind(Number.parseInt(requestedYear, 10))}`);
       } else if (scope !== "all") {
         const from = url.searchParams.get("from") ?? today;
         const to = url.searchParams.get("to") ?? addDays(today, 730);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
           return json({ error: "from/to must use YYYY-MM-DD" }, 400, "no-store");
         }
-        conditions.push(`m.release_date BETWEEN ${bind(from)} AND ${bind(to)}`);
+        conditions.push("c.date_precision = 'day'");
+        conditions.push(`c.release_date BETWEEN ${bind(from)} AND ${bind(to)}`);
       }
 
       if (search) {
         const pattern = `%${search}%`;
         const titleParam = bind(pattern);
         const nativeParam = bind(pattern);
-        conditions.push(`(m.title LIKE ${titleParam} COLLATE NOCASE OR m.native_title LIKE ${nativeParam} COLLATE NOCASE)`);
+        conditions.push(`(c.title LIKE ${titleParam} COLLATE NOCASE OR c.native_title LIKE ${nativeParam} COLLATE NOCASE)`);
       }
-      if (language) conditions.push(`m.language_name = ${bind(language)}`);
-      if (country) conditions.push(`m.country_code = ${bind(country)}`);
-      if (officialOnly) conditions.push("m.verification_status = 'verified'");
+      if (language) conditions.push(`c.language_name = ${bind(language)}`);
+      if (country) conditions.push(`c.country_code = ${bind(country)}`);
+      if (officialOnly) conditions.push("c.verification_status = 'verified'");
 
       const where = conditions.join(" AND ");
-      const direction = scope === "all" && !requestedYear ? "DESC" : "ASC";
+      const orderBy = scope === "all" || requestedYear
+        ? "c.release_year DESC, CASE WHEN c.date_precision='day' THEN 0 ELSE 1 END ASC, c.release_date DESC, c.title COLLATE NOCASE ASC"
+        : "c.release_date ASC, c.title COLLATE NOCASE ASC";
       const listStatement = env.DB.prepare(
-        `SELECT ${movieColumns}
-         FROM movies m
-         ${movieSourceJoin}
+        `${combinedCatalogueCte}
+         SELECT c.*
+         FROM combined_catalogue c
          WHERE ${where}
-         ORDER BY m.release_date ${direction}, m.title COLLATE NOCASE ASC
+         ORDER BY ${orderBy}
          LIMIT ?${bindings.length + 1} OFFSET ?${bindings.length + 2}`,
       ).bind(...bindings, limit, offset);
       const countStatement = env.DB.prepare(
-        `SELECT COUNT(*) AS count FROM movies m WHERE ${where}`,
+        `${combinedCatalogueCte}
+         SELECT COUNT(*) AS count FROM combined_catalogue c WHERE ${where}`,
       ).bind(...bindings);
 
       const next7 = addDays(today, 6);
       const next30 = addDays(today, 29);
       const [result, filteredCount, statsResult, sourcesResult, yearsResult, languagesResult, countriesResult, periodCountsResult] = await Promise.all([
-        listStatement.all<MovieRow>(),
+        listStatement.all<CatalogueRow>(),
         countStatement.first<{ count: number }>(),
         env.DB.prepare(
-          `SELECT
+          `${combinedCatalogueCte}
+           SELECT
              COUNT(*) AS total,
              COALESCE(SUM(CASE WHEN verification_status='verified' THEN 1 ELSE 0 END), 0) AS verified,
              COALESCE(SUM(CASE WHEN verification_status='supported' THEN 1 ELSE 0 END), 0) AS supported,
              COALESCE(SUM(CASE WHEN verification_status='unconfirmed' THEN 1 ELSE 0 END), 0) AS unconfirmed,
              MAX(updated_at) AS latest_updated_at
-           FROM movies m
-           WHERE ${visibleMovieClause}`,
+           FROM combined_catalogue`,
         ).first<StatsRow>(),
         env.DB.prepare(
           "SELECT COUNT(*) AS count, MAX(updated_at) AS latest_updated_at FROM source_channels WHERE active=1",
         ).first<SourcesRow>(),
         env.DB.prepare(
-          `SELECT substr(m.release_date, 1, 4) AS value, COUNT(*) AS count
-           FROM movies m WHERE ${visibleMovieClause}
-           GROUP BY value ORDER BY value DESC LIMIT 120`,
+          `${combinedCatalogueCte}
+           SELECT CAST(c.release_year AS TEXT) AS value, COUNT(*) AS count
+           FROM combined_catalogue c
+           GROUP BY c.release_year ORDER BY c.release_year DESC LIMIT 120`,
         ).all<FacetRow>(),
         env.DB.prepare(
-          `SELECT m.language_name AS value, COUNT(*) AS count
-           FROM movies m WHERE ${visibleMovieClause}
-           GROUP BY m.language_name ORDER BY count DESC, value COLLATE NOCASE ASC LIMIT 100`,
+          `${combinedCatalogueCte}
+           SELECT c.language_name AS value, COUNT(*) AS count
+           FROM combined_catalogue c
+           GROUP BY c.language_name ORDER BY count DESC, value COLLATE NOCASE ASC LIMIT 100`,
         ).all<FacetRow>(),
         env.DB.prepare(
-          `SELECT m.country_code AS value, COUNT(*) AS count
-           FROM movies m WHERE ${visibleMovieClause}
-           GROUP BY m.country_code ORDER BY count DESC, value ASC LIMIT 100`,
+          `${combinedCatalogueCte}
+           SELECT c.country_code AS value, COUNT(*) AS count
+           FROM combined_catalogue c
+           GROUP BY c.country_code ORDER BY count DESC, value ASC LIMIT 100`,
         ).all<FacetRow>(),
         env.DB.prepare(
           `SELECT
@@ -299,7 +355,9 @@ export default {
         nativeTitle: movie.native_title ?? undefined,
         language: movie.language_name,
         countryCode: movie.country_code,
-        releaseDate: movie.release_date,
+        releaseDate: movie.release_date ?? undefined,
+        releaseYear: Number(movie.release_year),
+        datePrecision: movie.date_precision,
         verificationStatus: movie.verification_status,
         releaseSource: movie.release_date_source,
         releaseSourceName: movie.release_source_name ?? undefined,
