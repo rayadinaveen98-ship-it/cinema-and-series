@@ -81,6 +81,22 @@ class WikidataNormalizationTests(unittest.TestCase):
         self.assertNotIn("COMMIT;", sql)
         self.assertIn("ON CONFLICT", sql)
 
+    def test_unresolved_qid_label_is_not_imported(self):
+        statements = build_statements(
+            {
+                "movies": [
+                    {
+                        "wikidata_qid": "Q999",
+                        "title": "Q999",
+                        "release_date": "2026-09-18",
+                        "languages": ["Unknown"],
+                        "source_url": "https://www.wikidata.org/wiki/Q999",
+                    }
+                ]
+            }
+        )
+        self.assertEqual(statements, [])
+
 
 if __name__ == "__main__":
     unittest.main()
