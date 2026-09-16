@@ -15,6 +15,39 @@ class WikipediaYearCatalogueTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             module.category_year("Category:Telugu-language films")
 
+    def test_category_members_captures_qid_in_discovery_request(self):
+        seed = module.base.Seed(
+            category="Category:2024 Telugu-language films",
+            country_code="IN",
+            language="Telugu",
+            group="india-Telugu",
+        )
+        payload = {
+            "query": {
+                "pages": [
+                    {"pageid": 42, "title": "Example Film", "pageprops": {"wikibase_item": "Q123"}},
+                    {"pageid": 43, "title": "No QID Film"},
+                ]
+            }
+        }
+        with patch.object(module.base, "request_json", return_value=payload) as request:
+            rows = module.category_members(seed, cap=10)
+
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(rows[0].wikidata_qid, "Q123")
+        self.assertIsNone(rows[1].wikidata_qid)
+        params = request.call_args.args[1]
+        self.assertEqual(params["generator"], "categorymembers")
+        self.assertEqual(params["prop"], "pageprops")
+        self.assertEqual(params["ppprop"], "wikibase_item")
+
+    def test_captured_qids_avoids_second_lookup_for_known_pages(self):
+        by_page = {
+            42: [module.Discovery(42, "One", 2024, "IN", "Telugu", "Category:2024 Telugu-language films", "Q42")],
+            43: [module.Discovery(43, "Two", 2024, "IN", "Telugu", "Category:2024 Telugu-language films")],
+        }
+        self.assertEqual(module.captured_qids(by_page), {42: "Q42"})
+
     def test_merge_discoveries_keeps_year_precision_and_stable_identity(self):
         first = module.Discovery(
             page_id=42,
