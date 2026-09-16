@@ -66,10 +66,6 @@ jobs:
       - name: Bind production D1
         run: python scripts/cloudflare_bootstrap.py
 
-      - name: Capture current production language baseline
-        run: |
-          npx wrangler d1 execute cinema-and-series --remote --command "SELECT COUNT(*) AS total_series, SUM(CASE WHEN language_name IS NOT NULL AND TRIM(language_name)<>'' AND LOWER(language_name)<>'unknown' THEN 1 ELSE 0 END) AS language_known FROM series_titles;"
-
       - name: Capture stable unknown-language SeriesRun snapshot
         id: snapshot
         shell: bash
