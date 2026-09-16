@@ -7,10 +7,9 @@ explicit date phrases only when release-oriented context is present, and emits
 reviewable candidates for D1. Sources may be registered by stable channel ID or
 by an official @handle; handle-only entries are resolved through channels.list.
 
-To avoid catalogue metadata and post-release promotional chatter being mistaken
-for useful release announcements, only recent uploads are considered, a
-candidate release date cannot precede the upload date, and response/review
-promotional videos are excluded from the review queue.
+To keep the live review queue useful, only recent uploads are considered,
+candidate dates must be today-or-future at scan time, candidate dates cannot
+precede the upload date, and response/review promotional videos are excluded.
 """
 from __future__ import annotations
 
@@ -122,7 +121,10 @@ def filter_plausible_release_dates(
     if published < reference_now - timedelta(days=MAX_UPLOAD_AGE_DAYS):
         return []
 
-    lower = published.date() - timedelta(days=MAX_RELEASE_LAG_DAYS)
+    lower = max(
+        published.date() - timedelta(days=MAX_RELEASE_LAG_DAYS),
+        reference_now.date(),
+    )
     upper = published.date() + timedelta(days=MAX_RELEASE_LEAD_DAYS)
     plausible: list[str] = []
     for value in dates:
@@ -233,12 +235,15 @@ def fetch_latest_uploads(
     return candidates
 
 
-def build_sql(candidates: list[dict], sources: list[dict] | None = None) -> str:
-    """Build an idempotent, FK-safe sync batch.
+def sources_for_candidates(candidates: list[dict], sources: list[dict]) -> list[dict]:
+    source_keys = {candidate.get("source_key") for candidate in candidates if candidate.get("source_key")}
+    if not source_keys:
+        return []
+    return [source for source in sources if source.get("key") in source_keys]
 
-    Source rows are upserted first so a registry change and the YouTube monitor
-    can run concurrently without source_observations failing its foreign key.
-    """
+
+def build_sql(candidates: list[dict], sources: list[dict] | None = None) -> str:
+    """Build an idempotent, FK-safe sync batch for retained observations."""
     statements: list[str] = []
 
     for source in sources or []:
@@ -307,7 +312,7 @@ def main() -> int:
         json.dumps(
             {
                 "generated_at": scan_time.isoformat(),
-                "policy": "official-channel observations only; recent non-response/review uploads and same-day/future release dates become pending review candidates; never auto-verify",
+                "policy": "official-channel observations only; recent non-response/review uploads with release dates that are still today-or-future become pending review candidates; never auto-verify",
                 "channels_registered": len(sources),
                 "channels_checked": channels_checked,
                 "candidates": candidates,
@@ -317,8 +322,8 @@ def main() -> int:
         ) + "\n",
         encoding="utf-8",
     )
-    OUT_SQL.write_text(build_sql(candidates, sources), encoding="utf-8")
-    print(f"checked {channels_checked}/{len(sources)} official channels and found {len(candidates)} release-date candidates")
+    OUT_SQL.write_text(build_sql(candidates, sources_for_candidates(candidates, sources)), encoding="utf-8")
+    print(f"checked {channels_checked}/{len(sources)} official channels and found {len(candidates)} future-facing release-date candidates")
     return 0
 
 
