@@ -41,6 +41,12 @@ def filter_candidates(
         item = dict(candidate)
         item["candidate_dates"] = remaining_dates
         item["candidate_release_date"] = remaining_dates[0] if len(remaining_dates) == 1 else None
+        if "date_contexts" in item:
+            remaining = set(remaining_dates)
+            item["date_contexts"] = [
+                context for context in (item.get("date_contexts") or [])
+                if context.get("date") in remaining
+            ]
         filtered.append(item)
     return filtered, suppressed_dates
 
@@ -59,7 +65,7 @@ def main() -> int:
     candidates_payload["policy"] = (
         "official-channel observations only; future-facing release signals become pending review; "
         "a date is suppressed only when the same source/date candidate explicitly names the same verified movie; "
-        "never auto-verify"
+        "short local date context is preserved for human review; never auto-verify"
     )
     CANDIDATES.write_text(json.dumps(candidates_payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
