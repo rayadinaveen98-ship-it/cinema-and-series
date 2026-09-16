@@ -75,6 +75,32 @@ class YouTubeMonitorTests(unittest.TestCase):
         self.assertNotIn("verification_status", sql)
         self.assertIn("ON CONFLICT(source_key, external_id) DO UPDATE", sql)
 
+    def test_sql_upserts_source_before_fk_observation(self):
+        source = {
+            "key": "excel_entertainment",
+            "name": "Excel Entertainment",
+            "source_type": "production_house",
+            "website_url": None,
+            "youtube_channel_id": None,
+            "youtube_handle": "@ExcelMovies",
+            "active": True,
+        }
+        candidate = {
+            "source_key": "excel_entertainment",
+            "video_id": "kWh6fgcreyw",
+            "video_url": "https://www.youtube.com/watch?v=kWh6fgcreyw",
+            "video_title": "Mirzapur The Movie | In Cinemas 4 Sep 2026",
+            "published_at": "2026-08-04T05:30:37Z",
+            "candidate_dates": ["2026-09-04"],
+            "candidate_release_date": "2026-09-04",
+        }
+        sql = module.build_sql([candidate], [source])
+        source_pos = sql.index("INSERT INTO source_channels")
+        observation_pos = sql.index("INSERT INTO source_observations")
+        self.assertLess(source_pos, observation_pos)
+        self.assertIn("@ExcelMovies", sql)
+        self.assertIn("pending_review", sql)
+
     def test_handle_only_source_resolves_through_official_channels_api(self):
         source = {
             "key": "dharma_productions",
