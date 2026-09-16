@@ -184,7 +184,7 @@ def fetch_latest_uploads(
 ) -> list[dict]:
     payload = api_get(
         "playlistItems",
-        {"part": "snippet,contentDetails", "playlistId": playlist_id, "maxResults": "12"},
+        {"part": "snippet,contentDetails", "playlistId": playlist_id, "maxResults": "50"},
     )
     candidates: list[dict] = []
     for item in payload.get("items", []):
