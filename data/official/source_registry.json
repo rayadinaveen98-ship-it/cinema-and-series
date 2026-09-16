@@ -1,0 +1,55 @@
+{
+  "updated_at": "2026-09-16",
+  "sources": [
+    {
+      "key": "mythri_movie_makers",
+      "name": "Mythri Movie Makers",
+      "source_type": "production_house",
+      "website_url": "https://mythrimoviemakers.com/",
+      "youtube_channel_id": "UCKZSn5C-RzrLjuWJF8wWiDw",
+      "youtube_handle": "@MythriMovieMakers",
+      "languages": ["Telugu", "Kannada", "Tamil", "Hindi"],
+      "active": true
+    },
+    {
+      "key": "hombale_films",
+      "name": "Hombale Films",
+      "source_type": "production_house",
+      "website_url": "https://www.hombalefilms.com/",
+      "youtube_channel_id": "UCBcAnz-fPtYqZr9I8bLcrTw",
+      "youtube_handle": "@hombalefilmofficial",
+      "languages": ["Kannada", "Telugu", "Tamil", "Malayalam", "Hindi"],
+      "active": true
+    },
+    {
+      "key": "sithara_entertainments",
+      "name": "Sithara Entertainments",
+      "source_type": "production_house",
+      "website_url": null,
+      "youtube_channel_id": "UC2woPAI_KMAR25R_oezEQqw",
+      "youtube_handle": "@SitharaEntertainments",
+      "languages": ["Telugu", "Malayalam"],
+      "active": true
+    },
+    {
+      "key": "sun_pictures",
+      "name": "Sun Pictures",
+      "source_type": "production_house",
+      "website_url": "https://www.sunpictures.in/",
+      "youtube_channel_id": "UC17vzygnkDJ2wLlcU4pE-Qg",
+      "youtube_handle": "@SunPicturesOffl",
+      "languages": ["Tamil", "Telugu"],
+      "active": true
+    },
+    {
+      "key": "yash_raj_films",
+      "name": "Yash Raj Films",
+      "source_type": "studio_distributor",
+      "website_url": "https://www.yashrajfilms.com/",
+      "youtube_channel_id": "UCbTLwN10NoCU4WDzLf1JMOA",
+      "youtube_handle": "@yrf",
+      "languages": ["Hindi"],
+      "active": true
+    }
+  ]
+}
