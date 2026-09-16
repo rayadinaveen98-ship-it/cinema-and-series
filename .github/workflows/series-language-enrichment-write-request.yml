@@ -1,0 +1,127 @@
+name: Series Language Enrichment Write Request
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ops/series-language-enrichment-write-request.json"
+
+concurrency:
+  group: series-language-enrichment-write-request
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  authorize-and-dispatch:
+    if: github.actor == 'rayadinaveen98-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate explicit operator request
+        id: request
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path("ops/series-language-enrichment-write-request.json")
+          if not path.exists():
+              raise SystemExit("write request file is missing")
+          request = json.loads(path.read_text(encoding="utf-8"))
+
+          required = {
+              "schema_version": "series-language-enrichment-write-request-v1",
+              "apply_writes": True,
+              "target_ref": "main",
+              "target_workflow": "series-language-enrichment-v1.yml",
+          }
+          for key, expected in required.items():
+              if request.get(key) != expected:
+                  raise SystemExit(f"invalid {key}: expected {expected!r}, got {request.get(key)!r}")
+
+          run_id = request.get("validated_analysis_run_id")
+          head_sha = str(request.get("validated_analysis_head_sha") or "").lower()
+          if not isinstance(run_id, int) or run_id <= 0:
+              raise SystemExit("validated_analysis_run_id must be a positive integer")
+          if not re.fullmatch(r"[0-9a-f]{40}", head_sha):
+              raise SystemExit("validated_analysis_head_sha must be a full 40-character commit SHA")
+
+          output = Path(os.environ["GITHUB_OUTPUT"])
+          with output.open("a", encoding="utf-8") as handle:
+              handle.write(f"analysis_run_id={run_id}\n")
+              handle.write(f"analysis_head_sha={head_sha}\n")
+          print(f"Authorized request references analysis run {run_id} at {head_sha}")
+          PY
+
+      - name: Verify successful immutable analysis evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANALYSIS_RUN_ID: ${{ steps.request.outputs.analysis_run_id }}
+          ANALYSIS_HEAD_SHA: ${{ steps.request.outputs.analysis_head_sha }}
+        shell: bash
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ANALYSIS_RUN_ID}" > /tmp/analysis-run.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ANALYSIS_RUN_ID}/jobs?per_page=100" > /tmp/analysis-jobs.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ANALYSIS_RUN_ID}/artifacts?per_page=100" > /tmp/analysis-artifacts.json
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          run = json.loads(Path("/tmp/analysis-run.json").read_text(encoding="utf-8"))
+          jobs_payload = json.loads(Path("/tmp/analysis-jobs.json").read_text(encoding="utf-8"))
+          artifacts_payload = json.loads(Path("/tmp/analysis-artifacts.json").read_text(encoding="utf-8"))
+          expected_sha = os.environ["ANALYSIS_HEAD_SHA"].lower()
+
+          checks = {
+              "workflow name": run.get("name") == "Series Language Enrichment V1",
+              "workflow event": run.get("event") == "push",
+              "head branch": run.get("head_branch") == "main",
+              "head SHA": str(run.get("head_sha") or "").lower() == expected_sha,
+              "workflow conclusion": run.get("conclusion") == "success",
+          }
+          failures = [name for name, passed in checks.items() if not passed]
+          if failures:
+              raise SystemExit("analysis run failed authorization checks: " + ", ".join(failures))
+
+          jobs = {job.get("name"): job.get("conclusion") for job in jobs_payload.get("jobs", [])}
+          required_jobs = ["prepare", *(f"enrich-shard-{index}" for index in range(8)), "summarize"]
+          bad_jobs = [name for name in required_jobs if jobs.get(name) != "success"]
+          if bad_jobs:
+              raise SystemExit("analysis run lacks successful required jobs: " + ", ".join(bad_jobs))
+
+          summaries = [
+              artifact for artifact in artifacts_payload.get("artifacts", [])
+              if artifact.get("name") == "series-language-enrichment-v1-summary" and not artifact.get("expired")
+          ]
+          if len(summaries) != 1:
+              raise SystemExit("analysis run must retain exactly one unexpired aggregate summary artifact")
+
+          print("ANALYSIS_WRITE_GATE_VERIFIED=" + json.dumps({
+              "run_id": run.get("id"),
+              "head_sha": run.get("head_sha"),
+              "required_jobs": len(required_jobs),
+              "summary_artifact_id": summaries[0].get("id"),
+          }, sort_keys=True))
+          PY
+
+      - name: Dispatch guarded production write workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/series-language-enrichment-v1.yml/dispatches" \
+            -f ref='main' \
+            -f 'inputs[apply_writes]=true'
+          echo "Guarded Series Language Enrichment V1 production write dispatched from verified analysis evidence." >> "$GITHUB_STEP_SUMMARY"
