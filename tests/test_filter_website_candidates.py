@@ -83,6 +83,32 @@ class WebsiteCandidateFilterTests(unittest.TestCase):
         self.assertEqual(suppressed, 0)
         self.assertEqual(filtered, [candidate])
 
+    def test_empty_candidate_queue_selects_no_sources_and_builds_empty_sql(self):
+        registry = {
+            "sources": [
+                {
+                    "key": "dharma_productions",
+                    "name": "Dharma Productions",
+                    "website_url": "https://dharma-production.com/",
+                    "active": True,
+                }
+            ]
+        }
+        sources = module.matching_sources([], registry)
+        self.assertEqual(sources, [])
+        self.assertEqual(module.build_sql([], sources), "")
+
+    def test_candidate_queue_selects_only_matching_active_website_source(self):
+        registry = {
+            "sources": [
+                {"key": "one", "website_url": "https://one.example/", "active": True},
+                {"key": "two", "website_url": "https://two.example/", "active": True},
+                {"key": "three", "website_url": None, "active": True},
+            ]
+        }
+        sources = module.matching_sources([{"source_key": "two"}], registry)
+        self.assertEqual([source["key"] for source in sources], ["two"])
+
 
 if __name__ == "__main__":
     unittest.main()
