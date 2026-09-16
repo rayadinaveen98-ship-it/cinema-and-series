@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { Link, Navigate, NavLink, Route, Routes } from "react-router";
 
 type Movie = {
   id: string;
-  wikidataQid?: string;
   title: string;
   nativeTitle?: string;
   language: string;
@@ -15,443 +15,322 @@ type Movie = {
   releaseSourceName?: string;
   posterUrl?: string;
   backdropUrl?: string;
-  artworkSource?: string;
-  artworkSourceUrl?: string;
 };
 
-type CatalogueStats = { total: number; verified: number; supported: number; unconfirmed: number; activeSources: number };
+type SeriesKind = "series" | "web_series" | "miniseries" | "anthology" | "unknown";
+type SeriesTitle = {
+  id: string;
+  wikidataQid?: string;
+  title: string;
+  nativeTitle?: string;
+  seriesKind: SeriesKind;
+  language: string;
+  countryCode?: string;
+  firstAirYear?: number;
+  lastAirYear?: number;
+  lifecycleStatus: "unknown" | "upcoming" | "ongoing" | "ended" | "limited";
+  seasonCount?: number;
+  episodeCount?: number;
+  verificationStatus: "verified" | "supported" | "unconfirmed";
+  sourceUrl?: string;
+};
+
 type FacetValue = { value: string; count: number };
-type CatalogueFacets = { years: FacetValue[]; languages: FacetValue[]; countries: FacetValue[] };
-type Pagination = { limit: number; offset: number; total: number; hasMore: boolean };
-type PeriodCounts = { upcoming: number; next7Days: number; next30Days: number };
-type ApiResponse = {
+type MovieResponse = {
   movies: Movie[];
-  source: "d1" | "preview";
-  generatedAt: string;
-  catalogueUpdatedAt?: string;
-  stats?: CatalogueStats;
-  facets?: CatalogueFacets;
-  pagination?: Pagination;
-  periodCounts?: PeriodCounts;
+  pagination?: { limit: number; offset: number; total: number; hasMore: boolean };
+  facets?: { years: FacetValue[]; languages: FacetValue[]; countries: FacetValue[] };
+  periodCounts?: { upcoming: number; next7Days: number; next30Days: number };
+  stats?: { total: number; verified: number; supported: number; unconfirmed: number; activeSources: number };
 };
-
-const fallback: Movie[] = [
-  { id: "preview-1", title: "RANABAALI", language: "Telugu", countryCode: "IN", releaseDate: "2026-10-16", releaseYear: 2026, datePrecision: "day", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
-  { id: "preview-2", title: "KING", language: "Hindi", countryCode: "IN", releaseDate: "2026-12-24", releaseYear: 2026, datePrecision: "day", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
-  { id: "preview-3", title: "Jailer 2", language: "Tamil", countryCode: "IN", releaseDate: "2026-10-15", releaseYear: 2026, datePrecision: "day", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
-  { id: "preview-4", title: "Spirit", language: "Telugu", countryCode: "IN", releaseDate: "2027-03-05", releaseYear: 2027, datePrecision: "day", verificationStatus: "supported", releaseSource: "preview" },
-];
-const fallbackStats: CatalogueStats = { total: 4, verified: 3, supported: 1, unconfirmed: 0, activeSources: 0 };
-const fallbackFacets: CatalogueFacets = {
-  years: [{ value: "2026", count: 3 }, { value: "2027", count: 1 }],
-  languages: [{ value: "Telugu", count: 2 }, { value: "Hindi", count: 1 }, { value: "Tamil", count: 1 }],
-  countries: [{ value: "IN", count: 4 }],
+type SeriesResponse = {
+  series: SeriesTitle[];
+  pagination?: { limit: number; offset: number; total: number; hasMore: boolean };
+  facets?: { years: FacetValue[]; languages: FacetValue[]; countries: FacetValue[]; kinds: FacetValue[] };
+  stats?: { total: number; withFirstAirYear: number; webSeries: number; miniseries: number };
 };
-const fallbackPagination: Pagination = { limit: 60, offset: 0, total: 4, hasMore: false };
-const fallbackPeriods: PeriodCounts = { upcoming: 4, next7Days: 0, next30Days: 2 };
+type CatalogueCounts = { movies: number; series: number; total: number };
+type MovieFilters = { q: string; year: string; language: string; country: string };
+type SeriesFilters = MovieFilters & { kind: string };
 
 const countryNames: Record<string, string> = {
   IN: "India", US: "United States", GB: "United Kingdom", KR: "South Korea", JP: "Japan", FR: "France", DE: "Germany",
   IT: "Italy", ES: "Spain", CN: "China", HK: "Hong Kong", TW: "Taiwan", CA: "Canada", AU: "Australia", NZ: "New Zealand",
-  BR: "Brazil", MX: "Mexico", AR: "Argentina", TR: "Turkey", IR: "Iran", PK: "Pakistan", BD: "Bangladesh", LK: "Sri Lanka",
-  NP: "Nepal", ID: "Indonesia", TH: "Thailand", PH: "Philippines", NG: "Nigeria", EG: "Egypt",
+  BR: "Brazil", MX: "Mexico", AR: "Argentina", TR: "Turkey", PK: "Pakistan", BD: "Bangladesh", ID: "Indonesia", TH: "Thailand",
+};
+const kindLabels: Record<SeriesKind, string> = {
+  series: "Series", web_series: "Web series", miniseries: "Miniseries", anthology: "Anthology", unknown: "Series",
 };
 
-function parseDate(value: string) { return new Date(`${value}T00:00:00+05:30`); }
-function dateKey(date: Date) {
-  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" })
-    .formatToParts(date).map(({ type, value }) => [type, value]));
+function countryLabel(code?: string) { return !code ? "Global" : countryNames[code] ?? code; }
+function movieYear(movie: Movie) { return movie.releaseYear ?? Number(movie.releaseDate?.slice(0, 4) || 0); }
+function formatDate(value?: string) {
+  if (!value) return "Release date not confirmed";
+  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00+05:30`));
+}
+function kindLabel(kind: SeriesKind) { return kindLabels[kind] ?? "Series"; }
+function toneIndex(title: string) { return [...title].reduce((total, char) => total + char.charCodeAt(0), 0) % 8; }
+function firstLetter(title: string) { return title.trim().slice(0, 1).toUpperCase() || "C"; }
+function activeFilterCount(filters: Record<string, string>) { return Object.values(filters).filter((value) => value && value !== "all").length; }
+function indiaDateKey(date = new Date()) {
+  const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date).map(({ type, value }) => [type, value]));
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
-function addDaysKey(value: string, days: number) { return dateKey(new Date(parseDate(value).getTime() + days * 86_400_000)); }
-function todayKey() { return dateKey(new Date()); }
-function formatDate(value: string) { return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(parseDate(value)); }
-function movieYear(movie: Movie) { return movie.releaseYear ?? Number(movie.releaseDate?.slice(0, 4) || 0); }
-function isYearPrecision(movie: Movie) { return movie.datePrecision === "year" || !movie.releaseDate; }
-function releaseLabel(movie: Movie) {
-  if (movie.releaseDate) return formatDate(movie.releaseDate);
-  const year = movieYear(movie);
-  return year ? `${year} · year precision` : "Year not resolved";
+function addDaysKey(value: string, days: number) {
+  const instant = new Date(`${value}T00:00:00+05:30`);
+  instant.setDate(instant.getDate() + days);
+  return indiaDateKey(instant);
 }
-function countryLabel(code?: string) { return !code ? "Global" : countryNames[code] ?? code; }
-function sourceLabel(source?: string) {
-  if (!source || source === "wikidata") return "Wikidata";
-  if (source === "wikipedia") return "Wikipedia";
-  if (source === "official") return "Official source";
-  if (source === "preview") return "Preview";
-  return source.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
-}
-function artworkSourceLabel(source?: string) {
-  if (!source) return "Generated title artwork";
-  if (source === "official_youtube") return "Official YouTube artwork";
-  if (source === "official_social") return "Official social artwork";
-  if (source === "official_website") return "Official website artwork";
-  if (source === "wikimedia_commons") return "Wikimedia Commons";
-  return sourceLabel(source);
-}
-function movieSourceLabel(movie?: Movie) { return movie?.releaseSourceName?.trim() || sourceLabel(movie?.releaseSource); }
-function statusLabel(status: Movie["verificationStatus"]) {
-  if (status === "verified") return "Verified";
-  if (status === "supported") return "Supported";
-  return "Tracking";
-}
-function toneClass(movie: Movie) {
-  let total = 0;
-  for (const char of movie.title) total += char.charCodeAt(0);
-  return `tone-${total % 8}`;
-}
-function posterArtwork(movie: Movie) { return movie.posterUrl || movie.backdropUrl; }
-function heroArtwork(movie: Movie) { return movie.backdropUrl || movie.posterUrl; }
-function hasArtwork(movie: Movie) { return Boolean(posterArtwork(movie)); }
 
-function PosterCard({ movie, onOpen, rank }: { movie: Movie; onOpen: (movie: Movie) => void; rank?: number }) {
-  const artwork = posterArtwork(movie);
+function useCounts() {
+  const [counts, setCounts] = useState<CatalogueCounts>({ movies: 0, series: 0, total: 0 });
+  useEffect(() => {
+    fetch("/api/catalogue-stats").then((response) => response.ok ? response.json() as Promise<CatalogueCounts> : Promise.reject()).then(setCounts).catch(() => undefined);
+  }, []);
+  return counts;
+}
+
+function useMovies(query: Record<string, string>, limit = 60) {
+  const [payload, setPayload] = useState<MovieResponse>({ movies: [] });
+  const [loading, setLoading] = useState(true);
+  const queryKey = JSON.stringify(query);
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ limit: String(limit), offset: "0", ...query });
+    setLoading(true);
+    fetch(`/api/movies?${params}`, { signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error("movies unavailable"); return response.json() as Promise<MovieResponse>; })
+      .then(setPayload).catch(() => undefined).finally(() => setLoading(false));
+    return () => controller.abort();
+  }, [queryKey, limit]);
+  return { payload, loading };
+}
+
+function useSeries(query: Record<string, string>, limit = 60) {
+  const [payload, setPayload] = useState<SeriesResponse>({ series: [] });
+  const [loading, setLoading] = useState(true);
+  const queryKey = JSON.stringify(query);
+  useEffect(() => {
+    const controller = new AbortController();
+    const params = new URLSearchParams({ limit: String(limit), offset: "0", ...query });
+    setLoading(true);
+    fetch(`/api/series?${params}`, { signal: controller.signal })
+      .then((response) => { if (!response.ok) throw new Error("series unavailable"); return response.json() as Promise<SeriesResponse>; })
+      .then(setPayload).catch(() => undefined).finally(() => setLoading(false));
+    return () => controller.abort();
+  }, [queryKey, limit]);
+  return { payload, loading };
+}
+
+function useModalLock(active: boolean, onClose: () => void) {
+  useEffect(() => {
+    if (!active) return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", onKey); };
+  }, [active, onClose]);
+}
+
+function TopNav() {
   return (
-    <button className="poster-button" onClick={() => onOpen(movie)} aria-label={`Open details for ${movie.title}`}>
-      {rank ? <span className="rank-number">{rank}</span> : null}
-      <article className={`poster-card ${toneClass(movie)} ${artwork ? "has-artwork" : ""}`}>
-        {artwork ? <img className="poster-artwork" src={artwork} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
-        <div className="poster-grain" />
-        <div className="poster-status"><span className={movie.verificationStatus} />{statusLabel(movie.verificationStatus)}</div>
-        <div className="poster-copy">
-          <p>{movie.language || "Cinema"}</p>
-          <h3>{movie.title}</h3>
-          <div><span>{movieYear(movie) || "—"}</span><span>•</span><span>{countryLabel(movie.countryCode)}</span></div>
-        </div>
-        <div className="poster-hover">
-          <span className="play-orb">ⓘ</span>
-          <strong>{releaseLabel(movie)}</strong>
-          <small>{movieSourceLabel(movie)}</small>
-        </div>
-      </article>
+    <header className="top-nav">
+      <Link className="brand" to="/"><span>CINEMA</span><b>& SERIES</b></Link>
+      <nav className="primary-links" aria-label="Primary navigation">
+        <NavLink end to="/">Home</NavLink>
+        <NavLink to="/movies">Movies</NavLink>
+        <NavLink to="/series">Series</NavLink>
+        <NavLink to="/upcoming">Upcoming</NavLink>
+      </nav>
+      <div className="nav-end"><span className="live-dot" /><span>Live catalogue</span></div>
+    </header>
+  );
+}
+
+function MobileNav() {
+  return (
+    <nav className="mobile-nav-v2" aria-label="Mobile navigation">
+      <NavLink end to="/"><span>⌂</span><small>Home</small></NavLink>
+      <NavLink to="/movies"><span>▣</span><small>Movies</small></NavLink>
+      <NavLink to="/series"><span>▤</span><small>Series</small></NavLink>
+      <NavLink to="/upcoming"><span>◷</span><small>Upcoming</small></NavLink>
+    </nav>
+  );
+}
+
+function MovieCard({ movie, onOpen }: { movie: Movie; onOpen: (movie: Movie) => void }) {
+  const artwork = movie.posterUrl || movie.backdropUrl;
+  return (
+    <button className={`media-card movie-card tone-${toneIndex(movie.title)}`} onClick={() => onOpen(movie)}>
+      <div className="media-art">
+        {artwork ? <img src={artwork} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
+        {!artwork ? <span className="fallback-letter">{firstLetter(movie.title)}</span> : null}
+        {movie.verificationStatus === "verified" ? <em className="quality-pill">Verified</em> : null}
+      </div>
+      <div className="media-copy"><strong>{movie.title}</strong><span>{movieYear(movie) || "—"} · {movie.language || "Cinema"}</span></div>
     </button>
   );
 }
 
-function MovieDetail({ movie, onClose, onFeature }: { movie: Movie; onClose: () => void; onFeature: (movie: Movie) => void }) {
-  const artwork = heroArtwork(movie);
-  const isVerified = movie.verificationStatus === "verified";
-  const yearPrecision = isYearPrecision(movie);
-  const nativeTitle = movie.nativeTitle?.trim() && movie.nativeTitle.trim().toLocaleLowerCase() !== movie.title.trim().toLocaleLowerCase()
-    ? movie.nativeTitle.trim()
-    : undefined;
-
+function SeriesCard({ item, onOpen }: { item: SeriesTitle; onOpen: (item: SeriesTitle) => void }) {
   return (
-    <div className="detail-overlay" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <section className={`detail-dialog ${toneClass(movie)}`} role="dialog" aria-modal="true" aria-labelledby="movie-detail-title">
-        <span className="detail-drag-handle" aria-hidden="true" />
-        <button className="detail-close" type="button" onClick={onClose} aria-label="Close movie details">×</button>
-        <div className="detail-visual">
-          <div className="detail-artwork-fallback" aria-hidden="true"><span>{movie.title.slice(0, 1)}</span></div>
-          {artwork ? <img className="detail-artwork" src={artwork} alt="" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
-          <div className="detail-title-block">
-            <div className="detail-eyebrow"><i /> Cinema & Series</div>
-            <h2 id="movie-detail-title">{movie.title}</h2>
-            {nativeTitle ? <p className="detail-native-title">{nativeTitle}</p> : null}
-          </div>
+    <button className={`media-card series-poster tone-${toneIndex(item.title)}`} onClick={() => onOpen(item)}>
+      <div className="media-art series-fallback"><span className="fallback-letter">{firstLetter(item.title)}</span><em className="kind-pill">{kindLabel(item.seriesKind)}</em></div>
+      <div className="media-copy"><strong>{item.title}</strong><span>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"}</span></div>
+    </button>
+  );
+}
+
+function Row({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {
+  return <section className="content-row"><div className="row-title"><h2>{title}</h2>{action}</div><div className="horizontal-rail">{children}</div></section>;
+}
+
+function MovieDetail({ movie, onClose }: { movie: Movie; onClose: () => void }) {
+  useModalLock(true, onClose);
+  return (
+    <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <article className={`detail-sheet tone-${toneIndex(movie.title)}`} role="dialog" aria-modal="true">
+        <button className="modal-close" onClick={onClose}>×</button>
+        <div className="detail-hero">
+          {(movie.backdropUrl || movie.posterUrl) ? <img src={movie.backdropUrl || movie.posterUrl} alt="" referrerPolicy="no-referrer" /> : <span>{firstLetter(movie.title)}</span>}
+          <div><p>MOVIE</p><h2>{movie.title}</h2><small>{formatDate(movie.releaseDate)} · {movie.language} · {countryLabel(movie.countryCode)}</small></div>
         </div>
-        <div className="detail-body">
-          <div className="detail-primary">
-            <div className="detail-meta">
-              <b className={movie.verificationStatus}>{statusLabel(movie.verificationStatus)}</b>
-              <span className="dot">•</span><span>{releaseLabel(movie)}</span>
-              <span className="dot">•</span><span>{movie.language || "Unknown language"}</span>
-              <span className="dot">•</span><span>{countryLabel(movie.countryCode)}</span>
-            </div>
-            <p className="detail-summary">
-              {yearPrecision
-                ? `Wikipedia currently places this title in the ${movieYear(movie)} film catalogue. This discovery record claims the year only; no exact release day is being invented.`
-                : isVerified
-                  ? `This release date is verified against first-party evidence from ${movieSourceLabel(movie)}.`
-                  : movie.verificationStatus === "supported"
-                    ? `This date is supported by the catalogue evidence currently available. First-party confirmation is still being monitored.`
-                    : `This title is being tracked while stronger release evidence is collected. Treat the exact date as unconfirmed until verification improves.`}
-            </p>
-            <div className="detail-actions">
-              <button className="detail-feature" type="button" onClick={() => onFeature(movie)}><span>▶</span> Feature this title</button>
-              {movie.artworkSourceUrl ? <a className="detail-source-link" href={movie.artworkSourceUrl} target="_blank" rel="noreferrer noopener">Artwork source ↗</a> : null}
-            </div>
-          </div>
-          <aside className="detail-evidence" aria-label="Movie evidence summary">
-            <div className="detail-evidence-row">
-              <span>Release status</span>
-              <strong>{yearPrecision ? "Year-level discovery" : statusLabel(movie.verificationStatus)}</strong>
-              <small>{yearPrecision ? "Exact day/month not claimed" : isVerified ? "First-party date confirmation captured" : "Evidence monitoring remains active"}</small>
-            </div>
-            <div className="detail-evidence-row">
-              <span>Release evidence</span>
-              <strong>{movieSourceLabel(movie)}</strong>
-              <small>{yearPrecision ? "Supports catalogue year only, not an exact release day" : isVerified ? "Used to verify the listed release date" : "Current catalogue source"}</small>
-            </div>
-            <div className="detail-evidence-row">
-              <span>Visual provenance</span>
-              <strong>{artworkSourceLabel(movie.artworkSource)}</strong>
-              <small>{movie.artworkSource ? "Artwork provenance tracked separately from release verification" : "Fallback visual generated by the interface"}</small>
-            </div>
-          </aside>
+        <div className="detail-content">
+          <p>{movie.datePrecision === "year" || !movie.releaseDate ? "This catalogue record currently supports the release year only. Exact day and month are not inferred." : movie.verificationStatus === "verified" ? `Release information is verified against ${movie.releaseSourceName || "a first-party source"}.` : "This title is in the catalogue while stronger first-party release evidence is still being collected."}</p>
+          <div className="detail-facts"><span><b>Year</b>{movieYear(movie) || "—"}</span><span><b>Language</b>{movie.language || "Unknown"}</span><span><b>Country</b>{countryLabel(movie.countryCode)}</span><span><b>Status</b>{movie.verificationStatus === "verified" ? "Verified" : "Catalogue"}</span></div>
         </div>
-      </section>
+      </article>
     </div>
   );
 }
 
-export default function App() {
-  const [movies, setMovies] = useState<Movie[]>(fallback);
-  const [hero, setHero] = useState<Movie>(fallback[0]);
-  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
-  const [stats, setStats] = useState<CatalogueStats>(fallbackStats);
-  const [facets, setFacets] = useState<CatalogueFacets>(fallbackFacets);
-  const [pagination, setPagination] = useState<Pagination>(fallbackPagination);
-  const [periodCounts, setPeriodCounts] = useState<PeriodCounts>(fallbackPeriods);
-  const [source, setSource] = useState<ApiResponse["source"]>("preview");
-  const [activeLanguage, setActiveLanguage] = useState("All");
-  const [activeCountry, setActiveCountry] = useState("All");
-  const [activePeriod, setActivePeriod] = useState("all");
-  const [officialOnly, setOfficialOnly] = useState(false);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
-  const [filtersOpen, setFiltersOpen] = useState(false);
-
-  const today = todayKey();
-  const sevenDayEnd = addDaysKey(today, 6);
-  const thirtyDayEnd = addDaysKey(today, 29);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => setDebouncedSearch(searchQuery.trim()), 240);
-    return () => window.clearTimeout(timer);
-  }, [searchQuery]);
-
-  useEffect(() => {
-    if (!selectedMovie) return;
-    const previousOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setSelectedMovie(null);
-    };
-    window.addEventListener("keydown", onKeyDown);
-    window.requestAnimationFrame(() => document.querySelector<HTMLButtonElement>(".detail-close")?.focus());
-    return () => {
-      document.body.style.overflow = previousOverflow;
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [selectedMovie]);
-
-  function buildCatalogueUrl(offset: number) {
-    const params = new URLSearchParams({ limit: "60", offset: String(offset) });
-    if (activePeriod === "all") params.set("scope", "all");
-    else if (/^\d{4}$/.test(activePeriod)) { params.set("scope", "all"); params.set("year", activePeriod); }
-    else {
-      params.set("scope", "upcoming");
-      params.set("from", today);
-      if (activePeriod === "7d") params.set("to", sevenDayEnd);
-      else if (activePeriod === "30d") params.set("to", thirtyDayEnd);
-      else params.set("to", addDaysKey(today, 730));
-    }
-    if (debouncedSearch) params.set("q", debouncedSearch);
-    if (activeLanguage !== "All") params.set("language", activeLanguage);
-    if (activeCountry !== "All") params.set("country", activeCountry);
-    if (officialOnly) params.set("official", "1");
-    return `/api/movies?${params}`;
-  }
-
-  function applyResponse(data: ApiResponse, append: boolean) {
-    setMovies((current) => append ? [...current, ...data.movies.filter((movie) => !current.some((item) => item.id === movie.id))] : data.movies);
-    if (data.stats) setStats(data.stats);
-    if (data.facets) setFacets(data.facets);
-    if (data.pagination) setPagination(data.pagination);
-    if (data.periodCounts) setPeriodCounts(data.periodCounts);
-    setSource(data.source);
-    if (!append && !debouncedSearch && activeLanguage === "All" && activeCountry === "All" && data.movies.length) {
-      setHero(
-        data.movies.find((movie) => movie.verificationStatus === "verified" && hasArtwork(movie))
-        ?? data.movies.find((movie) => movie.verificationStatus === "verified")
-        ?? data.movies.find(hasArtwork)
-        ?? data.movies[0],
-      );
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    setLoading(true);
-    fetch(buildCatalogueUrl(0), { signal: controller.signal })
-      .then((response) => { if (!response.ok) throw new Error("Movie API unavailable"); return response.json() as Promise<ApiResponse>; })
-      .then((data) => applyResponse(data, false))
-      .catch(() => undefined)
-      .finally(() => setLoading(false));
-    return () => controller.abort();
-  }, [activeCountry, activeLanguage, activePeriod, debouncedSearch, officialOnly]);
-
-  function openMovie(movie: Movie) { setSelectedMovie(movie); }
-  function featureMovie(movie: Movie) {
-    setHero(movie);
-    setSelectedMovie(null);
-    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
-  }
-
-  function loadMore() {
-    if (loadingMore || !pagination.hasMore) return;
-    setLoadingMore(true);
-    fetch(buildCatalogueUrl(movies.length))
-      .then((response) => { if (!response.ok) throw new Error("Movie API unavailable"); return response.json() as Promise<ApiResponse>; })
-      .then((data) => applyResponse(data, true))
-      .catch(() => undefined)
-      .finally(() => setLoadingMore(false));
-  }
-
-  function resetBrowseFilters() {
-    setActivePeriod("all");
-    setActiveLanguage("All");
-    setActiveCountry("All");
-  }
-
-  const verified = useMemo(() => movies.filter((movie) => movie.verificationStatus === "verified"), [movies]);
-  const arriving = useMemo(
-    () => movies.filter((movie) => Boolean(movie.releaseDate) && movie.releaseDate! >= today).sort((a, b) => a.releaseDate!.localeCompare(b.releaseDate!)),
-    [movies, today],
-  );
-  const featured = verified.length ? verified : (arriving.length ? arriving : movies);
-  const languages = useMemo(() => ["All", ...facets.languages.slice(0, 40).map((item) => item.value)], [facets.languages]);
-  const countries = useMemo(() => ["All", ...facets.countries.slice(0, 40).map((item) => item.value)], [facets.countries]);
-  const years = useMemo(() => facets.years.slice(0, 40), [facets.years]);
-  const activeHeroArtwork = heroArtwork(hero);
-  const heroYearPrecision = isYearPrecision(hero);
-  const activeFilterCount = (activePeriod !== "all" ? 1 : 0) + (activeLanguage !== "All" ? 1 : 0) + (activeCountry !== "All" ? 1 : 0);
-  const browseTitle = debouncedSearch
-    ? `Results for “${debouncedSearch}”`
-    : activeLanguage !== "All"
-      ? `${activeLanguage} movies`
-      : activeCountry !== "All"
-        ? `${countryLabel(activeCountry)} movies`
-        : activePeriod === "upcoming"
-          ? "Upcoming movies"
-          : activePeriod === "30d"
-            ? "Next 30 days"
-            : /^\d{4}$/.test(activePeriod)
-              ? `${activePeriod} movies`
-              : "Explore movies";
-
+function SeriesDetail({ item, onClose }: { item: SeriesTitle; onClose: () => void }) {
+  useModalLock(true, onClose);
   return (
-    <main className="stream-app">
-      <header className="stream-nav">
-        <a className="stream-brand" href="#top"><span>CINEMA</span><b>& SERIES</b></a>
-        <nav className="desktop-nav" aria-label="Primary navigation">
-          <a className="active" href="#top">Home</a><a href="#upcoming">Upcoming</a><a href="#series">Series</a><a href="#browse">Movies</a>
-        </nav>
-        <div className="nav-actions">
-          <button className="icon-button" onClick={() => setSearchOpen((value) => !value)} aria-label="Toggle search">⌕</button>
-          <button className={`verified-nav ${officialOnly ? "active" : ""}`} onClick={() => setOfficialOnly((value) => !value)}>✓ Verified</button>
-          <span className={`service-dot ${source === "d1" ? "live" : ""}`} title={source === "d1" ? "Live catalogue" : "Preview catalogue"} />
+    <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
+      <article className={`detail-sheet tone-${toneIndex(item.title)}`} role="dialog" aria-modal="true">
+        <button className="modal-close" onClick={onClose}>×</button>
+        <div className="detail-hero"><span>{firstLetter(item.title)}</span><div><p>{kindLabel(item.seriesKind).toUpperCase()}</p><h2>{item.title}</h2><small>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"} · {countryLabel(item.countryCode)}</small></div></div>
+        <div className="detail-content">
+          <p>Series information stays inside Cinema & Series. External references are sources, not the browsing experience.</p>
+          <div className="detail-facts"><span><b>Format</b>{kindLabel(item.seriesKind)}</span><span><b>Status</b>{item.lifecycleStatus === "unknown" ? "Not classified" : item.lifecycleStatus}</span><span><b>Seasons</b>{item.seasonCount ?? "—"}</span><span><b>Episodes</b>{item.episodeCount ?? "—"}</span></div>
+          {(item.sourceUrl || item.wikidataQid) ? <div className="source-links">{item.sourceUrl ? <a href={item.sourceUrl} target="_blank" rel="noreferrer noopener">Wikipedia source ↗</a> : null}{item.wikidataQid ? <a href={`https://www.wikidata.org/wiki/${item.wikidataQid}`} target="_blank" rel="noreferrer noopener">Wikidata ↗</a> : null}</div> : null}
         </div>
-      </header>
+      </article>
+    </div>
+  );
+}
 
-      <section id="top" className={`stream-hero ${toneClass(hero)} ${activeHeroArtwork ? "has-artwork" : ""}`}>
-        <div className="hero-art">
-          {activeHeroArtwork ? <img className="hero-backdrop" src={activeHeroArtwork} alt="" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
-          <div className="hero-orb" /><div className="hero-lines" /><span className="hero-monogram">{hero.title.slice(0, 1)}</span>
-        </div>
-        <div className="hero-vignette" />
-        <div className="stream-hero-copy">
-          <div className="series-label"><span>N</span> {heroYearPrecision ? "CATALOGUE FEATURE" : "FEATURED RELEASE"}</div>
-          <h1>{hero.title}</h1>
-          <div className="hero-meta">
-            <strong className={hero.verificationStatus}>{statusLabel(hero.verificationStatus)}</strong>
-            <span>{releaseLabel(hero)}</span><span>{hero.language || "Cinema"}</span><span>{countryLabel(hero.countryCode)}</span>
-          </div>
-          <p>{heroYearPrecision
-            ? `${movieYear(hero)} · ${hero.language || "Cinema"} · ${countryLabel(hero.countryCode)}`
-            : hero.verificationStatus === "verified"
-              ? `Official release date confirmed through ${movieSourceLabel(hero)}.`
-              : `Release information is currently being tracked.`}</p>
-          <div className="hero-buttons">
-            <a className="play-button" href="#browse"><span>▶</span> Explore movies</a>
-            <button className="info-button" onClick={() => setSelectedMovie(hero)}><span>ⓘ</span> More info</button>
-          </div>
-        </div>
-        <div className="hero-stats"><span>{stats.total.toLocaleString("en-IN")} MOVIES</span><i /><span>{stats.activeSources} OFFICIAL SOURCES</span></div>
+function HomePage() {
+  const counts = useCounts();
+  const upcoming = useMovies({ scope: "upcoming" }, 40);
+  const series = useSeries({}, 18);
+  const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
+  const [selectedSeries, setSelectedSeries] = useState<SeriesTitle | null>(null);
+  const hero = upcoming.payload.movies.find((item) => item.verificationStatus === "verified" && (item.backdropUrl || item.posterUrl)) ?? upcoming.payload.movies.find((item) => item.verificationStatus === "verified") ?? upcoming.payload.movies[0];
+  const verified = upcoming.payload.movies.filter((item) => item.verificationStatus === "verified").slice(0, 12);
+  const coming = upcoming.payload.movies.filter((item) => item.releaseDate).slice(0, 14);
+  return (
+    <main className="page home-page">
+      <section className={`home-hero tone-${toneIndex(hero?.title || "Cinema")}`}>
+        {hero?.backdropUrl || hero?.posterUrl ? <img src={hero.backdropUrl || hero.posterUrl} alt="" referrerPolicy="no-referrer" /> : null}
+        <div className="home-hero-shade" />
+        <div className="home-hero-copy"><p>FEATURED RELEASE</p><h1>{hero?.title || "Cinema & Series"}</h1><span>{hero ? `${formatDate(hero.releaseDate)} · ${hero.language}` : "Movies and series, one cinematic home."}</span><div className="hero-actions">{hero ? <button onClick={() => setSelectedMovie(hero)}>ⓘ More info</button> : null}<Link to="/movies">Browse movies</Link></div></div>
       </section>
-
-      <div className={`search-panel ${searchOpen || searchQuery ? "open" : ""}`}>
-        <span>⌕</span><input value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="Search movies…" aria-label="Search catalogue" />
-        {searchQuery && <button onClick={() => setSearchQuery("")}>Clear</button>}
+      <div className="home-content">
+        <Row title="Verified releases" action={<Link to="/upcoming">See all</Link>}>{verified.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelectedMovie} />)}</Row>
+        <Row title="Coming soon" action={<Link to="/upcoming">See all</Link>}>{coming.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelectedMovie} />)}</Row>
+        <Row title="Series to discover" action={<Link to="/series">Explore series</Link>}>{series.payload.series.slice(0, 14).map((item) => <SeriesCard key={item.id} item={item} onOpen={setSelectedSeries} />)}</Row>
+        <section className="home-library-callout"><div><p>EXPLORE THE LIBRARY</p><h2>{counts.total.toLocaleString("en-IN")} titles and growing</h2><span>{counts.movies.toLocaleString("en-IN")} movies · {counts.series.toLocaleString("en-IN")} series</span></div><div><Link to="/movies">Movies</Link><Link to="/series">Series</Link></div></section>
       </div>
-
-      <section className="content-stage">
-        <div className="stream-row first-row">
-          <div className="row-heading"><h2>Verified releases</h2><span>{stats.verified} official dates</span></div>
-          <div className="poster-rail rank-rail">
-            {featured.slice(0, 10).map((movie, index) => <PosterCard key={movie.id} movie={movie} onOpen={openMovie} rank={index + 1} />)}
-          </div>
-        </div>
-
-        <div id="upcoming" className="stream-row">
-          <div className="row-heading"><h2>Coming soon</h2><span>{periodCounts.upcoming} tracked</span></div>
-          <div className="poster-rail">
-            {arriving.slice(0, 14).map((movie) => <PosterCard key={movie.id} movie={movie} onOpen={openMovie} />)}
-          </div>
-        </div>
-
-        <section id="browse" className="browse-section">
-          <div className="browse-heading browse-heading-clean">
-            <div><h2>{browseTitle}</h2></div>
-            <div className="browse-heading-actions">
-              <span>{pagination.total.toLocaleString("en-IN")} titles</span>
-              <button className={`browse-filter-toggle ${filtersOpen ? "active" : ""}`} onClick={() => setFiltersOpen((value) => !value)}>
-                Filters{activeFilterCount ? <b>{activeFilterCount}</b> : null}
-              </button>
-            </div>
-          </div>
-
-          <div className="browse-quick-tabs" aria-label="Movie catalogue views">
-            <button className={activePeriod === "all" ? "active" : ""} onClick={() => setActivePeriod("all")}>All movies</button>
-            <button className={activePeriod === "upcoming" ? "active" : ""} onClick={() => setActivePeriod("upcoming")}>Upcoming</button>
-            <button className={activePeriod === "30d" ? "active" : ""} onClick={() => setActivePeriod("30d")}>Next 30 days</button>
-          </div>
-
-          {filtersOpen ? (
-            <div className="browse-filter-panel">
-              <label>
-                <span>Release year</span>
-                <select value={activePeriod} onChange={(event) => setActivePeriod(event.target.value)}>
-                  <option value="all">All years</option>
-                  <option value="upcoming">Upcoming</option>
-                  <option value="30d">Next 30 days</option>
-                  {years.map(({ value }) => <option key={value} value={value}>{value}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>Language</span>
-                <select value={activeLanguage} onChange={(event) => setActiveLanguage(event.target.value)}>
-                  {languages.map((language) => <option key={language} value={language}>{language === "All" ? "All languages" : language}</option>)}
-                </select>
-              </label>
-              <label>
-                <span>Country</span>
-                <select value={activeCountry} onChange={(event) => setActiveCountry(event.target.value)}>
-                  {countries.map((country) => <option key={country} value={country}>{country === "All" ? "All countries" : countryLabel(country)}</option>)}
-                </select>
-              </label>
-              <button className="browse-reset" type="button" onClick={resetBrowseFilters} disabled={!activeFilterCount}>Reset</button>
-            </div>
-          ) : null}
-
-          {loading && <div className="skeleton-grid">{Array.from({ length: 12 }).map((_, index) => <div className="skeleton-card" key={index} />)}</div>}
-          {!loading && movies.length > 0 && <div className="catalogue-grid">{movies.map((movie) => <PosterCard key={movie.id} movie={movie} onOpen={openMovie} />)}</div>}
-          {!loading && !movies.length && <div className="empty"><span>⌕</span><h3>No titles found</h3><p>Try changing the filters or search.</p></div>}
-          {pagination.hasMore && <button className="load-more" onClick={loadMore} disabled={loadingMore}>{loadingMore ? "Loading…" : "Load more"}</button>}
-        </section>
-      </section>
-
-      <footer className="stream-footer"><div className="stream-brand"><span>CINEMA</span><b>& SERIES</b></div><p>India-first release intelligence · global cinema catalogue</p><small>{stats.total.toLocaleString("en-IN")} movies · {facets.languages.length} languages · {stats.activeSources} official sources</small></footer>
-
-      <nav className="mobile-nav" aria-label="Mobile navigation">
-        <a href="#top"><span>⌂</span><small>Home</small></a><a href="#upcoming"><span>◷</span><small>Upcoming</small></a><button onClick={() => setSearchOpen(true)}><span>⌕</span><small>Search</small></button><a href="#browse"><span>▦</span><small>Movies</small></a>
-      </nav>
-
-      {selectedMovie ? <MovieDetail movie={selectedMovie} onClose={() => setSelectedMovie(null)} onFeature={featureMovie} /> : null}
+      {selectedMovie ? <MovieDetail movie={selectedMovie} onClose={() => setSelectedMovie(null)} /> : null}
+      {selectedSeries ? <SeriesDetail item={selectedSeries} onClose={() => setSelectedSeries(null)} /> : null}
     </main>
+  );
+}
+
+function FilterButton({ open, count, onClick }: { open: boolean; count: number; onClick: () => void }) {
+  return <button className={`filter-button ${open ? "active" : ""}`} onClick={onClick}>☰ Filters{count ? <b>{count}</b> : null}</button>;
+}
+
+function MoviesPage() {
+  const counts = useCounts();
+  const [filters, setFilters] = useState<MovieFilters>({ q: "", year: "all", language: "all", country: "all" });
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [selected, setSelected] = useState<Movie | null>(null);
+  const query = useMemo(() => ({ scope: "all", ...(filters.q ? { q: filters.q } : {}), ...(filters.year !== "all" ? { year: filters.year } : {}), ...(filters.language !== "all" ? { language: filters.language } : {}), ...(filters.country !== "all" ? { country: filters.country } : {}) }), [filters]);
+  const all = useMovies(query, 60);
+  const coming = useMovies({ scope: "upcoming" }, 14);
+  const facets = all.payload.facets;
+  return (
+    <main className="page library-page">
+      <section className="library-hero movie-library-hero"><div><p>MOVIES</p><h1>Movies</h1><span>Discover cinema by language, country and year.</span></div><b>{counts.movies.toLocaleString("en-IN")} titles</b></section>
+      <Row title="New & upcoming" action={<Link to="/upcoming">View upcoming</Link>}>{coming.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</Row>
+      <section className="catalogue-section">
+        <div className="catalogue-heading"><div><h2>Explore movies</h2><span>{all.payload.pagination?.total?.toLocaleString("en-IN") || counts.movies.toLocaleString("en-IN")} titles</span></div><div className="catalogue-tools"><input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Search movies" /><FilterButton open={filterOpen} count={activeFilterCount({ year: filters.year, language: filters.language, country: filters.country })} onClick={() => setFilterOpen((value) => !value)} /></div></div>
+        {filterOpen ? <div className="filter-panel"><label>Year<select value={filters.year} onChange={(event) => setFilters((current) => ({ ...current, year: event.target.value }))}><option value="all">All years</option>{facets?.years.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Language<select value={filters.language} onChange={(event) => setFilters((current) => ({ ...current, language: event.target.value }))}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Country<select value={filters.country} onChange={(event) => setFilters((current) => ({ ...current, country: event.target.value }))}><option value="all">All countries</option>{facets?.countries.map((item) => <option key={item.value} value={item.value}>{countryLabel(item.value)}</option>)}</select></label><button onClick={() => setFilters({ q: "", year: "all", language: "all", country: "all" })}>Reset</button></div> : null}
+        {all.loading ? <CardSkeletons /> : <div className="media-grid">{all.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</div>}
+      </section>
+      {selected ? <MovieDetail movie={selected} onClose={() => setSelected(null)} /> : null}
+    </main>
+  );
+}
+
+function SeriesPage() {
+  const counts = useCounts();
+  const [filters, setFilters] = useState<SeriesFilters>({ q: "", year: "all", language: "all", country: "all", kind: "all" });
+  const [filterOpen, setFilterOpen] = useState(false);
+  const [selected, setSelected] = useState<SeriesTitle | null>(null);
+  const query = useMemo(() => ({ ...(filters.q ? { q: filters.q } : {}), ...(filters.year !== "all" ? { year: filters.year } : {}), ...(filters.language !== "all" ? { language: filters.language } : {}), ...(filters.country !== "all" ? { country: filters.country } : {}), ...(filters.kind !== "all" ? { kind: filters.kind } : {}) }), [filters]);
+  const all = useSeries(query, 60);
+  const facets = all.payload.facets;
+  return (
+    <main className="page library-page series-library-page">
+      <section className="library-hero series-library-hero"><div><p>SERIES</p><h1>Series</h1><span>Shows from India and around the world, in their own dedicated library.</span></div><b>{counts.series.toLocaleString("en-IN")} titles</b></section>
+      <section className="spotlight-strip"><div><small>DISCOVER SERIES</small><h2>Find your next show</h2><p>Browse by language, country, debut year or format. Genre browsing will appear when genre metadata is available in the catalogue.</p></div></section>
+      <section className="catalogue-section series-catalogue-section">
+        <div className="catalogue-heading"><div><h2>Explore series</h2><span>{all.payload.pagination?.total?.toLocaleString("en-IN") || counts.series.toLocaleString("en-IN")} titles</span></div><div className="catalogue-tools"><input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Search series" /><FilterButton open={filterOpen} count={activeFilterCount({ year: filters.year, language: filters.language, country: filters.country, kind: filters.kind })} onClick={() => setFilterOpen((value) => !value)} /></div></div>
+        {filterOpen ? <div className="filter-panel four"><label>Language<select value={filters.language} onChange={(event) => setFilters((current) => ({ ...current, language: event.target.value }))}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Country<select value={filters.country} onChange={(event) => setFilters((current) => ({ ...current, country: event.target.value }))}><option value="all">All countries</option>{facets?.countries.map((item) => <option key={item.value} value={item.value}>{countryLabel(item.value)}</option>)}</select></label><label>Year<select value={filters.year} onChange={(event) => setFilters((current) => ({ ...current, year: event.target.value }))}><option value="all">All years</option>{facets?.years.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Format<select value={filters.kind} onChange={(event) => setFilters((current) => ({ ...current, kind: event.target.value }))}><option value="all">All formats</option>{facets?.kinds.filter((item) => item.value !== "unknown").map((item) => <option key={item.value} value={item.value}>{kindLabel(item.value as SeriesKind)}</option>)}</select></label><button onClick={() => setFilters({ q: "", year: "all", language: "all", country: "all", kind: "all" })}>Reset</button></div> : null}
+        {all.loading ? <CardSkeletons /> : <div className="media-grid">{all.payload.series.map((item) => <SeriesCard key={item.id} item={item} onOpen={setSelected} />)}</div>}
+      </section>
+      {selected ? <SeriesDetail item={selected} onClose={() => setSelected(null)} /> : null}
+    </main>
+  );
+}
+
+function UpcomingPage() {
+  const [window, setWindow] = useState<"all" | "30d" | "7d">("all");
+  const [language, setLanguage] = useState("all");
+  const [selected, setSelected] = useState<Movie | null>(null);
+  const today = indiaDateKey();
+  const query = useMemo(() => ({ scope: "upcoming", from: today, ...(window === "7d" ? { to: addDaysKey(today, 6) } : window === "30d" ? { to: addDaysKey(today, 29) } : {}), ...(language !== "all" ? { language } : {}) }), [window, language, today]);
+  const data = useMovies(query, 80);
+  const facets = data.payload.facets;
+  return (
+    <main className="page upcoming-page">
+      <section className="library-hero upcoming-hero"><div><p>UPCOMING</p><h1>Coming soon</h1><span>Upcoming theatrical releases and tracked release dates.</span></div><b>{data.payload.pagination?.total?.toLocaleString("en-IN") || "—"} titles</b></section>
+      <section className="upcoming-controls"><div className="segmented"><button className={window === "all" ? "active" : ""} onClick={() => setWindow("all")}>All upcoming</button><button className={window === "30d" ? "active" : ""} onClick={() => setWindow("30d")}>Next 30 days</button><button className={window === "7d" ? "active" : ""} onClick={() => setWindow("7d")}>Next 7 days</button></div><select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></section>
+      <section className="catalogue-section compact-top">{data.loading ? <CardSkeletons /> : <div className="media-grid">{data.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</div>}</section>
+      {selected ? <MovieDetail movie={selected} onClose={() => setSelected(null)} /> : null}
+    </main>
+  );
+}
+
+function CardSkeletons() { return <div className="media-grid">{Array.from({ length: 12 }).map((_, index) => <div className="card-skeleton" key={index} />)}</div>; }
+
+export default function App() {
+  return (
+    <div className="cs-app">
+      <TopNav />
+      <Routes>
+        <Route path="/" element={<HomePage />} />
+        <Route path="/movies" element={<MoviesPage />} />
+        <Route path="/series" element={<SeriesPage />} />
+        <Route path="/upcoming" element={<UpcomingPage />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+      <MobileNav />
+    </div>
   );
 }
