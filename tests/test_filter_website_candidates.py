@@ -1,8 +1,12 @@
 import importlib.util
+import sys
 import unittest
 from pathlib import Path
 
-MODULE_PATH = Path(__file__).resolve().parents[1] / "scripts" / "filter_website_candidates.py"
+SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+MODULE_PATH = SCRIPTS_DIR / "filter_website_candidates.py"
 spec = importlib.util.spec_from_file_location("filter_website_candidates", MODULE_PATH)
 module = importlib.util.module_from_spec(spec)
 assert spec and spec.loader
