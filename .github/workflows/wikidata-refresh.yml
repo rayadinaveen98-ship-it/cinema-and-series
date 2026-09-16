@@ -1,4 +1,4 @@
-name: Wikidata Candidate Refresh
+name: Catalogue Source Refresh
 
 on:
   workflow_dispatch:
@@ -8,7 +8,9 @@ on:
       - ".github/workflows/wikidata-refresh.yml"
       - "scripts/fetch_wikidata.py"
       - "scripts/wikidata_to_sql.py"
+      - "scripts/official_to_sql.py"
       - "scripts/cloudflare_bootstrap.py"
+      - "data/official/**"
       - "migrations/**"
   schedule:
     - cron: "17 */12 * * *"
@@ -29,15 +31,23 @@ jobs:
       - name: Fetch India film release candidates
         run: python scripts/fetch_wikidata.py
 
-      - name: Validate generated payload
+      - name: Validate Wikidata payload
         run: python -m json.tool data/generated/wikidata-india.json >/dev/null
 
-      - name: Build idempotent D1 SQL
+      - name: Build Wikidata D1 SQL
         run: python scripts/wikidata_to_sql.py
+
+      - name: Validate official source payloads
+        run: |
+          python -m json.tool data/official/source_registry.json >/dev/null
+          python -m json.tool data/official/releases.json >/dev/null
+
+      - name: Build official-source D1 SQL
+        run: python scripts/official_to_sql.py
 
       - uses: actions/upload-artifact@v4
         with:
-          name: wikidata-india-candidates
+          name: cinema-series-source-refresh
           path: data/generated/
           retention-days: 7
 
@@ -50,7 +60,7 @@ jobs:
             echo "Cloudflare credentials found; catalogue sync enabled."
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Cloudflare credentials are not configured; artifact generated but D1 sync skipped."
+            echo "Cloudflare credentials are not configured; artifacts generated but D1 sync skipped."
           fi
 
       - uses: actions/setup-node@v4
@@ -70,6 +80,10 @@ jobs:
         if: steps.cloudflare.outputs.ready == 'true'
         run: npx wrangler d1 migrations apply cinema-and-series --remote
 
-      - name: Sync candidates to D1
+      - name: Sync Wikidata candidates to D1
         if: steps.cloudflare.outputs.ready == 'true'
         run: npx wrangler d1 execute cinema-and-series --remote --file=data/generated/wikidata-upsert.sql
+
+      - name: Sync official sources and verified dates to D1
+        if: steps.cloudflare.outputs.ready == 'true'
+        run: npx wrangler d1 execute cinema-and-series --remote --file=data/generated/official-upsert.sql
