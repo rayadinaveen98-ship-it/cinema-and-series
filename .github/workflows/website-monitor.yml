@@ -7,8 +7,10 @@ on:
     paths:
       - ".github/workflows/website-monitor.yml"
       - "scripts/website_monitor.py"
+      - "scripts/filter_website_candidates.py"
       - "scripts/cloudflare_bootstrap.py"
       - "data/official/source_registry.json"
+      - "data/official/releases.json"
       - "migrations/**"
   schedule:
     - cron: "47 */6 * * *"
@@ -32,6 +34,9 @@ jobs:
 
       - name: Poll first-party studio websites
         run: python scripts/website_monitor.py
+
+      - name: Suppress already verified website signals
+        run: python scripts/filter_website_candidates.py
 
       - name: Validate website candidate payload
         run: python -m json.tool data/generated/website-release-candidates.json >/dev/null
@@ -77,5 +82,5 @@ jobs:
           if [[ -s data/generated/website-candidates-upsert.sql ]]; then
             npx wrangler d1 execute cinema-and-series --remote --file=data/generated/website-candidates-upsert.sql
           else
-            echo "No release-date candidates detected on monitored first-party websites."
+            echo "No new release-date candidates detected on monitored first-party websites."
           fi
