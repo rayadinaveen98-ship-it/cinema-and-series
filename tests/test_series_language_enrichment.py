@@ -31,6 +31,21 @@ class SeriesLanguageEnrichmentTests(unittest.TestCase):
         selected = module.select_candidates(rows, 10)
         self.assertEqual([row["id"] for row in selected], ["s1"])
 
+    def test_qid_shards_are_stable_and_disjoint(self):
+        rows = [
+            {"id": f"s{qid}", "wikidata_qid": f"Q{qid}", "language_name": "Unknown"}
+            for qid in range(1, 9)
+        ]
+        shard0 = module.select_candidates(rows, 10, shard_index=0, shard_count=2)
+        shard1 = module.select_candidates(rows, 10, shard_index=1, shard_count=2)
+        self.assertEqual([row["wikidata_qid"] for row in shard0], ["Q2", "Q4", "Q6", "Q8"])
+        self.assertEqual([row["wikidata_qid"] for row in shard1], ["Q1", "Q3", "Q5", "Q7"])
+        self.assertFalse({row["id"] for row in shard0} & {row["id"] for row in shard1})
+
+    def test_invalid_shard_index_is_rejected(self):
+        with self.assertRaises(ValueError):
+            module.select_candidates([], 10, shard_index=8, shard_count=8)
+
     def test_single_p364_claim_resolves(self):
         entity = {"claims": {"P364": [language_claim("Q1860")]}}
         self.assertEqual(module.claim_language_qids(entity), ("resolved", "Q1860"))
@@ -104,6 +119,31 @@ class SeriesLanguageEnrichmentTests(unittest.TestCase):
         self.assertEqual(called_params["maxlag"], "5")
         self.assertFalse(request_json.call_args_list[0].kwargs["post"])
         sleep.assert_called_once_with(7)
+
+    def test_wikidata_request_retries_http_200_maxlag_payload(self):
+        with mock.patch.object(
+            module.base,
+            "request_json",
+            side_effect=[
+                {"error": {"code": "maxlag", "lag": 7, "info": "Waiting for database replication lag"}},
+                {"entities": {}},
+            ],
+        ) as request_json, mock.patch.object(module.time, "sleep") as sleep:
+            payload = module.request_wikidata({"action": "wbgetentities", "ids": "Q1"})
+
+        self.assertEqual(payload, {"entities": {}})
+        self.assertEqual(request_json.call_count, 2)
+        sleep.assert_called_once_with(8)
+
+    def test_non_transient_wikidata_api_error_never_becomes_missing_metadata(self):
+        with mock.patch.object(
+            module.base,
+            "request_json",
+            return_value={"error": {"code": "badvalue", "info": "Invalid ids parameter"}},
+        ), mock.patch.object(module.time, "sleep") as sleep:
+            with self.assertRaisesRegex(RuntimeError, "Wikidata API error badvalue"):
+                module.request_wikidata({"action": "wbgetentities", "ids": "Q1"})
+        sleep.assert_not_called()
 
 
 if __name__ == "__main__":
