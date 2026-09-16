@@ -31,6 +31,21 @@ class SeriesLanguageEnrichmentTests(unittest.TestCase):
         selected = module.select_candidates(rows, 10)
         self.assertEqual([row["id"] for row in selected], ["s1"])
 
+    def test_qid_shards_are_stable_and_disjoint(self):
+        rows = [
+            {"id": f"s{qid}", "wikidata_qid": f"Q{qid}", "language_name": "Unknown"}
+            for qid in range(1, 9)
+        ]
+        shard0 = module.select_candidates(rows, 10, shard_index=0, shard_count=2)
+        shard1 = module.select_candidates(rows, 10, shard_index=1, shard_count=2)
+        self.assertEqual([row["wikidata_qid"] for row in shard0], ["Q2", "Q4", "Q6", "Q8"])
+        self.assertEqual([row["wikidata_qid"] for row in shard1], ["Q1", "Q3", "Q5", "Q7"])
+        self.assertFalse({row["id"] for row in shard0} & {row["id"] for row in shard1})
+
+    def test_invalid_shard_index_is_rejected(self):
+        with self.assertRaises(ValueError):
+            module.select_candidates([], 10, shard_index=8, shard_count=8)
+
     def test_single_p364_claim_resolves(self):
         entity = {"claims": {"P364": [language_claim("Q1860")]}}
         self.assertEqual(module.claim_language_qids(entity), ("resolved", "Q1860"))
