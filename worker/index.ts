@@ -11,6 +11,7 @@ type MovieRow = {
   release_date: string;
   verification_status: "verified" | "supported" | "unconfirmed";
   release_date_source: string;
+  release_source_name: string | null;
 };
 
 type StatsRow = {
@@ -29,11 +30,14 @@ type SourcesRow = {
 const previewMovies = [
   { id: "preview-1", title: "A Film in Production", language: "Telugu", releaseDate: "2026-09-18", verificationStatus: "unconfirmed", releaseSource: "preview" },
   { id: "preview-2", title: "Festival Premiere", language: "Malayalam", releaseDate: "2026-09-19", verificationStatus: "supported", releaseSource: "preview" },
-  { id: "preview-3", title: "Theatrical Release", language: "Tamil", releaseDate: "2026-09-25", verificationStatus: "verified", releaseSource: "official" },
+  { id: "preview-3", title: "Theatrical Release", language: "Tamil", releaseDate: "2026-09-25", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
   { id: "preview-4", title: "Coming Soon", language: "Kannada", releaseDate: "2026-10-02", verificationStatus: "unconfirmed", releaseSource: "preview" },
 ];
 
-const visibleMovieClause = "(wikidata_qid IS NULL OR title <> wikidata_qid)";
+const visibleMovieClause = "(m.wikidata_qid IS NULL OR m.title <> m.wikidata_qid)";
+const movieColumns = `m.id, m.wikidata_qid, m.title, m.native_title, m.language_name, m.release_date,
+  m.verification_status, m.release_date_source, s.source_name AS release_source_name`;
+const movieSourceJoin = "LEFT JOIN source_channels s ON s.source_key = m.release_date_source";
 
 function json(data: unknown, status = 200) {
   return Response.json(data, {
@@ -71,34 +75,35 @@ export default {
       const requestedYear = url.searchParams.get("year");
       let result;
 
-      const columns = "id, wikidata_qid, title, native_title, language_name, release_date, verification_status, release_date_source";
-
       if (scope === "all") {
         result = await env.DB.prepare(
-          `SELECT ${columns}
-           FROM movies
+          `SELECT ${movieColumns}
+           FROM movies m
+           ${movieSourceJoin}
            WHERE ${visibleMovieClause}
-           ORDER BY release_date ASC, title COLLATE NOCASE ASC
+           ORDER BY m.release_date ASC, m.title COLLATE NOCASE ASC
            LIMIT 1000`,
         ).all<MovieRow>();
       } else if (requestedYear && /^\d{4}$/.test(requestedYear)) {
         result = await env.DB.prepare(
-          `SELECT ${columns}
-           FROM movies
+          `SELECT ${movieColumns}
+           FROM movies m
+           ${movieSourceJoin}
            WHERE ${visibleMovieClause}
-             AND release_date BETWEEN ?1 AND ?2
-           ORDER BY release_date ASC, title COLLATE NOCASE ASC
+             AND m.release_date BETWEEN ?1 AND ?2
+           ORDER BY m.release_date ASC, m.title COLLATE NOCASE ASC
            LIMIT 1000`,
         ).bind(`${requestedYear}-01-01`, `${requestedYear}-12-31`).all<MovieRow>();
       } else {
         const from = url.searchParams.get("from") ?? new Date().toISOString().slice(0, 10);
         const to = url.searchParams.get("to") ?? new Date(Date.now() + 730 * 86400000).toISOString().slice(0, 10);
         result = await env.DB.prepare(
-          `SELECT ${columns}
-           FROM movies
+          `SELECT ${movieColumns}
+           FROM movies m
+           ${movieSourceJoin}
            WHERE ${visibleMovieClause}
-             AND release_date BETWEEN ?1 AND ?2
-           ORDER BY release_date ASC, title COLLATE NOCASE ASC
+             AND m.release_date BETWEEN ?1 AND ?2
+           ORDER BY m.release_date ASC, m.title COLLATE NOCASE ASC
            LIMIT 1000`,
         ).bind(from, to).all<MovieRow>();
       }
@@ -112,7 +117,7 @@ export default {
              COALESCE(SUM(CASE WHEN verification_status='unconfirmed' THEN 1 ELSE 0 END), 0) AS unconfirmed,
              MAX(updated_at) AS latest_updated_at
            FROM movies
-           WHERE ${visibleMovieClause}`,
+           WHERE (wikidata_qid IS NULL OR title <> wikidata_qid)`,
         ).first<StatsRow>(),
         env.DB.prepare(
           "SELECT COUNT(*) AS count, MAX(updated_at) AS latest_updated_at FROM source_channels WHERE active=1",
@@ -128,6 +133,7 @@ export default {
         releaseDate: movie.release_date,
         verificationStatus: movie.verification_status,
         releaseSource: movie.release_date_source,
+        releaseSourceName: movie.release_source_name ?? undefined,
       }));
 
       const latestUpdate = [statsResult?.latest_updated_at, sourcesResult?.latest_updated_at]
