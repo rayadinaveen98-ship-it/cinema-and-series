@@ -9,11 +9,11 @@ verified; a human-curated entry in data/official/releases.json remains required.
 """
 from __future__ import annotations
 
+import concurrent.futures
 import hashlib
 import json
 import re
 import sys
-import time
 import urllib.parse
 import urllib.request
 import urllib.robotparser
@@ -24,11 +24,13 @@ from pathlib import Path
 REGISTRY = Path("data/official/source_registry.json")
 OUT_JSON = Path("data/generated/website-release-candidates.json")
 OUT_SQL = Path("data/generated/website-candidates-upsert.sql")
-MAX_PAGES_PER_SOURCE = 8
+MAX_PAGES_PER_SOURCE = 5
 MAX_RESPONSE_BYTES = 1_500_000
+REQUEST_TIMEOUT_SECONDS = 10
 MAX_RELEASE_LEAD_DAYS = 1095
 MAX_RELEASE_LAG_DAYS = 1
-USER_AGENT = "CinemaAndSeries-OfficialWebsiteMonitor/1.0 (+https://github.com/rayadinaveen98-ship-it/cinema-and-series)"
+MAX_SOURCE_WORKERS = 5
+USER_AGENT = "CinemaAndSeries-OfficialWebsiteMonitor/1.1 (+https://github.com/rayadinaveen98-ship-it/cinema-and-series)"
 
 MONTHS = {
     "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
@@ -212,16 +214,25 @@ def candidate_links(base_url: str, anchors: list[tuple[str, str]], limit: int = 
     return candidates
 
 
-def can_fetch(url: str) -> bool:
-    parsed = urllib.parse.urlparse(url)
+def load_robots(base_url: str) -> urllib.robotparser.RobotFileParser | None:
+    parsed = urllib.parse.urlparse(base_url)
     robots_url = f"{parsed.scheme}://{parsed.netloc}/robots.txt"
-    parser = urllib.robotparser.RobotFileParser()
-    parser.set_url(robots_url)
+    request = urllib.request.Request(robots_url, headers={"User-Agent": USER_AGENT, "Accept": "text/plain,*/*"})
     try:
-        parser.read()
-        return parser.can_fetch(USER_AGENT, url)
+        with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
+            raw = response.read(256_000)
+            charset = response.headers.get_content_charset() or "utf-8"
+            text = raw.decode(charset, errors="replace")
+        parser = urllib.robotparser.RobotFileParser()
+        parser.set_url(robots_url)
+        parser.parse(text.splitlines())
+        return parser
     except Exception:
-        return True
+        return None
+
+
+def allowed_by_robots(parser: urllib.robotparser.RobotFileParser | None, url: str) -> bool:
+    return True if parser is None else parser.can_fetch(USER_AGENT, url)
 
 
 def fetch_page(url: str) -> PageParser:
@@ -232,7 +243,7 @@ def fetch_page(url: str) -> PageParser:
             "User-Agent": USER_AGENT,
         },
     )
-    with urllib.request.urlopen(request, timeout=20) as response:
+    with urllib.request.urlopen(request, timeout=REQUEST_TIMEOUT_SECONDS) as response:
         content_type = response.headers.get_content_type()
         if content_type not in {"text/html", "application/xhtml+xml"}:
             raise ValueError(f"unsupported content type {content_type}")
@@ -267,6 +278,49 @@ def observation_for_page(source: dict, url: str, parser: PageParser, today: date
         "candidate_release_date": dates[0] if len(dates) == 1 else None,
         "context_excerpts": excerpts,
         "status": "pending_review",
+    }
+
+
+def monitor_source(source: dict, scan_day: date) -> tuple[list[dict], dict]:
+    base_url = source["website_url"]
+    checked = 0
+    errors = 0
+    observations: list[dict] = []
+    robots = load_robots(base_url)
+
+    if not allowed_by_robots(robots, base_url):
+        print(f"warning: robots.txt disallows monitoring {base_url}", file=sys.stderr)
+        return observations, {"source_key": source["key"], "pages_checked": 0, "errors": 0, "robots_disallowed": True}
+
+    try:
+        home = fetch_page(base_url)
+        checked += 1
+        observation = observation_for_page(source, base_url, home, today=scan_day)
+        if observation:
+            observations.append(observation)
+        urls = candidate_links(base_url, home.anchors)
+    except Exception as exc:
+        print(f"warning: website monitor failed for {source['name']} homepage: {exc}", file=sys.stderr)
+        return observations, {"source_key": source["key"], "pages_checked": checked, "errors": 1}
+
+    for url in urls:
+        if not allowed_by_robots(robots, url):
+            continue
+        try:
+            page = fetch_page(url)
+            checked += 1
+            observation = observation_for_page(source, url, page, today=scan_day)
+            if observation:
+                observations.append(observation)
+        except Exception as exc:
+            errors += 1
+            print(f"warning: website monitor page failed for {source['name']} {url}: {exc}", file=sys.stderr)
+
+    return observations, {
+        "source_key": source["key"],
+        "pages_checked": checked,
+        "errors": errors,
+        "candidates": len(observations),
     }
 
 
@@ -311,54 +365,25 @@ def build_sql(candidates: list[dict], sources: list[dict]) -> str:
 def main() -> int:
     registry = json.loads(REGISTRY.read_text(encoding="utf-8"))
     sources = [source for source in registry.get("sources", []) if source.get("active") and source.get("website_url")]
+    scan_day = datetime.now(timezone.utc).date()
     observations: list[dict] = []
     source_results: list[dict] = []
-    scan_day = datetime.now(timezone.utc).date()
 
-    for source in sources:
-        base_url = source["website_url"]
-        checked = 0
-        errors = 0
-        source_observations: list[dict] = []
-        try:
-            if not can_fetch(base_url):
-                print(f"warning: robots.txt disallows monitoring {base_url}", file=sys.stderr)
-                source_results.append({"source_key": source["key"], "pages_checked": 0, "errors": 0, "robots_disallowed": True})
-                continue
-            home = fetch_page(base_url)
-            checked += 1
-            observation = observation_for_page(source, base_url, home, today=scan_day)
-            if observation:
-                source_observations.append(observation)
-            urls = candidate_links(base_url, home.anchors)
-        except Exception as exc:
-            print(f"warning: website monitor failed for {source['name']} homepage: {exc}", file=sys.stderr)
-            source_results.append({"source_key": source["key"], "pages_checked": checked, "errors": 1})
-            continue
-
-        for url in urls:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_SOURCE_WORKERS) as executor:
+        futures = {executor.submit(monitor_source, source, scan_day): source for source in sources}
+        for future in concurrent.futures.as_completed(futures):
+            source = futures[future]
             try:
-                if not can_fetch(url):
-                    continue
-                page = fetch_page(url)
-                checked += 1
-                observation = observation_for_page(source, url, page, today=scan_day)
-                if observation:
-                    source_observations.append(observation)
+                source_observations, result = future.result()
             except Exception as exc:
-                errors += 1
-                print(f"warning: website monitor page failed for {source['name']} {url}: {exc}", file=sys.stderr)
-            time.sleep(0.1)
-
-        observations.extend(source_observations)
-        source_results.append({
-            "source_key": source["key"],
-            "pages_checked": checked,
-            "errors": errors,
-            "candidates": len(source_observations),
-        })
+                print(f"warning: website monitor crashed for {source['name']}: {exc}", file=sys.stderr)
+                source_observations = []
+                result = {"source_key": source["key"], "pages_checked": 0, "errors": 1}
+            observations.extend(source_observations)
+            source_results.append(result)
 
     observations.sort(key=lambda item: (item["source_key"], item["page_url"], item["external_id"]))
+    source_results.sort(key=lambda item: item["source_key"])
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     OUT_JSON.write_text(
         json.dumps(
