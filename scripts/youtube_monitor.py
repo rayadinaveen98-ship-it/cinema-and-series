@@ -6,6 +6,10 @@ YouTube Data API to read each registered channel's uploads playlist, extracts
 explicit date phrases only when release-oriented context is present, and emits
 reviewable candidates for D1. Sources may be registered by stable channel ID or
 by an official @handle; handle-only entries are resolved through channels.list.
+
+To avoid catalogue metadata in descriptions being mistaken for new release
+announcements, only recent uploads are considered and candidate dates must sit
+within a plausible window around the upload date.
 """
 from __future__ import annotations
 
@@ -15,13 +19,16 @@ import re
 import sys
 import urllib.parse
 import urllib.request
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 REGISTRY = Path("data/official/source_registry.json")
 OUT_JSON = Path("data/generated/youtube-release-candidates.json")
 OUT_SQL = Path("data/generated/youtube-candidates-upsert.sql")
 API_ROOT = "https://www.googleapis.com/youtube/v3"
+MAX_UPLOAD_AGE_DAYS = 45
+MAX_RELEASE_LAG_DAYS = 7
+MAX_RELEASE_LEAD_DAYS = 1095
 
 MONTHS = {
     "jan": 1, "january": 1, "feb": 2, "february": 2, "mar": 3, "march": 3,
@@ -80,6 +87,44 @@ def extract_release_dates(text: str) -> list[str]:
     return sorted(dates)
 
 
+def parse_published_at(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def filter_plausible_release_dates(
+    dates: list[str],
+    published_at: str | None,
+    now: datetime | None = None,
+) -> list[str]:
+    published = parse_published_at(published_at)
+    if not published:
+        return []
+
+    reference_now = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
+    if published < reference_now - timedelta(days=MAX_UPLOAD_AGE_DAYS):
+        return []
+
+    lower = published.date() - timedelta(days=MAX_RELEASE_LAG_DAYS)
+    upper = published.date() + timedelta(days=MAX_RELEASE_LEAD_DAYS)
+    plausible: list[str] = []
+    for value in dates:
+        try:
+            candidate = datetime.strptime(value, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if lower <= candidate <= upper:
+            plausible.append(value)
+    return plausible
+
+
 def esc(value: str) -> str:
     return value.replace("'", "''")
 
@@ -131,7 +176,12 @@ def resolve_upload_playlists(sources: list[dict]) -> dict[str, dict[str, str]]:
     return resolved
 
 
-def fetch_latest_uploads(source: dict, channel_id: str, playlist_id: str) -> list[dict]:
+def fetch_latest_uploads(
+    source: dict,
+    channel_id: str,
+    playlist_id: str,
+    now: datetime | None = None,
+) -> list[dict]:
     payload = api_get(
         "playlistItems",
         {"part": "snippet,contentDetails", "playlistId": playlist_id, "maxResults": "12"},
@@ -144,7 +194,12 @@ def fetch_latest_uploads(source: dict, channel_id: str, playlist_id: str) -> lis
             continue
         title = snippet.get("title", "").strip()
         description = snippet.get("description", "").strip()
-        dates = extract_release_dates(f"{title}\n{description}")
+        published_at = snippet.get("publishedAt")
+        dates = filter_plausible_release_dates(
+            extract_release_dates(f"{title}\n{description}"),
+            published_at,
+            now=now,
+        )
         if not dates:
             continue
         candidates.append({
@@ -154,7 +209,7 @@ def fetch_latest_uploads(source: dict, channel_id: str, playlist_id: str) -> lis
             "video_id": video_id,
             "video_url": f"https://www.youtube.com/watch?v={video_id}",
             "video_title": title,
-            "published_at": snippet.get("publishedAt"),
+            "published_at": published_at,
             "candidate_dates": dates,
             "candidate_release_date": dates[0] if len(dates) == 1 else None,
             "status": "pending_review",
@@ -195,21 +250,29 @@ def main() -> int:
     resolved = resolve_upload_playlists(sources)
     candidates: list[dict] = []
     channels_checked = 0
+    scan_time = datetime.now(timezone.utc)
     for source in sources:
         channel = resolved.get(source["key"])
         if not channel:
             print(f"warning: uploads playlist not found for {source['name']}", file=sys.stderr)
             continue
         channels_checked += 1
-        candidates.extend(fetch_latest_uploads(source, channel["channel_id"], channel["uploads_playlist_id"]))
+        candidates.extend(
+            fetch_latest_uploads(
+                source,
+                channel["channel_id"],
+                channel["uploads_playlist_id"],
+                now=scan_time,
+            )
+        )
 
     candidates.sort(key=lambda item: (item.get("published_at") or "", item["source_key"], item["video_id"]), reverse=True)
     OUT_JSON.parent.mkdir(parents=True, exist_ok=True)
     OUT_JSON.write_text(
         json.dumps(
             {
-                "generated_at": datetime.now(timezone.utc).isoformat(),
-                "policy": "official-channel observations only; explicit release-context dates become pending review candidates; never auto-verify",
+                "generated_at": scan_time.isoformat(),
+                "policy": "official-channel observations only; recent uploads and plausible release-window dates become pending review candidates; never auto-verify",
                 "channels_registered": len(sources),
                 "channels_checked": channels_checked,
                 "candidates": candidates,
