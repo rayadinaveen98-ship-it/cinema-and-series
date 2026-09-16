@@ -68,6 +68,12 @@ class YouTubeMonitorTests(unittest.TestCase):
         )
         self.assertEqual(dates, ["2026-09-16"])
 
+    def test_rejects_public_response_promo_title(self):
+        self.assertTrue(module.is_low_value_promo("Korean Kanakaraju Public Response | Varun Tej"))
+
+    def test_keeps_release_announcement_title(self):
+        self.assertFalse(module.is_low_value_promo("Mirzapur The Movie | In Cinemas 4 Sep 2026"))
+
     def test_sql_keeps_candidates_pending_review(self):
         sql = module.build_sql([
             {
