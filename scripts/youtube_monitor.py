@@ -7,9 +7,9 @@ explicit date phrases only when release-oriented context is present, and emits
 reviewable candidates for D1. Sources may be registered by stable channel ID or
 by an official @handle; handle-only entries are resolved through channels.list.
 
-To avoid catalogue metadata in descriptions being mistaken for new release
-announcements, only recent uploads are considered and candidate dates must sit
-within a plausible window around the upload date.
+To avoid catalogue metadata and post-release promotional chatter being mistaken
+for useful release announcements, only recent uploads are considered and a
+candidate release date cannot precede the upload date.
 """
 from __future__ import annotations
 
@@ -27,7 +27,7 @@ OUT_JSON = Path("data/generated/youtube-release-candidates.json")
 OUT_SQL = Path("data/generated/youtube-candidates-upsert.sql")
 API_ROOT = "https://www.googleapis.com/youtube/v3"
 MAX_UPLOAD_AGE_DAYS = 45
-MAX_RELEASE_LAG_DAYS = 7
+MAX_RELEASE_LAG_DAYS = 0
 MAX_RELEASE_LEAD_DAYS = 1095
 
 MONTHS = {
@@ -295,7 +295,7 @@ def main() -> int:
         json.dumps(
             {
                 "generated_at": scan_time.isoformat(),
-                "policy": "official-channel observations only; recent uploads and plausible release-window dates become pending review candidates; never auto-verify",
+                "policy": "official-channel observations only; recent uploads and same-day/future release dates become pending review candidates; never auto-verify",
                 "channels_registered": len(sources),
                 "channels_checked": channels_checked,
                 "candidates": candidates,
