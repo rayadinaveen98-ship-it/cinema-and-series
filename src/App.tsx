@@ -96,6 +96,7 @@ export default function App() {
   const [source, setSource] = useState<ApiResponse["source"]>("preview");
   const [activeLanguage, setActiveLanguage] = useState("All");
   const [activePeriod, setActivePeriod] = useState("upcoming");
+  const [officialOnly, setOfficialOnly] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [visibleCount, setVisibleCount] = useState(60);
   const [loading, setLoading] = useState(true);
@@ -135,19 +136,24 @@ export default function App() {
     return movies.filter((movie) => movie.releaseDate.startsWith(`${activePeriod}-`));
   }, [activePeriod, movies, today]);
 
+  const confidenceMovies = useMemo(
+    () => officialOnly ? periodMovies.filter((movie) => movie.verificationStatus === "verified") : periodMovies,
+    [officialOnly, periodMovies],
+  );
+
   const languages = useMemo(
-    () => ["All", ...Array.from(new Set(periodMovies.map((movie) => movie.language || "Unknown"))).sort()],
-    [periodMovies],
+    () => ["All", ...Array.from(new Set(confidenceMovies.map((movie) => movie.language || "Unknown"))).sort()],
+    [confidenceMovies],
   );
 
   const filtered = useMemo(() => {
     const query = searchQuery.trim().toLocaleLowerCase();
-    return periodMovies.filter((movie) => {
+    return confidenceMovies.filter((movie) => {
       const languageMatch = activeLanguage === "All" || (movie.language || "Unknown") === activeLanguage;
       const searchMatch = !query || movie.title.toLocaleLowerCase().includes(query) || movie.nativeTitle?.toLocaleLowerCase().includes(query);
       return languageMatch && searchMatch;
     });
-  }, [activeLanguage, periodMovies, searchQuery]);
+  }, [activeLanguage, confidenceMovies, searchQuery]);
 
   const hero = useMemo(
     () => movies.find((movie) => movie.releaseDate >= today && movie.verificationStatus === "verified")
@@ -165,7 +171,7 @@ export default function App() {
 
   useEffect(() => {
     setVisibleCount(60);
-  }, [activeLanguage, activePeriod, searchQuery]);
+  }, [activeLanguage, activePeriod, officialOnly, searchQuery]);
 
   return (
     <main className="page-shell">
@@ -238,7 +244,7 @@ export default function App() {
           {searchQuery && <button onClick={() => setSearchQuery("")} aria-label="Clear search">Clear</button>}
         </div>
 
-        <div className="filter-row" aria-label="Choose release period">
+        <div className="filter-row" aria-label="Choose release period and confidence">
           <button className={activePeriod === "upcoming" ? "chip active" : "chip"} onClick={() => setActivePeriod("upcoming")}>
             Upcoming · {upcomingCount}
           </button>
@@ -249,6 +255,9 @@ export default function App() {
           ))}
           <button className={activePeriod === "all" ? "chip active" : "chip"} onClick={() => setActivePeriod("all")}>
             All · {movies.length}
+          </button>
+          <button className={officialOnly ? "chip active" : "chip"} onClick={() => setOfficialOnly((value) => !value)}>
+            Official only · {stats.verified}
           </button>
         </div>
 
@@ -269,7 +278,7 @@ export default function App() {
         <div className="section-heading">
           <div>
             <p className="eyebrow">Release desk</p>
-            <h2>{searchQuery ? `Results for “${searchQuery}”` : periodLabel(activePeriod)}</h2>
+            <h2>{searchQuery ? `Results for “${searchQuery}”` : officialOnly ? `Official · ${periodLabel(activePeriod)}` : periodLabel(activePeriod)}</h2>
           </div>
           <p>{filtered.length} matching · {stats.verified} officially verified</p>
         </div>
@@ -309,7 +318,7 @@ export default function App() {
             <div className="empty-state">
               <p className="eyebrow">No matching releases yet</p>
               <h2>Nothing in this slice.</h2>
-              <p>Try another year, language, or search term while the source refresh continues to expand the calendar.</p>
+              <p>Try another year, language, confidence level, or search term while the source refresh continues to expand the calendar.</p>
             </div>
           )}
         </div>
