@@ -22,6 +22,26 @@ type CatalogueRow = {
   updated_at: string | null;
 };
 
+type SeriesRow = {
+  id: string;
+  wikidata_qid: string | null;
+  wikipedia_page_id: number | null;
+  title: string;
+  native_title: string | null;
+  series_kind: "series" | "web_series" | "miniseries" | "anthology" | "unknown";
+  language_name: string;
+  country_code: string;
+  first_air_year: number | null;
+  last_air_year: number | null;
+  lifecycle_status: "unknown" | "upcoming" | "ongoing" | "ended" | "limited";
+  season_count: number | null;
+  episode_count: number | null;
+  source_category: string;
+  source_url: string;
+  verification_status: "verified" | "supported" | "unconfirmed";
+  updated_at: string | null;
+};
+
 type StatsRow = {
   total: number;
   verified: number;
@@ -30,22 +50,16 @@ type StatsRow = {
   latest_updated_at: string | null;
 };
 
-type SourcesRow = {
-  count: number;
+type SourcesRow = { count: number; latest_updated_at: string | null };
+type FacetRow = { value: string; count: number };
+type PeriodCountsRow = { upcoming: number; next_7_days: number; next_30_days: number };
+type SeriesStatsRow = {
+  total: number;
+  with_first_air_year: number;
+  web_series: number;
+  miniseries: number;
   latest_updated_at: string | null;
 };
-
-type FacetRow = {
-  value: string;
-  count: number;
-};
-
-type PeriodCountsRow = {
-  upcoming: number;
-  next_7_days: number;
-  next_30_days: number;
-};
-
 type ObservationRow = {
   id: number;
   source_key: string;
@@ -65,6 +79,11 @@ const previewMovies = [
   { id: "preview-2", title: "Festival Premiere", language: "Malayalam", countryCode: "IN", releaseDate: "2026-09-19", releaseYear: 2026, datePrecision: "day", verificationStatus: "supported", releaseSource: "preview" },
   { id: "preview-3", title: "Theatrical Release", language: "Tamil", countryCode: "IN", releaseDate: "2026-09-25", releaseYear: 2026, datePrecision: "day", verificationStatus: "verified", releaseSource: "official", releaseSourceName: "Official source" },
   { id: "preview-4", title: "Coming Soon", language: "Kannada", countryCode: "IN", releaseDate: "2026-10-02", releaseYear: 2026, datePrecision: "day", verificationStatus: "unconfirmed", releaseSource: "preview" },
+];
+
+const previewSeries = [
+  { id: "series-preview-1", title: "Series Catalogue", language: "Hindi", countryCode: "IN", seriesKind: "series", firstAirYear: 2025, lifecycleStatus: "unknown", verificationStatus: "unconfirmed", sourceUrl: "https://en.wikipedia.org/" },
+  { id: "series-preview-2", title: "Streaming Original", language: "Telugu", countryCode: "IN", seriesKind: "web_series", firstAirYear: 2026, lifecycleStatus: "unknown", verificationStatus: "unconfirmed", sourceUrl: "https://en.wikipedia.org/" },
 ];
 
 const visibleMovieClause = "(m.wikidata_qid IS NULL OR m.title <> m.wikidata_qid)";
@@ -122,10 +141,7 @@ const combinedCatalogueCte = `WITH combined_catalogue AS (
 )`;
 
 function json(data: unknown, status = 200, cacheControl = "public, max-age=60, s-maxage=300") {
-  return Response.json(data, {
-    status,
-    headers: { "Cache-Control": cacheControl },
-  });
+  return Response.json(data, { status, headers: { "Cache-Control": cacheControl } });
 }
 
 function d1TimestampToIso(value: string | null | undefined) {
@@ -152,12 +168,8 @@ function boundedInteger(value: string | null, fallback: number, minimum: number,
 
 function indiaDateKey(date = new Date()) {
   const parts = Object.fromEntries(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Kolkata",
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-    }).formatToParts(date).map(({ type, value }) => [type, value]),
+    new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Kolkata", year: "numeric", month: "2-digit", day: "2-digit" })
+      .formatToParts(date).map(({ type, value }) => [type, value]),
   );
   return `${parts.year}-${parts.month}-${parts.day}`;
 }
@@ -182,13 +194,8 @@ export default {
 
     if (url.pathname === "/api/review-observations") {
       if (!env.DB) {
-        return json(
-          { observations: [], source: "preview", generatedAt: new Date().toISOString() },
-          200,
-          "no-store",
-        );
+        return json({ observations: [], source: "preview", generatedAt: new Date().toISOString() }, 200, "no-store");
       }
-
       const result = await env.DB.prepare(
         `SELECT o.id, o.source_key, s.source_name, o.external_id, o.external_url, o.title,
                 o.published_at, o.candidate_release_date, o.candidate_dates_json,
@@ -199,28 +206,142 @@ export default {
          ORDER BY COALESCE(o.candidate_release_date, '9999-12-31') ASC, o.observed_at DESC
          LIMIT 100`,
       ).all<ObservationRow>();
+      return json({
+        observations: result.results.map((observation) => ({
+          id: observation.id,
+          sourceKey: observation.source_key,
+          sourceName: observation.source_name ?? observation.source_key,
+          externalId: observation.external_id,
+          externalUrl: observation.external_url,
+          title: observation.title,
+          publishedAt: observation.published_at ?? undefined,
+          candidateReleaseDate: observation.candidate_release_date ?? undefined,
+          candidateDates: parseJsonArray(observation.candidate_dates_json),
+          evidenceContexts: parseJsonArray(observation.evidence_contexts_json),
+          observedAt: d1TimestampToIso(observation.observed_at),
+        })),
+        source: "d1",
+        generatedAt: new Date().toISOString(),
+      }, 200, "no-store");
+    }
 
-      return json(
-        {
-          observations: result.results.map((observation) => ({
-            id: observation.id,
-            sourceKey: observation.source_key,
-            sourceName: observation.source_name ?? observation.source_key,
-            externalId: observation.external_id,
-            externalUrl: observation.external_url,
-            title: observation.title,
-            publishedAt: observation.published_at ?? undefined,
-            candidateReleaseDate: observation.candidate_release_date ?? undefined,
-            candidateDates: parseJsonArray(observation.candidate_dates_json),
-            evidenceContexts: parseJsonArray(observation.evidence_contexts_json),
-            observedAt: d1TimestampToIso(observation.observed_at),
-          })),
-          source: "d1",
+    if (url.pathname === "/api/catalogue-stats") {
+      if (!env.DB) {
+        return json({ movies: previewMovies.length, series: previewSeries.length, total: previewMovies.length + previewSeries.length, source: "preview", generatedAt: new Date().toISOString() });
+      }
+      const [movieTotal, exactDayMovies, yearPrecisionMovies, seriesTotal] = await Promise.all([
+        env.DB.prepare(`${combinedCatalogueCte} SELECT COUNT(*) AS count FROM combined_catalogue`).first<{ count: number }>(),
+        env.DB.prepare(`SELECT COUNT(*) AS count FROM movies m WHERE ${visibleMovieClause}`).first<{ count: number }>(),
+        env.DB.prepare("SELECT COUNT(*) AS count FROM catalogue_titles").first<{ count: number }>(),
+        env.DB.prepare("SELECT COUNT(*) AS count FROM series_titles").first<{ count: number }>(),
+      ]);
+      const movies = Number(movieTotal?.count ?? 0);
+      const series = Number(seriesTotal?.count ?? 0);
+      return json({
+        movies,
+        series,
+        total: movies + series,
+        exactDayMovies: Number(exactDayMovies?.count ?? 0),
+        yearPrecisionMovieRows: Number(yearPrecisionMovies?.count ?? 0),
+        source: "d1",
+        generatedAt: new Date().toISOString(),
+      });
+    }
+
+    if (url.pathname === "/api/series") {
+      if (!env.DB) {
+        return json({
+          series: previewSeries,
+          source: "preview",
           generatedAt: new Date().toISOString(),
+          pagination: { limit: previewSeries.length, offset: 0, total: previewSeries.length, hasMore: false },
+          facets: {
+            years: [{ value: "2026", count: 1 }, { value: "2025", count: 1 }],
+            languages: [{ value: "Hindi", count: 1 }, { value: "Telugu", count: 1 }],
+            countries: [{ value: "IN", count: 2 }],
+            kinds: [{ value: "series", count: 1 }, { value: "web_series", count: 1 }],
+          },
+          stats: { total: 2, withFirstAirYear: 2, webSeries: 1, miniseries: 0 },
+        });
+      }
+
+      const requestedYear = url.searchParams.get("year");
+      const search = (url.searchParams.get("q") ?? "").trim().slice(0, 120);
+      const language = (url.searchParams.get("language") ?? "").trim().slice(0, 80);
+      const country = (url.searchParams.get("country") ?? "").trim().toUpperCase().slice(0, 3);
+      const kind = (url.searchParams.get("kind") ?? "").trim().slice(0, 30);
+      const limit = boundedInteger(url.searchParams.get("limit"), 60, 1, 200);
+      const offset = boundedInteger(url.searchParams.get("offset"), 0, 0, 100_000);
+      const conditions: string[] = ["1=1"];
+      const bindings: (string | number)[] = [];
+      const bind = (value: string | number) => { bindings.push(value); return `?${bindings.length}`; };
+
+      if (requestedYear && /^\d{4}$/.test(requestedYear)) conditions.push(`s.first_air_year = ${bind(Number.parseInt(requestedYear, 10))}`);
+      if (search) conditions.push(`(s.title LIKE ${bind(`%${search}%`)} COLLATE NOCASE OR s.native_title LIKE ${bind(`%${search}%`)} COLLATE NOCASE)`);
+      if (language) conditions.push(`s.language_name = ${bind(language)}`);
+      if (country) conditions.push(`s.country_code = ${bind(country)}`);
+      if (kind) conditions.push(`s.series_kind = ${bind(kind)}`);
+      const where = conditions.join(" AND ");
+
+      const [rows, filteredCount, statsResult, yearsResult, languagesResult, countriesResult, kindsResult] = await Promise.all([
+        env.DB.prepare(
+          `SELECT s.* FROM series_titles s WHERE ${where}
+           ORDER BY CASE WHEN s.first_air_year IS NULL THEN 1 ELSE 0 END ASC, s.first_air_year DESC, s.title COLLATE NOCASE ASC
+           LIMIT ?${bindings.length + 1} OFFSET ?${bindings.length + 2}`,
+        ).bind(...bindings, limit, offset).all<SeriesRow>(),
+        env.DB.prepare(`SELECT COUNT(*) AS count FROM series_titles s WHERE ${where}`).bind(...bindings).first<{ count: number }>(),
+        env.DB.prepare(
+          `SELECT COUNT(*) AS total,
+             COALESCE(SUM(CASE WHEN first_air_year IS NOT NULL THEN 1 ELSE 0 END), 0) AS with_first_air_year,
+             COALESCE(SUM(CASE WHEN series_kind='web_series' THEN 1 ELSE 0 END), 0) AS web_series,
+             COALESCE(SUM(CASE WHEN series_kind='miniseries' THEN 1 ELSE 0 END), 0) AS miniseries,
+             MAX(updated_at) AS latest_updated_at
+           FROM series_titles`,
+        ).first<SeriesStatsRow>(),
+        env.DB.prepare("SELECT CAST(first_air_year AS TEXT) AS value, COUNT(*) AS count FROM series_titles WHERE first_air_year IS NOT NULL GROUP BY first_air_year ORDER BY first_air_year DESC LIMIT 120").all<FacetRow>(),
+        env.DB.prepare("SELECT language_name AS value, COUNT(*) AS count FROM series_titles GROUP BY language_name ORDER BY count DESC, value COLLATE NOCASE ASC LIMIT 100").all<FacetRow>(),
+        env.DB.prepare("SELECT country_code AS value, COUNT(*) AS count FROM series_titles GROUP BY country_code ORDER BY count DESC, value ASC LIMIT 100").all<FacetRow>(),
+        env.DB.prepare("SELECT series_kind AS value, COUNT(*) AS count FROM series_titles GROUP BY series_kind ORDER BY count DESC, value ASC").all<FacetRow>(),
+      ]);
+
+      const series = rows.results.map((item) => ({
+        id: item.id,
+        wikidataQid: item.wikidata_qid ?? undefined,
+        wikipediaPageId: item.wikipedia_page_id ?? undefined,
+        title: item.title,
+        nativeTitle: item.native_title ?? undefined,
+        seriesKind: item.series_kind,
+        language: item.language_name,
+        countryCode: item.country_code,
+        firstAirYear: item.first_air_year ?? undefined,
+        lastAirYear: item.last_air_year ?? undefined,
+        lifecycleStatus: item.lifecycle_status,
+        seasonCount: item.season_count ?? undefined,
+        episodeCount: item.episode_count ?? undefined,
+        verificationStatus: item.verification_status,
+        sourceCategory: item.source_category,
+        sourceUrl: item.source_url,
+      }));
+      const filteredTotal = Number(filteredCount?.count ?? series.length);
+      return json({
+        series,
+        source: "d1",
+        generatedAt: new Date().toISOString(),
+        catalogueUpdatedAt: d1TimestampToIso(statsResult?.latest_updated_at),
+        pagination: { limit, offset, total: filteredTotal, hasMore: offset + series.length < filteredTotal },
+        facets: {
+          years: facet(yearsResult.results),
+          languages: facet(languagesResult.results),
+          countries: facet(countriesResult.results),
+          kinds: facet(kindsResult.results),
         },
-        200,
-        "no-store",
-      );
+        stats: {
+          total: Number(statsResult?.total ?? series.length),
+          withFirstAirYear: Number(statsResult?.with_first_air_year ?? 0),
+          webSeries: Number(statsResult?.web_series ?? 0),
+          miniseries: Number(statsResult?.miniseries ?? 0),
+        },
+      });
     }
 
     if (url.pathname === "/api/movies") {
@@ -236,10 +357,7 @@ export default {
           facets: {
             years: [{ value: "2026", count: previewMovies.length }],
             languages: [
-              { value: "Kannada", count: 1 },
-              { value: "Malayalam", count: 1 },
-              { value: "Tamil", count: 1 },
-              { value: "Telugu", count: 1 },
+              { value: "Kannada", count: 1 }, { value: "Malayalam", count: 1 }, { value: "Tamil", count: 1 }, { value: "Telugu", count: 1 },
             ],
             countries: [{ value: "IN", count: previewMovies.length }],
           },
@@ -259,10 +377,7 @@ export default {
 
       const conditions: string[] = ["1=1"];
       const bindings: (string | number)[] = [];
-      const bind = (value: string | number) => {
-        bindings.push(value);
-        return `?${bindings.length}`;
-      };
+      const bind = (value: string | number) => { bindings.push(value); return `?${bindings.length}`; };
 
       if (requestedYear && /^\d{4}$/.test(requestedYear)) {
         conditions.push(`c.release_year = ${bind(Number.parseInt(requestedYear, 10))}`);
@@ -275,12 +390,9 @@ export default {
         conditions.push("c.date_precision = 'day'");
         conditions.push(`c.release_date BETWEEN ${bind(from)} AND ${bind(to)}`);
       }
-
       if (search) {
         const pattern = `%${search}%`;
-        const titleParam = bind(pattern);
-        const nativeParam = bind(pattern);
-        conditions.push(`(c.title LIKE ${titleParam} COLLATE NOCASE OR c.native_title LIKE ${nativeParam} COLLATE NOCASE)`);
+        conditions.push(`(c.title LIKE ${bind(pattern)} COLLATE NOCASE OR c.native_title LIKE ${bind(pattern)} COLLATE NOCASE)`);
       }
       if (language) conditions.push(`c.language_name = ${bind(language)}`);
       if (country) conditions.push(`c.country_code = ${bind(country)}`);
@@ -291,57 +403,28 @@ export default {
         ? "c.release_year DESC, CASE WHEN c.date_precision='day' THEN 0 ELSE 1 END ASC, c.release_date DESC, c.title COLLATE NOCASE ASC"
         : "c.release_date ASC, c.title COLLATE NOCASE ASC";
       const listStatement = env.DB.prepare(
-        `${combinedCatalogueCte}
-         SELECT c.*
-         FROM combined_catalogue c
-         WHERE ${where}
-         ORDER BY ${orderBy}
-         LIMIT ?${bindings.length + 1} OFFSET ?${bindings.length + 2}`,
+        `${combinedCatalogueCte} SELECT c.* FROM combined_catalogue c WHERE ${where} ORDER BY ${orderBy} LIMIT ?${bindings.length + 1} OFFSET ?${bindings.length + 2}`,
       ).bind(...bindings, limit, offset);
-      const countStatement = env.DB.prepare(
-        `${combinedCatalogueCte}
-         SELECT COUNT(*) AS count FROM combined_catalogue c WHERE ${where}`,
-      ).bind(...bindings);
-
+      const countStatement = env.DB.prepare(`${combinedCatalogueCte} SELECT COUNT(*) AS count FROM combined_catalogue c WHERE ${where}`).bind(...bindings);
       const next7 = addDays(today, 6);
       const next30 = addDays(today, 29);
+
       const [result, filteredCount, statsResult, sourcesResult, yearsResult, languagesResult, countriesResult, periodCountsResult] = await Promise.all([
         listStatement.all<CatalogueRow>(),
         countStatement.first<{ count: number }>(),
         env.DB.prepare(
-          `${combinedCatalogueCte}
-           SELECT
-             COUNT(*) AS total,
+          `${combinedCatalogueCte} SELECT COUNT(*) AS total,
              COALESCE(SUM(CASE WHEN verification_status='verified' THEN 1 ELSE 0 END), 0) AS verified,
              COALESCE(SUM(CASE WHEN verification_status='supported' THEN 1 ELSE 0 END), 0) AS supported,
              COALESCE(SUM(CASE WHEN verification_status='unconfirmed' THEN 1 ELSE 0 END), 0) AS unconfirmed,
-             MAX(updated_at) AS latest_updated_at
-           FROM combined_catalogue`,
+             MAX(updated_at) AS latest_updated_at FROM combined_catalogue`,
         ).first<StatsRow>(),
+        env.DB.prepare("SELECT COUNT(*) AS count, MAX(updated_at) AS latest_updated_at FROM source_channels WHERE active=1").first<SourcesRow>(),
+        env.DB.prepare(`${combinedCatalogueCte} SELECT CAST(c.release_year AS TEXT) AS value, COUNT(*) AS count FROM combined_catalogue c GROUP BY c.release_year ORDER BY c.release_year DESC LIMIT 120`).all<FacetRow>(),
+        env.DB.prepare(`${combinedCatalogueCte} SELECT c.language_name AS value, COUNT(*) AS count FROM combined_catalogue c GROUP BY c.language_name ORDER BY count DESC, value COLLATE NOCASE ASC LIMIT 100`).all<FacetRow>(),
+        env.DB.prepare(`${combinedCatalogueCte} SELECT c.country_code AS value, COUNT(*) AS count FROM combined_catalogue c GROUP BY c.country_code ORDER BY count DESC, value ASC LIMIT 100`).all<FacetRow>(),
         env.DB.prepare(
-          "SELECT COUNT(*) AS count, MAX(updated_at) AS latest_updated_at FROM source_channels WHERE active=1",
-        ).first<SourcesRow>(),
-        env.DB.prepare(
-          `${combinedCatalogueCte}
-           SELECT CAST(c.release_year AS TEXT) AS value, COUNT(*) AS count
-           FROM combined_catalogue c
-           GROUP BY c.release_year ORDER BY c.release_year DESC LIMIT 120`,
-        ).all<FacetRow>(),
-        env.DB.prepare(
-          `${combinedCatalogueCte}
-           SELECT c.language_name AS value, COUNT(*) AS count
-           FROM combined_catalogue c
-           GROUP BY c.language_name ORDER BY count DESC, value COLLATE NOCASE ASC LIMIT 100`,
-        ).all<FacetRow>(),
-        env.DB.prepare(
-          `${combinedCatalogueCte}
-           SELECT c.country_code AS value, COUNT(*) AS count
-           FROM combined_catalogue c
-           GROUP BY c.country_code ORDER BY count DESC, value ASC LIMIT 100`,
-        ).all<FacetRow>(),
-        env.DB.prepare(
-          `SELECT
-             COALESCE(SUM(CASE WHEN m.release_date >= ?1 THEN 1 ELSE 0 END), 0) AS upcoming,
+          `SELECT COALESCE(SUM(CASE WHEN m.release_date >= ?1 THEN 1 ELSE 0 END), 0) AS upcoming,
              COALESCE(SUM(CASE WHEN m.release_date BETWEEN ?1 AND ?2 THEN 1 ELSE 0 END), 0) AS next_7_days,
              COALESCE(SUM(CASE WHEN m.release_date BETWEEN ?1 AND ?3 THEN 1 ELSE 0 END), 0) AS next_30_days
            FROM movies m WHERE ${visibleMovieClause}`,
@@ -366,11 +449,7 @@ export default {
         artworkSource: movie.artwork_source ?? undefined,
         artworkSourceUrl: movie.artwork_source_url ?? undefined,
       }));
-
-      const latestUpdate = [statsResult?.latest_updated_at, sourcesResult?.latest_updated_at]
-        .filter((value): value is string => Boolean(value))
-        .sort()
-        .at(-1);
+      const latestUpdate = [statsResult?.latest_updated_at, sourcesResult?.latest_updated_at].filter((value): value is string => Boolean(value)).sort().at(-1);
       const filteredTotal = Number(filteredCount?.count ?? movies.length);
 
       return json({
@@ -378,17 +457,8 @@ export default {
         source: "d1",
         generatedAt: new Date().toISOString(),
         catalogueUpdatedAt: d1TimestampToIso(latestUpdate),
-        pagination: {
-          limit,
-          offset,
-          total: filteredTotal,
-          hasMore: offset + movies.length < filteredTotal,
-        },
-        facets: {
-          years: facet(yearsResult.results),
-          languages: facet(languagesResult.results),
-          countries: facet(countriesResult.results),
-        },
+        pagination: { limit, offset, total: filteredTotal, hasMore: offset + movies.length < filteredTotal },
+        facets: { years: facet(yearsResult.results), languages: facet(languagesResult.results), countries: facet(countriesResult.results) },
         periodCounts: {
           upcoming: Number(periodCountsResult?.upcoming ?? 0),
           next7Days: Number(periodCountsResult?.next_7_days ?? 0),
