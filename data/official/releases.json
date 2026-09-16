@@ -1,0 +1,29 @@
+{
+  "updated_at": "2026-09-16",
+  "releases": [
+    {
+      "title": "Jailer 2",
+      "wikidata_qid": "Q133255153",
+      "language": "Tamil",
+      "country_code": "IN",
+      "release_date": "2026-10-15",
+      "source_key": "sun_pictures",
+      "source_type": "official_website",
+      "source_title": "Jailer 2 — Sun Pictures",
+      "source_url": "https://www.sunpictures.in/movies/jailer2/",
+      "verification_status": "verified"
+    },
+    {
+      "title": "Dragon",
+      "wikidata_qid": null,
+      "language": "Telugu",
+      "country_code": "IN",
+      "release_date": "2027-06-11",
+      "source_key": "mythri_movie_makers",
+      "source_type": "official_youtube",
+      "source_title": "Dragon Glimpse - Telugu | NTR | Prashanth Neel",
+      "source_url": "https://www.youtube.com/watch?v=bedocP4nRAo",
+      "verification_status": "verified"
+    }
+  ]
+}
