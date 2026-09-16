@@ -1,0 +1,27 @@
+name: Wikidata Candidate Refresh
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 */12 * * *"
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Fetch India film release candidates
+        run: python scripts/fetch_wikidata.py
+      - name: Validate generated payload
+        run: python -m json.tool data/generated/wikidata-india.json >/dev/null
+      - name: Build idempotent D1 SQL
+        run: python scripts/wikidata_to_sql.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wikidata-india-candidates
+          path: data/generated/
+          retention-days: 7
