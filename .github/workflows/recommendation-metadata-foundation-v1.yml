@@ -143,12 +143,14 @@ jobs:
         run: |
           python - <<'PY'
           import json
+          import os
           from pathlib import Path
           shard = "${{ matrix.shard }}"
           report = json.loads(Path(f"data/generated/recommendation-metadata-shard-{shard}.json").read_text())
           if report.get("production_mutation") is not False:
               raise SystemExit("audit must remain read-only")
-          if int(report.get("candidate_count") or 0) > int("${MAX_TITLES_PER_SHARD}"):
+          safety_cap = int(os.environ["MAX_TITLES_PER_SHARD"])
+          if int(report.get("candidate_count") or 0) > safety_cap:
               raise SystemExit("shard exceeded safety cap")
           media_total = sum(int(v.get("titles") or 0) for v in report["media"].values())
           if media_total != int(report.get("candidate_count") or 0):
