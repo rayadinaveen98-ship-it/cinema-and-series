@@ -6,7 +6,9 @@ on:
     paths:
       - "migrations/0021_recommendation_metadata_foundation.sql"
       - "scripts/recommendation_metadata_audit.py"
+      - "scripts/recommendation_projection_manifest.py"
       - "tests/test_recommendation_metadata_audit.py"
+      - "tests/test_recommendation_projection_manifest.py"
       - ".github/workflows/recommendation-metadata-foundation-v1.yml"
       - "docs/10-execution/RECOMMENDATION_METADATA_FOUNDATION_V1.md"
   workflow_dispatch:
@@ -37,7 +39,9 @@ jobs:
           python-version: "3.13"
 
       - name: Run Recommendation Metadata Foundation tests
-        run: python -m unittest tests.test_recommendation_metadata_audit -v
+        run: |
+          python -m unittest tests.test_recommendation_metadata_audit -v
+          python -m unittest tests.test_recommendation_projection_manifest -v
 
       - name: Check Cloudflare connection
         shell: bash
@@ -71,15 +75,27 @@ jobs:
             --command "SELECT id,wikidata_qid,title,source_url FROM series_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
             > data/generated/recommendation-series.json
 
+      - name: Build immutable catalogue projection manifest
+        run: |
+          python scripts/recommendation_projection_manifest.py \
+            --movies data/generated/recommendation-movies.json \
+            --catalogue data/generated/recommendation-catalogue.json \
+            --series data/generated/recommendation-series.json \
+            --out-json data/generated/recommendation-projection-manifest.json
+
       - name: Validate catalogue projection before external calls
         run: |
           python - <<'PY'
+          import json
+          from pathlib import Path
           from scripts.recommendation_metadata_audit import load_d1_rows, build_catalogue_projection
+
           projection = build_catalogue_projection(
               load_d1_rows("data/generated/recommendation-movies.json"),
               load_d1_rows("data/generated/recommendation-catalogue.json"),
               load_d1_rows("data/generated/recommendation-series.json"),
           )
+          manifest = json.loads(Path("data/generated/recommendation-projection-manifest.json").read_text())
           candidates = projection["candidates"]
           collisions = projection["cross_type_collision_qids"]
           print("RECOMMENDATION_PROJECTION=" + str({
@@ -88,11 +104,18 @@ jobs:
               "suppressed_movie_projection_overlaps": projection["suppressed_catalogue_overlap_count"],
               "cross_type_collisions": len(collisions),
               "candidate_titles": len(candidates),
+              "sha256": manifest["sha256"],
           }))
           if collisions:
               raise SystemExit(f"cross-type Wikidata identity collision detected: {collisions[:20]}")
           if len(candidates) == 0:
               raise SystemExit("no QID-backed candidates available")
+          if manifest.get("candidate_count") != len(candidates):
+              raise SystemExit("projection manifest count does not match candidate projection")
+          if manifest.get("movie_qid_count") != projection["movie_qid_count"]:
+              raise SystemExit("projection manifest movie count mismatch")
+          if manifest.get("series_qid_count") != projection["series_qid_count"]:
+              raise SystemExit("projection manifest series count mismatch")
           PY
 
       - name: Preserve stable production snapshots
@@ -103,6 +126,7 @@ jobs:
             data/generated/recommendation-movies.json
             data/generated/recommendation-catalogue.json
             data/generated/recommendation-series.json
+            data/generated/recommendation-projection-manifest.json
           if-no-files-found: error
           retention-days: 30
 
@@ -186,6 +210,11 @@ jobs:
           path: audit-shards
           merge-multiple: true
 
+      - uses: actions/download-artifact@v4
+        with:
+          name: recommendation-metadata-foundation-v1-snapshots
+          path: stable-snapshot
+
       - name: Aggregate recommendation coverage
         run: |
           python - <<'PY'
@@ -201,6 +230,7 @@ jobs:
               if report["projection"] != projection:
                   raise SystemExit("projection metadata drifted between shards")
 
+          manifest = json.loads(Path("stable-snapshot/recommendation-projection-manifest.json").read_text())
           totals = {
               "candidate_count": 0,
               "movie_titles": 0,
@@ -238,6 +268,8 @@ jobs:
           expected = projection["movie_qid_count"] + projection["series_qid_count"]
           if totals["candidate_count"] != expected:
               raise SystemExit(f"candidate partition mismatch: {totals['candidate_count']} != {expected}")
+          if manifest.get("candidate_count") != totals["candidate_count"]:
+              raise SystemExit("manifest candidate count does not match aggregate audit")
 
           def pct(part, whole):
               return round(part / whole * 100.0, 2) if whole else 0.0
@@ -246,6 +278,11 @@ jobs:
               "schema_version": "recommendation-metadata-foundation-v1-summary",
               "production_mutation": False,
               "projection": projection,
+              "projection_manifest": {
+                  "schema_version": manifest["schema_version"],
+                  "candidate_count": manifest["candidate_count"],
+                  "sha256": manifest["sha256"],
+              },
               "totals": totals,
               "coverage": {
                   "movies": {
