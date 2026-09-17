@@ -10,14 +10,40 @@ sys.path.insert(0, str(SCRIPTS))
 import enrich_series_native_titles as module
 
 
-def native_claim(text, language="te", rank="normal", snaktype="value"):
+def mono_claim(text, language="te", rank="normal", snaktype="value", qualifiers=None):
     mainsnak = {"snaktype": snaktype}
     if snaktype == "value":
         mainsnak["datavalue"] = {
             "value": {"text": text, "language": language},
             "type": "monolingualtext",
         }
-    return {"rank": rank, "mainsnak": mainsnak}
+    claim = {"rank": rank, "mainsnak": mainsnak}
+    if qualifiers is not None:
+        claim["qualifiers"] = qualifiers
+    return claim
+
+
+def item_snak(qid):
+    return {
+        "snaktype": "value",
+        "datavalue": {
+            "value": {
+                "entity-type": "item",
+                "numeric-id": int(qid[1:]),
+                "id": qid,
+            },
+            "type": "wikibase-entityid",
+        },
+    }
+
+
+def original_title_claim(text, language="te", rank="normal"):
+    return mono_claim(
+        text,
+        language,
+        rank,
+        qualifiers={"P3831": [item_snak("Q1294573")]},
+    )
 
 
 class SeriesNativeTitleEnrichmentTests(unittest.TestCase):
@@ -47,66 +73,149 @@ class SeriesNativeTitleEnrichmentTests(unittest.TestCase):
             module.select_candidates([], 10, shard_index=8, shard_count=8)
 
     def test_single_p1705_claim_resolves_with_language_code(self):
-        entity = {"claims": {"P1705": [native_claim("ఆర్ఆర్ఆర్", "te")]}}
-        self.assertEqual(module.claim_native_title(entity), ("resolved", ("ఆర్ఆర్ఆర్", "te")))
+        entity = {"claims": {"P1705": [mono_claim("ఆర్ఆర్ఆర్", "te")]}}
+        self.assertEqual(
+            module.resolve_native_title(entity),
+            ("resolved", ("ఆర్ఆర్ఆర్", "te"), "wikidata:P1705"),
+        )
 
-    def test_duplicate_identical_claims_still_resolve(self):
-        entity = {"claims": {"P1705": [native_claim("Example", "en"), native_claim("Example", "en")]}}
-        self.assertEqual(module.claim_native_title(entity), ("resolved", ("Example", "en")))
+    def test_duplicate_identical_p1705_claims_still_resolve(self):
+        entity = {"claims": {"P1705": [mono_claim("Example", "en"), mono_claim("Example", "en")]}}
+        self.assertEqual(
+            module.resolve_native_title(entity),
+            ("resolved", ("Example", "en"), "wikidata:P1705"),
+        )
 
-    def test_multiple_distinct_native_labels_remain_ambiguous(self):
-        entity = {"claims": {"P1705": [native_claim("One", "en"), native_claim("Uno", "es")]}}
-        self.assertEqual(module.claim_native_title(entity), ("ambiguous", None))
+    def test_multiple_distinct_p1705_native_labels_remain_ambiguous(self):
+        entity = {"claims": {"P1705": [mono_claim("One", "en"), mono_claim("Uno", "es")]}}
+        self.assertEqual(module.resolve_native_title(entity), ("ambiguous", None, None))
 
-    def test_unique_preferred_native_label_wins(self):
+    def test_unique_preferred_p1705_wins(self):
         entity = {
             "claims": {
                 "P1705": [
-                    native_claim("Normal", "en"),
-                    native_claim("Preferred", "ko", rank="preferred"),
+                    mono_claim("Normal", "en"),
+                    mono_claim("Preferred", "ko", rank="preferred"),
                 ]
             }
         }
-        self.assertEqual(module.claim_native_title(entity), ("resolved", ("Preferred", "ko")))
+        self.assertEqual(
+            module.resolve_native_title(entity),
+            ("resolved", ("Preferred", "ko"), "wikidata:P1705"),
+        )
 
-    def test_multiple_preferred_native_labels_are_ambiguous(self):
+    def test_multiple_preferred_p1705_values_are_ambiguous(self):
         entity = {
             "claims": {
                 "P1705": [
-                    native_claim("One", "en", rank="preferred"),
-                    native_claim("Two", "fr", rank="preferred"),
+                    mono_claim("One", "en", rank="preferred"),
+                    mono_claim("Two", "fr", rank="preferred"),
                 ]
             }
         }
-        self.assertEqual(module.claim_native_title(entity), ("ambiguous", None))
+        self.assertEqual(module.resolve_native_title(entity), ("ambiguous", None, None))
 
-    def test_unusable_preferred_claim_never_falls_back_to_normal(self):
+    def test_unusable_preferred_p1705_never_falls_back_to_normal_or_p1476(self):
         entity = {
             "claims": {
                 "P1705": [
-                    native_claim("Normal", "en"),
-                    native_claim("", "te", rank="preferred"),
-                ]
+                    mono_claim("Normal", "en"),
+                    mono_claim("", "te", rank="preferred"),
+                ],
+                "P1476": [original_title_claim("Fallback", "te")],
             }
         }
-        self.assertEqual(module.claim_native_title(entity), ("unusable", None))
+        self.assertEqual(module.resolve_native_title(entity), ("unusable", None, None))
 
-    def test_deprecated_claim_is_ignored(self):
-        entity = {"claims": {"P1705": [native_claim("Old", "en", rank="deprecated")]}}
-        self.assertEqual(module.claim_native_title(entity), ("missing", None))
+    def test_deprecated_p1705_is_ignored(self):
+        entity = {"claims": {"P1705": [mono_claim("Old", "en", rank="deprecated")]}}
+        self.assertEqual(module.resolve_native_title(entity), ("missing", None, None))
 
     def test_missing_language_code_is_unusable(self):
-        entity = {"claims": {"P1705": [native_claim("Title", "")]}}
-        self.assertEqual(module.claim_native_title(entity), ("unusable", None))
+        entity = {"claims": {"P1705": [mono_claim("Title", "")]}}
+        self.assertEqual(module.resolve_native_title(entity), ("unusable", None, None))
 
-    def test_build_enrichment_records_language_and_provenance(self):
-        candidates = [{"id": "series-wd-Q10", "wikidata_qid": "Q10", "title": "Example", "native_title": None}]
-        entities = {"Q10": {"claims": {"P1705": [native_claim("예시", "ko")]}}}
+    def test_explicit_original_title_p1476_resolves_when_p1705_missing(self):
+        entity = {"claims": {"P1476": [original_title_claim("మూల శీర్షిక", "te")]}}
+        self.assertEqual(
+            module.resolve_native_title(entity),
+            ("resolved", ("మూల శీర్షిక", "te"), "wikidata:P1476+P3831=Q1294573"),
+        )
+
+    def test_unqualified_p1476_is_not_accepted_as_original_title(self):
+        entity = {"claims": {"P1476": [mono_claim("Localized title", "en")]}}
+        self.assertEqual(module.resolve_native_title(entity), ("missing", None, None))
+
+    def test_wrong_p3831_role_is_not_accepted(self):
+        claim = mono_claim(
+            "Not original",
+            "en",
+            qualifiers={"P3831": [item_snak("Q12345")]},
+        )
+        entity = {"claims": {"P1476": [claim]}}
+        self.assertEqual(module.resolve_native_title(entity), ("missing", None, None))
+
+    def test_matching_p1705_and_explicit_original_p1476_prefers_p1705(self):
+        entity = {
+            "claims": {
+                "P1705": [mono_claim("동일", "ko")],
+                "P1476": [original_title_claim("동일", "ko")],
+            }
+        }
+        self.assertEqual(
+            module.resolve_native_title(entity),
+            ("resolved", ("동일", "ko"), "wikidata:P1705"),
+        )
+
+    def test_disagreeing_p1705_and_explicit_original_p1476_is_conflict(self):
+        entity = {
+            "claims": {
+                "P1705": [mono_claim("One", "en")],
+                "P1476": [original_title_claim("Two", "en")],
+            }
+        }
+        self.assertEqual(module.resolve_native_title(entity), ("conflict", None, None))
+
+    def test_multiple_explicit_original_p1476_values_are_ambiguous(self):
+        entity = {
+            "claims": {
+                "P1476": [
+                    original_title_claim("One", "en"),
+                    original_title_claim("Two", "fr"),
+                ]
+            }
+        }
+        self.assertEqual(module.resolve_native_title(entity), ("ambiguous", None, None))
+
+    def test_build_enrichment_records_source_specific_provenance(self):
+        candidates = [
+            {"id": "series-wd-Q10", "wikidata_qid": "Q10", "title": "Direct", "native_title": None},
+            {"id": "series-wd-Q11", "wikidata_qid": "Q11", "title": "Qualified", "native_title": None},
+        ]
+        entities = {
+            "Q10": {"claims": {"P1705": [mono_claim("예시", "ko")]}},
+            "Q11": {"claims": {"P1476": [original_title_claim("ఉదాహరణ", "te")]}},
+        }
         report = module.build_enrichment(candidates, entities)
-        self.assertEqual(report["update_count"], 1)
-        self.assertEqual(report["updates"][0]["native_title"], "예시")
+        self.assertEqual(report["update_count"], 2)
+        self.assertEqual(report["source_counts"]["wikidata:P1705"], 1)
+        self.assertEqual(report["source_counts"]["wikidata:P1476+P3831=Q1294573"], 1)
         self.assertEqual(report["updates"][0]["native_title_language_code"], "ko")
-        self.assertEqual(report["updates"][0]["native_title_source"], "wikidata:P1705")
+        self.assertEqual(report["updates"][1]["native_title_language_code"], "te")
+
+    def test_build_enrichment_partitions_conflicts_separately(self):
+        candidates = [{"id": "s1", "wikidata_qid": "Q1", "title": "X", "native_title": None}]
+        entities = {
+            "Q1": {
+                "claims": {
+                    "P1705": [mono_claim("One", "en")],
+                    "P1476": [original_title_claim("Two", "en")],
+                }
+            }
+        }
+        report = module.build_enrichment(candidates, entities)
+        self.assertEqual(report["conflict_count"], 1)
+        self.assertEqual(report["update_count"], 0)
 
     def test_sql_never_overwrites_existing_native_title(self):
         report = {
@@ -116,7 +225,7 @@ class SeriesNativeTitleEnrichmentTests(unittest.TestCase):
                     "wikidata_qid": "Q10",
                     "native_title": "మూల శీర్షిక",
                     "native_title_language_code": "te",
-                    "native_title_source": "wikidata:P1705",
+                    "native_title_source": "wikidata:P1476+P3831=Q1294573",
                     "native_title_source_url": "https://www.wikidata.org/wiki/Q10",
                 }
             ]
@@ -125,7 +234,7 @@ class SeriesNativeTitleEnrichmentTests(unittest.TestCase):
         self.assertIn("UPDATE series_titles", sql)
         self.assertIn("wikidata_qid='Q10'", sql)
         self.assertIn("TRIM(native_title)=''", sql)
-        self.assertIn("native_title_source='wikidata:P1705'", sql)
+        self.assertIn("native_title_source='wikidata:P1476+P3831=Q1294573'", sql)
         self.assertIn("native_title_language_code='te'", sql)
         self.assertNotIn("language_name=", sql)
 
