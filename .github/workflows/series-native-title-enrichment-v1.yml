@@ -1,0 +1,329 @@
+name: Series Native Title Enrichment V1
+
+on:
+  push:
+    branches: [main, "feature/**", "fix/**"]
+    paths:
+      - "migrations/0021_series_native_title_provenance.sql"
+      - "scripts/enrich_series_native_titles.py"
+      - "tests/test_series_native_title_enrichment.py"
+      - ".github/workflows/series-native-title-enrichment-v1.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: series-native-title-enrichment-v1-analysis
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  SHARD_COUNT: "8"
+  SHARD_SIZE: "1200"
+  SNAPSHOT_LIMIT: "8000"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    outputs:
+      snapshot_ready: ${{ steps.snapshot.outputs.snapshot_ready }}
+      deferred_reason: ${{ steps.snapshot.outputs.deferred_reason }}
+      snapshot_rows: ${{ steps.snapshot.outputs.snapshot_rows }}
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Run native-title enrichment tests
+        run: python -m unittest tests.test_series_native_title_enrichment -v
+
+      - name: Check Cloudflare connection
+        shell: bash
+        run: |
+          if [[ -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "Cloudflare credentials are required for Series native-title analysis."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Wrangler
+        run: npm install --no-audit --no-fund
+
+      - name: Bind production D1
+        run: python scripts/cloudflare_bootstrap.py
+
+      - name: Capture stable missing-native-title SeriesRun snapshot
+        id: snapshot
+        shell: bash
+        run: |
+          mkdir -p data/generated
+          SNAPSHOT="data/generated/series-native-title-candidates-snapshot.json"
+          STDERR="data/generated/series-native-title-candidates-snapshot.stderr.txt"
+
+          set +e
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,native_title FROM series_titles WHERE (native_title IS NULL OR TRIM(native_title)='') AND wikidata_qid IS NOT NULL ORDER BY wikidata_qid LIMIT ${SNAPSHOT_LIMIT};" \
+            > "$SNAPSHOT" 2> "$STDERR"
+          STATUS=$?
+          set -e
+
+          if [[ "$STATUS" -ne 0 ]]; then
+            echo "D1 snapshot capture failed; response follows:"
+            cat "$SNAPSHOT" || true
+            cat "$STDERR" || true
+
+            if grep -Eq '"code"[[:space:]]*:[[:space:]]*7500|daily row read limit' "$SNAPSHOT" "$STDERR" 2>/dev/null; then
+              python - <<'PY'
+          import json
+          from pathlib import Path
+          report = {
+              "schema_version": "series-native-title-enrichment-v1-summary",
+              "state": "deferred",
+              "reason": "cloudflare_d1_daily_row_read_limit",
+              "production_mutation": False,
+          }
+          Path("data/generated/series-native-title-enrichment-v1-deferred.json").write_text(
+              json.dumps(report, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          PY
+              echo "snapshot_ready=false" >> "$GITHUB_OUTPUT"
+              echo "deferred_reason=cloudflare_d1_daily_row_read_limit" >> "$GITHUB_OUTPUT"
+              echo "snapshot_rows=0" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+
+            exit "$STATUS"
+          fi
+
+          ROWS=$(python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("data/generated/series-native-title-candidates-snapshot.json").read_text(encoding="utf-8"))
+          rows = []
+          for batch in payload if isinstance(payload, list) else [payload]:
+              if isinstance(batch, dict):
+                  rows.extend(batch.get("results") or [])
+          if len(rows) > 8000:
+              raise SystemExit(f"snapshot cap exceeded: {len(rows)}")
+          print(len(rows))
+          PY
+          )
+          echo "SERIES_NATIVE_TITLE_SNAPSHOT_ROWS=${ROWS}"
+          echo "snapshot_ready=true" >> "$GITHUB_OUTPUT"
+          echo "deferred_reason=" >> "$GITHUB_OUTPUT"
+          echo "snapshot_rows=${ROWS}" >> "$GITHUB_OUTPUT"
+
+      - name: Preserve stable candidate snapshot
+        if: steps.snapshot.outputs.snapshot_ready == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: series-native-title-enrichment-v1-candidate-snapshot
+          path: data/generated/series-native-title-candidates-snapshot.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Preserve quota-deferred state
+        if: steps.snapshot.outputs.snapshot_ready == 'false'
+        uses: actions/upload-artifact@v4
+        with:
+          name: series-native-title-enrichment-v1-deferred
+          path: data/generated/series-native-title-enrichment-v1-deferred.json
+          if-no-files-found: error
+          retention-days: 30
+
+  enrich:
+    name: enrich-shard-${{ matrix.shard }}
+    needs: prepare
+    if: needs.prepare.outputs.snapshot_ready == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    env:
+      SHARD_INDEX: ${{ matrix.shard }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Restore stable candidate snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: series-native-title-enrichment-v1-candidate-snapshot
+          path: data/generated
+
+      - name: Resolve explicit Wikidata P1705 native-title shard
+        run: |
+          python scripts/enrich_series_native_titles.py \
+            --input data/generated/series-native-title-candidates-snapshot.json \
+            --max-series "${SHARD_SIZE}" \
+            --shard-index "${SHARD_INDEX}" \
+            --shard-count "${SHARD_COUNT}" \
+            --out-json "data/generated/series-native-title-enrichment-v1-${SHARD_INDEX}.json" \
+            --sql-out "data/generated/series-native-title-enrichment-v1-${SHARD_INDEX}.sql"
+
+      - name: Validate bounded shard output
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          shard = int(os.environ["SHARD_INDEX"])
+          report = json.loads(Path(f"data/generated/series-native-title-enrichment-v1-{shard}.json").read_text(encoding="utf-8"))
+          candidates = int(report.get("candidate_count") or 0)
+          updates = int(report.get("update_count") or 0)
+          ambiguous = int(report.get("ambiguous_count") or 0)
+          missing_claim = int(report.get("missing_claim_count") or 0)
+          unusable = int(report.get("unusable_value_count") or 0)
+          if report.get("shard_index") != shard or report.get("shard_count") != int(os.environ["SHARD_COUNT"]):
+              raise SystemExit("shard metadata mismatch")
+          if candidates > int(os.environ["SHARD_SIZE"]):
+              raise SystemExit(f"candidate cap exceeded: {candidates}")
+          if updates + ambiguous + missing_claim + unusable != candidates:
+              raise SystemExit("native-title outcome categories do not partition shard candidates")
+          print("SERIES_NATIVE_TITLE_SHARD_VALIDATED=" + json.dumps({
+              "shard": shard,
+              "candidates": candidates,
+              "updates": updates,
+              "ambiguous": ambiguous,
+              "missing_claim": missing_claim,
+              "unusable_value": unusable,
+          }, sort_keys=True))
+          PY
+
+      - name: Preserve shard analysis
+        uses: actions/upload-artifact@v4
+        with:
+          name: series-native-title-enrichment-v1-analysis-shard-${{ matrix.shard }}
+          path: |
+            data/generated/series-native-title-enrichment-v1-${{ matrix.shard }}.json
+            data/generated/series-native-title-enrichment-v1-${{ matrix.shard }}.sql
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Confirm read-only mode
+        run: echo "Native-title analysis complete for shard ${SHARD_INDEX}. Production mutation is disabled in V1 analysis mode."
+
+  summarize:
+    needs: [prepare, enrich]
+    if: always() && needs.prepare.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Fail if enrichment was expected but failed
+        if: needs.prepare.outputs.snapshot_ready == 'true' && needs.enrich.result != 'success'
+        run: |
+          echo "Snapshot was ready, but one or more native-title shards failed."
+          exit 1
+
+      - uses: actions/download-artifact@v4
+        if: needs.prepare.outputs.snapshot_ready == 'true' && needs.enrich.result == 'success'
+        with:
+          pattern: series-native-title-enrichment-v1-analysis-shard-*
+          path: data/generated/shards
+          merge-multiple: true
+
+      - name: Aggregate and validate all shard reports
+        if: needs.prepare.outputs.snapshot_ready == 'true' && needs.enrich.result == 'success'
+        env:
+          SNAPSHOT_ROWS: ${{ needs.prepare.outputs.snapshot_rows }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          reports = []
+          for shard in range(8):
+              path = Path(f"data/generated/shards/series-native-title-enrichment-v1-{shard}.json")
+              if not path.exists():
+                  raise SystemExit(f"missing shard report: {path}")
+              reports.append(json.loads(path.read_text(encoding="utf-8")))
+
+          seen_qids = set()
+          totals = {"candidates": 0, "updates": 0, "ambiguous": 0, "missing_claim": 0, "unusable_value": 0}
+          for shard, report in enumerate(reports):
+              if report.get("shard_index") != shard or report.get("shard_count") != 8:
+                  raise SystemExit(f"invalid shard metadata for shard {shard}")
+              candidates = int(report.get("candidate_count") or 0)
+              updates = int(report.get("update_count") or 0)
+              ambiguous = int(report.get("ambiguous_count") or 0)
+              missing_claim = int(report.get("missing_claim_count") or 0)
+              unusable = int(report.get("unusable_value_count") or 0)
+              if updates + ambiguous + missing_claim + unusable != candidates:
+                  raise SystemExit(f"shard {shard} categories do not partition candidates")
+              totals["candidates"] += candidates
+              totals["updates"] += updates
+              totals["ambiguous"] += ambiguous
+              totals["missing_claim"] += missing_claim
+              totals["unusable_value"] += unusable
+              for item in report.get("updates") or []:
+                  qid = item.get("wikidata_qid")
+                  if qid in seen_qids:
+                      raise SystemExit(f"duplicate update across shards: {qid}")
+                  seen_qids.add(qid)
+
+          snapshot_rows = int(os.environ.get("SNAPSHOT_ROWS") or 0)
+          if totals["candidates"] > snapshot_rows:
+              raise SystemExit(f"candidate total exceeds snapshot: candidates={totals['candidates']} snapshot={snapshot_rows}")
+          if totals["updates"] != len(seen_qids):
+              raise SystemExit("aggregate update count does not match unique QIDs")
+
+          summary = {
+              "schema_version": "series-native-title-enrichment-v1-summary",
+              "state": "complete",
+              "source_property": "P1705",
+              "production_mutation": False,
+              "shards": 8,
+              "snapshot_rows": snapshot_rows,
+              **totals,
+          }
+          Path("data/generated").mkdir(parents=True, exist_ok=True)
+          Path("data/generated/series-native-title-enrichment-v1-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print("SERIES_NATIVE_TITLE_ENRICHMENT_SUMMARY=" + json.dumps(summary, sort_keys=True))
+          PY
+
+      - name: Materialize quota-deferred summary
+        if: needs.prepare.outputs.snapshot_ready == 'false'
+        env:
+          DEFERRED_REASON: ${{ needs.prepare.outputs.deferred_reason }}
+        run: |
+          mkdir -p data/generated
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          summary = {
+              "schema_version": "series-native-title-enrichment-v1-summary",
+              "state": "deferred",
+              "reason": os.environ.get("DEFERRED_REASON") or "unknown",
+              "production_mutation": False,
+          }
+          Path("data/generated/series-native-title-enrichment-v1-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+          )
+          print("SERIES_NATIVE_TITLE_ENRICHMENT_SUMMARY=" + json.dumps(summary, sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: needs.prepare.outputs.snapshot_ready == 'false' || needs.enrich.result == 'success'
+        with:
+          name: series-native-title-enrichment-v1-summary
+          path: data/generated/series-native-title-enrichment-v1-summary.json
+          if-no-files-found: error
+          retention-days: 30
