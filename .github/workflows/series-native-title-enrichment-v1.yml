@@ -166,7 +166,7 @@ jobs:
           name: series-native-title-enrichment-v1-candidate-snapshot
           path: data/generated
 
-      - name: Resolve explicit Wikidata P1705 native-title shard
+      - name: Resolve explicit Wikidata original-title evidence shard
         run: |
           python scripts/enrich_series_native_titles.py \
             --input data/generated/series-native-title-candidates-snapshot.json \
@@ -187,21 +187,24 @@ jobs:
           candidates = int(report.get("candidate_count") or 0)
           updates = int(report.get("update_count") or 0)
           ambiguous = int(report.get("ambiguous_count") or 0)
+          conflicts = int(report.get("conflict_count") or 0)
           missing_claim = int(report.get("missing_claim_count") or 0)
           unusable = int(report.get("unusable_value_count") or 0)
           if report.get("shard_index") != shard or report.get("shard_count") != int(os.environ["SHARD_COUNT"]):
               raise SystemExit("shard metadata mismatch")
           if candidates > int(os.environ["SHARD_SIZE"]):
               raise SystemExit(f"candidate cap exceeded: {candidates}")
-          if updates + ambiguous + missing_claim + unusable != candidates:
+          if updates + ambiguous + conflicts + missing_claim + unusable != candidates:
               raise SystemExit("native-title outcome categories do not partition shard candidates")
           print("SERIES_NATIVE_TITLE_SHARD_VALIDATED=" + json.dumps({
               "shard": shard,
               "candidates": candidates,
               "updates": updates,
               "ambiguous": ambiguous,
+              "conflicts": conflicts,
               "missing_claim": missing_claim,
               "unusable_value": unusable,
+              "source_counts": report.get("source_counts") or {},
           }, sort_keys=True))
           PY
 
@@ -254,22 +257,34 @@ jobs:
               reports.append(json.loads(path.read_text(encoding="utf-8")))
 
           seen_qids = set()
-          totals = {"candidates": 0, "updates": 0, "ambiguous": 0, "missing_claim": 0, "unusable_value": 0}
+          totals = {
+              "candidates": 0,
+              "updates": 0,
+              "ambiguous": 0,
+              "conflicts": 0,
+              "missing_claim": 0,
+              "unusable_value": 0,
+          }
+          source_counts = {}
           for shard, report in enumerate(reports):
               if report.get("shard_index") != shard or report.get("shard_count") != 8:
                   raise SystemExit(f"invalid shard metadata for shard {shard}")
               candidates = int(report.get("candidate_count") or 0)
               updates = int(report.get("update_count") or 0)
               ambiguous = int(report.get("ambiguous_count") or 0)
+              conflicts = int(report.get("conflict_count") or 0)
               missing_claim = int(report.get("missing_claim_count") or 0)
               unusable = int(report.get("unusable_value_count") or 0)
-              if updates + ambiguous + missing_claim + unusable != candidates:
+              if updates + ambiguous + conflicts + missing_claim + unusable != candidates:
                   raise SystemExit(f"shard {shard} categories do not partition candidates")
               totals["candidates"] += candidates
               totals["updates"] += updates
               totals["ambiguous"] += ambiguous
+              totals["conflicts"] += conflicts
               totals["missing_claim"] += missing_claim
               totals["unusable_value"] += unusable
+              for source, count in (report.get("source_counts") or {}).items():
+                  source_counts[source] = source_counts.get(source, 0) + int(count or 0)
               for item in report.get("updates") or []:
                   qid = item.get("wikidata_qid")
                   if qid in seen_qids:
@@ -277,18 +292,21 @@ jobs:
                   seen_qids.add(qid)
 
           snapshot_rows = int(os.environ.get("SNAPSHOT_ROWS") or 0)
-          if totals["candidates"] > snapshot_rows:
-              raise SystemExit(f"candidate total exceeds snapshot: candidates={totals['candidates']} snapshot={snapshot_rows}")
+          if totals["candidates"] != snapshot_rows:
+              raise SystemExit(f"candidate total does not exactly match snapshot: candidates={totals['candidates']} snapshot={snapshot_rows}")
           if totals["updates"] != len(seen_qids):
               raise SystemExit("aggregate update count does not match unique QIDs")
+          if sum(source_counts.values()) != totals["updates"]:
+              raise SystemExit("source counts do not equal aggregate update count")
 
           summary = {
               "schema_version": "series-native-title-enrichment-v1-summary",
               "state": "complete",
-              "source_property": "P1705",
+              "source_contract": "P1705 OR P1476 qualified P3831=Q1294573",
               "production_mutation": False,
               "shards": 8,
               "snapshot_rows": snapshot_rows,
+              "source_counts": source_counts,
               **totals,
           }
           Path("data/generated").mkdir(parents=True, exist_ok=True)
