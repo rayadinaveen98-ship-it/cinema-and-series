@@ -2,26 +2,33 @@
 
 This repository is the authoritative source of truth for **Cinema and Series**.
 
-## Mandatory rule
+## Current execution state
 
-Do **not** begin production implementation until the V1 specification package is explicitly marked **FROZEN**.
+Production implementation is active.
 
-This includes Android, web, backend, database migrations, ingestion workers, and production UI. Small disposable research prototypes are permitted only when a specification document explicitly authorizes them for validation.
+The original research foundation and long-form architecture remain preserved as historical/future-platform references, but the current active implementation contract is:
 
-## Required reading order
+`docs/10-execution/PERSONALIZED_DISCOVERY_ACTIVE_ROADMAP_V1.md`
+
+Where an older research or Fast-Track document conflicts with that active roadmap, the active roadmap wins for current product execution unless a newer LOCKED decision explicitly supersedes it.
+
+## Required reading order for active implementation
 
 1. `README.md`
-2. `docs/00-charter/PRODUCT_VISION.md`
-3. `docs/00-charter/PRODUCT_PHILOSOPHY.md`
-4. `docs/00-charter/SCOPE_V1.md`
-5. `docs/00-charter/NON_GOALS_V1.md`
-6. `docs/01-research/RESEARCH_FOUNDATION_V0.1.md`
-7. `docs/02-sources/SOURCE_CONSTITUTION.md`
-8. `docs/03-data/DATA_CONSTITUTION.md`
-9. `docs/05-architecture/ARCHITECTURE_CONSTITUTION.md`
-10. `docs/10-execution/MASTER_ROADMAP.md`
+2. `docs/10-execution/PERSONALIZED_DISCOVERY_ACTIVE_ROADMAP_V1.md`
+3. `docs/10-execution/V1_FAST_TRACK_PRODUCT_AND_TECH_LOCK.md` — historical Fast-Track context
+4. `docs/10-execution/CATALOGUE_QUALITY_V1.md`
+5. relevant current execution/milestone document for the slice being worked on
+6. relevant source/data/architecture specifications when the slice depends on them
 
-Documents that do not yet exist are planned deliverables of Research Foundation v0.1 and must be created before the V1 contract can be frozen.
+For deep future-platform architecture work, also read:
+
+- `docs/00-charter/PRODUCT_VISION.md`
+- `docs/00-charter/PRODUCT_PHILOSOPHY.md`
+- `docs/02-sources/SOURCE_CONSTITUTION.md`
+- `docs/03-data/DATA_CONSTITUTION.md`
+- `docs/05-architecture/ARCHITECTURE_CONSTITUTION.md`
+- `docs/10-execution/MASTER_ROADMAP.md`
 
 ## Decision states
 
@@ -34,21 +41,36 @@ Every important specification must use one of these states:
 
 ## Non-negotiable working discipline
 
-1. Research before implementation.
+1. Research/prove external data assumptions before production enrichment.
 2. Preserve evidence and licensing constraints alongside source decisions.
-3. Never make an external provider's ID our canonical identity.
-4. Never silently replace disputed metadata; preserve claims and provenance.
-5. Never call a field "complete" without a measurable definition.
-6. Never merge uncertain identities without a confidence/review path.
-7. Never treat artwork rights as equivalent to metadata rights.
-8. Never allow an AI-generated unsupported claim to become canonical metadata.
-9. Record important architecture/product changes through ADRs or equivalent decision records.
+3. Never silently replace disputed metadata; preserve provenance.
+4. Never call a field complete without a measurable definition.
+5. Never merge uncertain identities without a confidence/review path.
+6. Never treat artwork rights as equivalent to metadata rights.
+7. Never allow an AI-generated unsupported claim to become canonical metadata.
+8. Production mutations must be explicit, defensive and auditable.
+9. Keep quality regression gates clean after catalogue mutations.
 10. Keep this repository updated before implementation diverges from the specification.
+
+## Current product direction
+
+Cinema & Series is an India-first cinema discovery and release-intelligence product with three active promises:
+
+1. personalized discovery and recommendations,
+2. trustworthy release intelligence,
+3. a premium cinematic web/Android experience.
 
 ## Current milestone
 
-**Research Foundation v0.1**
+**Phase P1 — Recommendation Metadata Foundation**
 
-Goal: establish the product constitution, competitor/gap research, source/licensing strategy, data constitution, architecture constitution, engine boundaries, UX information architecture, data quality model, and execution roadmap.
+Goal: create the shared genre/person/credit metadata layer required for real personalization before building onboarding/recommendation UI.
 
-Exit condition: enough evidence exists to freeze the V1 specification without relying on assumptions that could invalidate the product later.
+Immediate execution sequence:
+
+1. inspect current Movie + Series identity coverage,
+2. design shared genre/person/credit schema,
+3. build read-only Wikidata genre/director/cast resolver,
+4. measure production-catalogue coverage,
+5. review quality/yield,
+6. only then authorize production migration/enrichment.
