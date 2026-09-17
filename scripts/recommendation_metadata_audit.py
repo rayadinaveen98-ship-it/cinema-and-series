@@ -250,8 +250,8 @@ def audit_candidates(
     entities: Mapping[str, Mapping[str, Any]],
 ) -> dict[str, Any]:
     media = {
-        "movie": {"titles": 0, "genre": 0, "director_or_creator": 0, "cast": 0, "ready": 0},
-        "series": {"titles": 0, "genre": 0, "director_or_creator": 0, "cast": 0, "ready": 0},
+        "movie": {"titles": 0, "genre": 0, "director_or_creator": 0, "cast": 0, "people": 0, "ready": 0},
+        "series": {"titles": 0, "genre": 0, "director_or_creator": 0, "cast": 0, "people": 0, "ready": 0},
     }
     relation_counts = {"P136": 0, "P57": 0, "P170": 0, "P161": 0}
     unique_genres: set[str] = set()
@@ -296,7 +296,10 @@ def audit_candidates(
             media[media_type]["director_or_creator"] += 1
         if cast:
             media[media_type]["cast"] += 1
-        ready = bool(genres and (directors or creators or cast))
+        has_people = bool(directors or creators or cast)
+        if has_people:
+            media[media_type]["people"] += 1
+        ready = bool(genres and has_people)
         if ready:
             media[media_type]["ready"] += 1
         if len(cast) > 50:
@@ -318,9 +321,7 @@ def audit_candidates(
         total = values["titles"]
         values["ready_percent"] = round((values["ready"] / total * 100.0), 2) if total else 0.0
         values["genre_percent"] = round((values["genre"] / total * 100.0), 2) if total else 0.0
-        values["people_percent"] = round(
-            ((values["director_or_creator"] + values["cast"] - min(values["director_or_creator"], values["cast"])) / total * 100.0), 2
-        ) if total else 0.0
+        values["people_percent"] = round((values["people"] / total * 100.0), 2) if total else 0.0
 
     return {
         "candidate_count": len(candidates),
