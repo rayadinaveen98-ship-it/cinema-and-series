@@ -1,0 +1,181 @@
+name: Series First-Air-Year Enrichment Write Request
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ops/series-first-air-year-enrichment-write-request.json"
+
+concurrency:
+  group: series-first-air-year-enrichment-write-request
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  authorize-and-dispatch:
+    if: github.actor == 'rayadinaveen98-ship-it'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validate explicit operator request
+        id: request
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import re
+          from pathlib import Path
+
+          path = Path("ops/series-first-air-year-enrichment-write-request.json")
+          if not path.exists():
+              raise SystemExit("write request file is missing")
+          request = json.loads(path.read_text(encoding="utf-8"))
+
+          required = {
+              "schema_version": "series-first-air-year-enrichment-write-request-v1",
+              "apply_writes": True,
+              "target_ref": "main",
+              "target_workflow": "series-first-air-year-enrichment-v1.yml",
+          }
+          for key, expected in required.items():
+              if request.get(key) != expected:
+                  raise SystemExit(f"invalid {key}: expected {expected!r}, got {request.get(key)!r}")
+
+          run_id = request.get("validated_analysis_run_id")
+          head_sha = str(request.get("validated_analysis_head_sha") or "").lower()
+          if not isinstance(run_id, int) or run_id <= 0:
+              raise SystemExit("validated_analysis_run_id must be a positive integer")
+          if not re.fullmatch(r"[0-9a-f]{40}", head_sha):
+              raise SystemExit("validated_analysis_head_sha must be a full 40-character commit SHA")
+
+          expected = request.get("expected_summary")
+          fields = ("snapshot", "candidates", "missing_identity", "updates", "ambiguous", "missing_claim", "unusable_time")
+          if not isinstance(expected, dict):
+              raise SystemExit("expected_summary must be an object")
+          for field in fields:
+              value = expected.get(field)
+              if not isinstance(value, int) or value < 0:
+                  raise SystemExit(f"expected_summary.{field} must be a non-negative integer")
+          if expected["candidates"] + expected["missing_identity"] != expected["snapshot"]:
+              raise SystemExit("identity partition does not match snapshot")
+          if expected["updates"] + expected["ambiguous"] + expected["missing_claim"] + expected["unusable_time"] + expected["missing_identity"] != expected["snapshot"]:
+              raise SystemExit("result categories do not partition snapshot")
+          if expected["updates"] <= 0:
+              raise SystemExit("write request must contain at least one analyzed update")
+
+          output = Path(os.environ["GITHUB_OUTPUT"])
+          with output.open("a", encoding="utf-8") as handle:
+              handle.write(f"analysis_run_id={run_id}\n")
+              handle.write(f"analysis_head_sha={head_sha}\n")
+          print(f"Authorized request references analysis run {run_id} at {head_sha}")
+          PY
+
+      - name: Prove enrichment-critical code is unchanged since analysis
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANALYSIS_HEAD_SHA: ${{ steps.request.outputs.analysis_head_sha }}
+        shell: bash
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/compare/${ANALYSIS_HEAD_SHA}...${GITHUB_SHA}" > /tmp/analysis-to-request-compare.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          compare = json.loads(Path("/tmp/analysis-to-request-compare.json").read_text(encoding="utf-8"))
+          if compare.get("status") not in {"ahead", "identical"}:
+              raise SystemExit(f"analysis commit is not an ancestor of write request: {compare.get('status')}")
+          exact_critical = {
+              ".github/workflows/series-first-air-year-enrichment-v1.yml",
+              "scripts/enrich_series_first_air_year.py",
+              "scripts/fetch_mediawiki_backfill.py",
+              "scripts/cloudflare_bootstrap.py",
+              "tests/test_series_first_air_year_enrichment.py",
+              "migrations/0020_series_first_air_year_provenance.sql",
+              "package.json",
+              "package-lock.json",
+          }
+          changed = [item.get("filename") for item in compare.get("files", []) if item.get("filename")]
+          blocked = sorted(path for path in changed if path in exact_critical)
+          if blocked:
+              raise SystemExit("enrichment-critical code changed after analysis: " + ", ".join(blocked))
+          print("ANALYZED_CODE_IMMUTABLE=true")
+          PY
+
+      - name: Verify successful immutable analysis evidence
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANALYSIS_RUN_ID: ${{ steps.request.outputs.analysis_run_id }}
+          ANALYSIS_HEAD_SHA: ${{ steps.request.outputs.analysis_head_sha }}
+        shell: bash
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ANALYSIS_RUN_ID}" > /tmp/analysis-run.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ANALYSIS_RUN_ID}/jobs?per_page=100" > /tmp/analysis-jobs.json
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ANALYSIS_RUN_ID}/artifacts?per_page=100" > /tmp/analysis-artifacts.json
+          rm -rf /tmp/analysis-summary
+          mkdir -p /tmp/analysis-summary
+          gh run download "${ANALYSIS_RUN_ID}" -n series-first-air-year-enrichment-v1-summary -D /tmp/analysis-summary
+
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          run = json.loads(Path("/tmp/analysis-run.json").read_text(encoding="utf-8"))
+          jobs_payload = json.loads(Path("/tmp/analysis-jobs.json").read_text(encoding="utf-8"))
+          artifacts_payload = json.loads(Path("/tmp/analysis-artifacts.json").read_text(encoding="utf-8"))
+          request = json.loads(Path("ops/series-first-air-year-enrichment-write-request.json").read_text(encoding="utf-8"))
+          expected_sha = os.environ["ANALYSIS_HEAD_SHA"].lower()
+
+          checks = {
+              "workflow name": run.get("name") == "Series First-Air-Year Enrichment V1",
+              "workflow event": run.get("event") == "push",
+              "head branch": run.get("head_branch") == "main",
+              "head SHA": str(run.get("head_sha") or "").lower() == expected_sha,
+              "workflow conclusion": run.get("conclusion") == "success",
+          }
+          failures = [name for name, passed in checks.items() if not passed]
+          if failures:
+              raise SystemExit("analysis run failed authorization checks: " + ", ".join(failures))
+
+          jobs = {job.get("name"): job.get("conclusion") for job in jobs_payload.get("jobs", [])}
+          for name in ("prepare", "enrich", "summarize"):
+              if jobs.get(name) != "success":
+                  raise SystemExit(f"analysis run lacks successful job: {name}")
+
+          summaries = [artifact for artifact in artifacts_payload.get("artifacts", []) if artifact.get("name") == "series-first-air-year-enrichment-v1-summary" and not artifact.get("expired")]
+          if len(summaries) != 1:
+              raise SystemExit("analysis run must retain exactly one unexpired summary artifact")
+
+          summary = json.loads(Path("/tmp/analysis-summary/series-first-air-year-enrichment-v1-summary.json").read_text(encoding="utf-8"))
+          if summary.get("state") != "complete":
+              raise SystemExit("aggregate summary is not complete")
+          expected = request["expected_summary"]
+          for field in ("snapshot", "candidates", "missing_identity", "updates", "ambiguous", "missing_claim", "unusable_time"):
+              if summary.get(field) != expected.get(field):
+                  raise SystemExit(f"summary mismatch for {field}: expected {expected.get(field)}, got {summary.get(field)}")
+
+          print("FIRST_AIR_YEAR_WRITE_GATE_VERIFIED=" + json.dumps({
+              "run_id": run.get("id"),
+              "head_sha": run.get("head_sha"),
+              "summary_artifact_id": summaries[0].get("id"),
+              "summary": expected,
+          }, sort_keys=True))
+          PY
+
+      - name: Dispatch guarded production write workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/series-first-air-year-enrichment-v1.yml/dispatches" \
+            -f ref='main' \
+            -f 'inputs[apply_writes]=true'
+          echo "Guarded Series First-Air-Year Enrichment V1 production write dispatched from verified analysis evidence." >> "$GITHUB_STEP_SUMMARY"
