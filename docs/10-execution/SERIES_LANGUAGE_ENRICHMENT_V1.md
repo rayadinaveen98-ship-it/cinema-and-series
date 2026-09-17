@@ -138,6 +138,24 @@ Selected verified post-write language counts include:
 
 These counts reflect explicit stored labels and should not be interpreted as complete market coverage for each language.
 
+### Post-write Catalogue Quality regression
+
+Catalogue Quality V1 run `35181301435` completed successfully after the production write:
+
+- catalogue total: **16,184**
+- projected movies: **8,150**
+- projected series: **8,034**
+- **S0 Critical: 0**
+- **S1 High: 0**
+- S2 Medium: **7,567** (down from **11,375** before enrichment)
+- S3 Low: **8,034**
+- `METADATA.LANGUAGE_UNKNOWN`: **7,344** (down from **11,152**)
+- `METADATA.YEAR_UNKNOWN`: **223**
+- `SERIES.LIFECYCLE_UNKNOWN`: **8,034**
+- measured series language coverage: **4,053 / 8,034 (50.45%)**
+
+This confirms the production enrichment materially improved metadata coverage without introducing a structural quality regression.
+
 ## Acceptance
 
 - enrichment unit tests pass: **YES**
@@ -147,7 +165,7 @@ These counts reflect explicit stored labels and should not be interpreted as com
 - post-run language coverage measured and documented: **YES — 50.45%**
 - all eight production write shards complete: **YES**
 - post-write production verification succeeds: **YES**
-- Catalogue Quality V1 post-write S0 regression check: **triggered by the closeout workflow change and required before final quality closeout**
+- Catalogue Quality V1 post-write S0 regression check: **YES — S0=0, S1=0**
 
 ## Remaining language backlog
 
