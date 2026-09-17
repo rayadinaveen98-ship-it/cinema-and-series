@@ -8,7 +8,7 @@ on:
       - "tests/test_production_catalogue_quality.py"
       - ".github/workflows/catalogue-quality-v1.yml"
   workflow_run:
-    workflows: ["Series Language Enrichment V1"]
+    workflows: ["Series Language Enrichment V1", "Series First-Air-Year Enrichment V1"]
     types: [completed]
   workflow_dispatch:
   schedule:
