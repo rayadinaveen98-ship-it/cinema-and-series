@@ -1,0 +1,152 @@
+name: Catalogue Quality Post-Write Watch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/catalogue-quality-post-write-watch.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "*/15 * * * *"
+
+concurrency:
+  group: catalogue-quality-post-write-watch
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  check-and-dispatch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - name: Find latest verified production enrichment write
+        id: latest_write
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" > /tmp/runs.json
+
+          python - <<'PY' > /tmp/write-candidates.txt
+          import json
+          from pathlib import Path
+
+          payload = json.loads(Path('/tmp/runs.json').read_text(encoding='utf-8'))
+          names = {
+              'Series Language Enrichment V1',
+              'Series First-Air-Year Enrichment V1',
+          }
+          candidates = [
+              run for run in payload.get('workflow_runs', [])
+              if run.get('name') in names
+              and run.get('event') == 'workflow_dispatch'
+              and run.get('conclusion') == 'success'
+          ]
+          candidates.sort(key=lambda run: run.get('created_at') or '', reverse=True)
+          for run in candidates:
+              print(run.get('id'))
+          PY
+
+          VERIFIED_RUN_ID=""
+          while read -r RUN_ID; do
+            [[ -z "$RUN_ID" ]] && continue
+            gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${RUN_ID}/jobs?per_page=100" > /tmp/jobs.json
+            if python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path('/tmp/jobs.json').read_text(encoding='utf-8'))
+          ok = any(job.get('name') == 'verify-write' and job.get('conclusion') == 'success' for job in payload.get('jobs', []))
+          raise SystemExit(0 if ok else 1)
+          PY
+            then
+              VERIFIED_RUN_ID="$RUN_ID"
+              break
+            fi
+          done < /tmp/write-candidates.txt
+
+          if [[ -z "$VERIFIED_RUN_ID" ]]; then
+            echo "No successful verified production enrichment write found in the recent run window."
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          python - "$VERIFIED_RUN_ID" <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import sys
+          from pathlib import Path
+          run_id = int(sys.argv[1])
+          payload = json.loads(Path('/tmp/runs.json').read_text(encoding='utf-8'))
+          run = next(item for item in payload.get('workflow_runs', []) if int(item.get('id') or 0) == run_id)
+          print('found=true')
+          print(f"run_id={run_id}")
+          print(f"created_at={run.get('created_at')}")
+          print(f"workflow_name={run.get('name')}")
+          print(f"html_url={run.get('html_url')}")
+          PY
+
+      - name: Decide whether a post-write quality audit already exists
+        id: decision
+        if: steps.latest_write.outputs.found == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          WRITE_CREATED_AT: ${{ steps.latest_write.outputs.created_at }}
+        shell: bash
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" > /tmp/runs-current.json
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          import os
+          from pathlib import Path
+
+          write_at = os.environ['WRITE_CREATED_AT']
+          payload = json.loads(Path('/tmp/runs-current.json').read_text(encoding='utf-8'))
+          later_quality = [
+              run for run in payload.get('workflow_runs', [])
+              if run.get('name') == 'Catalogue Quality V1'
+              and (run.get('created_at') or '') > write_at
+          ]
+          later_quality.sort(key=lambda run: run.get('created_at') or '', reverse=True)
+          if later_quality:
+              newest = later_quality[0]
+              print('dispatch=false')
+              print(f"existing_run_id={newest.get('id')}")
+              print(f"existing_url={newest.get('html_url')}")
+              print(f"existing_status={newest.get('status')}")
+              print(f"existing_conclusion={newest.get('conclusion') or ''}")
+          else:
+              print('dispatch=true')
+          PY
+
+      - name: Dispatch Catalogue Quality V1
+        if: steps.latest_write.outputs.found == 'true' && steps.decision.outputs.dispatch == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api \
+            --method POST \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/catalogue-quality-v1.yml/dispatches" \
+            -f ref='main'
+          echo "Dispatched Catalogue Quality V1 after verified production write ${{ steps.latest_write.outputs.run_id }}."
+
+      - name: Publish watcher summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## Catalogue Quality Post-Write Watch"
+            echo
+            if [[ "${{ steps.latest_write.outputs.found }}" != "true" ]]; then
+              echo "No recent verified production enrichment write required auditing."
+            elif [[ "${{ steps.decision.outputs.dispatch }}" == "true" ]]; then
+              echo "Dispatched Catalogue Quality V1 after verified write run ${{ steps.latest_write.outputs.run_id }}."
+              echo "Upstream: ${{ steps.latest_write.outputs.html_url }}"
+            else
+              echo "A post-write Catalogue Quality run already exists."
+              echo "Run: ${{ steps.decision.outputs.existing_url }}"
+              echo "Status: ${{ steps.decision.outputs.existing_status }} ${{ steps.decision.outputs.existing_conclusion }}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
