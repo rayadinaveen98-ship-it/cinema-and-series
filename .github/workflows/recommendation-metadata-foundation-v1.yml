@@ -1,0 +1,273 @@
+name: Recommendation Metadata Foundation V1
+
+on:
+  push:
+    branches: [main, "feature/**", "fix/**"]
+    paths:
+      - "migrations/0021_recommendation_metadata_foundation.sql"
+      - "scripts/recommendation_metadata_audit.py"
+      - "tests/test_recommendation_metadata_audit.py"
+      - ".github/workflows/recommendation-metadata-foundation-v1.yml"
+      - "docs/10-execution/RECOMMENDATION_METADATA_FOUNDATION_V1.md"
+  workflow_dispatch:
+
+concurrency:
+  group: recommendation-metadata-foundation-v1-analysis
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  SHARD_COUNT: "8"
+  MAX_TITLES_PER_SHARD: "2000"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Run Recommendation Metadata Foundation tests
+        run: python -m unittest tests.test_recommendation_metadata_audit -v
+
+      - name: Check Cloudflare connection
+        shell: bash
+        run: |
+          if [[ -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "Cloudflare credentials are required for the read-only production snapshot."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install Wrangler
+        run: npm install --no-audit --no-fund
+
+      - name: Bind production D1
+        run: python scripts/cloudflare_bootstrap.py
+
+      - name: Capture QID-backed catalogue snapshots
+        shell: bash
+        run: |
+          mkdir -p data/generated
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title FROM movies WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/recommendation-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,source_url FROM catalogue_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/recommendation-catalogue.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,source_url FROM series_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/recommendation-series.json
+
+      - name: Validate catalogue projection before external calls
+        run: |
+          python - <<'PY'
+          from scripts.recommendation_metadata_audit import load_d1_rows, build_catalogue_projection
+          projection = build_catalogue_projection(
+              load_d1_rows("data/generated/recommendation-movies.json"),
+              load_d1_rows("data/generated/recommendation-catalogue.json"),
+              load_d1_rows("data/generated/recommendation-series.json"),
+          )
+          candidates = projection["candidates"]
+          collisions = projection["cross_type_collision_qids"]
+          print("RECOMMENDATION_PROJECTION=" + str({
+              "movie_qids": projection["movie_qid_count"],
+              "series_qids": projection["series_qid_count"],
+              "suppressed_movie_projection_overlaps": projection["suppressed_catalogue_overlap_count"],
+              "cross_type_collisions": len(collisions),
+              "candidate_titles": len(candidates),
+          }))
+          if collisions:
+              raise SystemExit(f"cross-type Wikidata identity collision detected: {collisions[:20]}")
+          if len(candidates) == 0:
+              raise SystemExit("no QID-backed candidates available")
+          PY
+
+      - name: Preserve stable production snapshots
+        uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-metadata-foundation-v1-snapshots
+          path: |
+            data/generated/recommendation-movies.json
+            data/generated/recommendation-catalogue.json
+            data/generated/recommendation-series.json
+          if-no-files-found: error
+          retention-days: 30
+
+  audit:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Restore stable production snapshots
+        uses: actions/download-artifact@v4
+        with:
+          name: recommendation-metadata-foundation-v1-snapshots
+          path: data/generated
+
+      - name: Audit explicit genre and credit metadata
+        run: |
+          python scripts/recommendation_metadata_audit.py \
+            --movies data/generated/recommendation-movies.json \
+            --catalogue data/generated/recommendation-catalogue.json \
+            --series data/generated/recommendation-series.json \
+            --shard-index "${{ matrix.shard }}" \
+            --shard-count "${SHARD_COUNT}" \
+            --max-titles "${MAX_TITLES_PER_SHARD}" \
+            --out-json "data/generated/recommendation-metadata-shard-${{ matrix.shard }}.json"
+
+      - name: Validate shard stayed read-only
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          shard = "${{ matrix.shard }}"
+          report = json.loads(Path(f"data/generated/recommendation-metadata-shard-{shard}.json").read_text())
+          if report.get("production_mutation") is not False:
+              raise SystemExit("audit must remain read-only")
+          if int(report.get("candidate_count") or 0) > int("${MAX_TITLES_PER_SHARD}"):
+              raise SystemExit("shard exceeded safety cap")
+          media_total = sum(int(v.get("titles") or 0) for v in report["media"].values())
+          if media_total != int(report.get("candidate_count") or 0):
+              raise SystemExit("media partition does not equal candidate count")
+          if report["projection"].get("cross_type_collision_qids"):
+              raise SystemExit("cross-type collision surfaced during shard analysis")
+          print("RECOMMENDATION_SHARD_VALIDATED=" + json.dumps({
+              "shard": shard,
+              "candidates": report["candidate_count"],
+              "movie_ready": report["media"]["movie"]["ready"],
+              "series_ready": report["media"]["series"]["ready"],
+              "genre_relations": report["relation_counts"]["P136"],
+              "people_relations": report["relation_counts"]["P57"] + report["relation_counts"]["P170"] + report["relation_counts"]["P161"],
+          }, sort_keys=True))
+          PY
+
+      - name: Preserve shard audit
+        uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-metadata-foundation-v1-shard-${{ matrix.shard }}
+          path: data/generated/recommendation-metadata-shard-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  summarize:
+    needs: audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: recommendation-metadata-foundation-v1-shard-*
+          path: audit-shards
+          merge-multiple: true
+
+      - name: Aggregate recommendation coverage
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          reports = [json.loads(path.read_text()) for path in sorted(Path("audit-shards").glob("*.json"))]
+          if len(reports) != 8:
+              raise SystemExit(f"expected 8 shard reports, found {len(reports)}")
+
+          projection = reports[0]["projection"]
+          for report in reports[1:]:
+              if report["projection"] != projection:
+                  raise SystemExit("projection metadata drifted between shards")
+
+          totals = {
+              "candidate_count": 0,
+              "movie_titles": 0,
+              "movie_genre": 0,
+              "movie_people": 0,
+              "movie_ready": 0,
+              "series_titles": 0,
+              "series_genre": 0,
+              "series_people": 0,
+              "series_ready": 0,
+              "genre_relations": 0,
+              "director_relations": 0,
+              "creator_relations": 0,
+              "cast_relations": 0,
+              "missing_entities": 0,
+              "unusable_claims": 0,
+              "high_fanout_cast_titles": 0,
+          }
+          for report in reports:
+              totals["candidate_count"] += report["candidate_count"]
+              for media_type in ("movie", "series"):
+                  block = report["media"][media_type]
+                  totals[f"{media_type}_titles"] += block["titles"]
+                  totals[f"{media_type}_genre"] += block["genre"]
+                  totals[f"{media_type}_people"] += block["people"]
+                  totals[f"{media_type}_ready"] += block["ready"]
+              totals["genre_relations"] += report["relation_counts"]["P136"]
+              totals["director_relations"] += report["relation_counts"]["P57"]
+              totals["creator_relations"] += report["relation_counts"]["P170"]
+              totals["cast_relations"] += report["relation_counts"]["P161"]
+              totals["missing_entities"] += report["missing_entity_count"]
+              totals["unusable_claims"] += report["unusable_claim_count"]
+              totals["high_fanout_cast_titles"] += report["high_fanout_cast_title_count"]
+
+          expected = projection["movie_qid_count"] + projection["series_qid_count"]
+          if totals["candidate_count"] != expected:
+              raise SystemExit(f"candidate partition mismatch: {totals['candidate_count']} != {expected}")
+
+          def pct(part, whole):
+              return round(part / whole * 100.0, 2) if whole else 0.0
+
+          summary = {
+              "schema_version": "recommendation-metadata-foundation-v1-summary",
+              "production_mutation": False,
+              "projection": projection,
+              "totals": totals,
+              "coverage": {
+                  "movies": {
+                      "genre_percent": pct(totals["movie_genre"], totals["movie_titles"]),
+                      "people_percent": pct(totals["movie_people"], totals["movie_titles"]),
+                      "recommendation_ready_percent": pct(totals["movie_ready"], totals["movie_titles"]),
+                  },
+                  "series": {
+                      "genre_percent": pct(totals["series_genre"], totals["series_titles"]),
+                      "people_percent": pct(totals["series_people"], totals["series_titles"]),
+                      "recommendation_ready_percent": pct(totals["series_ready"], totals["series_titles"]),
+                  },
+              },
+          }
+          Path("recommendation-metadata-foundation-v1-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n"
+          )
+          print("RECOMMENDATION_METADATA_FOUNDATION_V1=" + json.dumps(summary, sort_keys=True))
+          PY
+
+      - name: Preserve aggregate report
+        uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-metadata-foundation-v1-summary
+          path: recommendation-metadata-foundation-v1-summary.json
+          if-no-files-found: error
+          retention-days: 30
