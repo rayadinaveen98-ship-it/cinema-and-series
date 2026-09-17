@@ -1,0 +1,17 @@
+{
+  "schema_version": "series-first-air-year-enrichment-write-request-v1",
+  "apply_writes": true,
+  "target_ref": "main",
+  "target_workflow": "series-first-air-year-enrichment-v1.yml",
+  "validated_analysis_run_id": 35186244929,
+  "validated_analysis_head_sha": "216ec13bdeb830d4262b3aba90dfd8292fc5105f",
+  "expected_summary": {
+    "snapshot": 223,
+    "candidates": 219,
+    "missing_identity": 4,
+    "updates": 81,
+    "ambiguous": 0,
+    "missing_claim": 138,
+    "unusable_time": 0
+  }
+}
