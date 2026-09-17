@@ -1,0 +1,24 @@
+name: P1 Materialization Dispatch Once
+
+on:
+  push:
+    branches: ["feature/recommendation-metadata-foundation-v1"]
+    paths:
+      - ".github/workflows/p1-materialization-dispatch-once.yml"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch read-only P1 materialization
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run recommendation-metadata-materialization-v1.yml \
+            --repo "${{ github.repository }}" \
+            --ref "feature/recommendation-metadata-foundation-v1"
