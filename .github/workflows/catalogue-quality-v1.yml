@@ -7,6 +7,9 @@ on:
       - "scripts/production_catalogue_quality.py"
       - "tests/test_production_catalogue_quality.py"
       - ".github/workflows/catalogue-quality-v1.yml"
+  workflow_run:
+    workflows: ["Series Language Enrichment V1"]
+    types: [completed]
   workflow_dispatch:
   schedule:
     - cron: "30 2 * * 1"
@@ -20,6 +23,10 @@ permissions:
 
 jobs:
   audit:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'workflow_dispatch')
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
