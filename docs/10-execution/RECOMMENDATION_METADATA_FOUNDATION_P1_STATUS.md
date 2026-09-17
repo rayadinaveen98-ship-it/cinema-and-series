@@ -1,6 +1,6 @@
 # Recommendation Metadata Foundation P1 — Execution Status
 
-**Status:** ACTIVE — READ-ONLY ANALYSIS + MATERIALIZATION FOUNDATION  
+**Status:** ACTIVE — FINGERPRINTED READ-ONLY AUDITS + MATERIALIZATION HARDENING  
 **Date:** 2026-09-17  
 **Parent roadmap:** `PERSONALIZED_DISCOVERY_ACTIVE_ROADMAP_V1.md`
 
@@ -27,35 +27,51 @@ Migration `0021_recommendation_metadata_foundation.sql` defines:
 
 The shared title registry is keyed by stable Wikidata identity. Exact-date `movies` rows take precedence over duplicate QIDs in `catalogue_titles`; Series remains a distinct media type. A QID appearing as both Movie and Series is a hard audit failure.
 
-## Production identity baseline
+## Current production identity baseline
 
-Read-only production projection on 2026-09-17:
+Authoritative read-only production projection captured on 2026-09-17:
 
-- Movie QIDs: **3,952**
+- Movie QIDs: **4,343**
 - Series QIDs: **7,921**
-- total recommendation candidates: **11,873**
+- total recommendation candidates: **12,264**
 - duplicate movie projection overlaps safely suppressed: **199**
 - Movie/Series cross-type QID collisions: **0**
+- projection SHA-256: **`86da6c202ca5013d595596226a80e9dbe008b25a4a7c6b656c61b7c3a1a17786`**
 
-## Coverage audit
+The fingerprint covers the canonical recommendation projection fields: Wikidata QID, media type, display title, source table, source ID, and source URL. A future production write must recapture the projection and match this fingerprint before applying analyzed metadata.
 
-Workflow: `Recommendation Metadata Foundation V1`
+## Global coverage audit
 
-The corrected full 8-shard audit is read-only and currently active. Each shard is bounded to 2,000 titles and Wikidata requests are paced sequentially.
+Workflow: `Recommendation Metadata Foundation V1`  
+Run: `35204375729`
 
-First validated shard:
+The authoritative 8-shard audit is read-only, bounded to 2,000 titles per shard, and uses the fingerprinted production snapshot above.
 
-- candidates: **1,463**
-- explicit genre relations: **1,330**
-- explicit people relations: **5,035**
-- recommendation-ready Movies: **352**
-- recommendation-ready Series: **310**
-- total recommendation-ready sample: **662 / 1,463 = 45.25%**
-- unique genre QIDs observed: **219**
-- unique people QIDs observed: **4,608**
+Validated through shards 0–4; shard 5 is currently active. First three completed shards established a stable signal:
+
+- candidates: **4,514**
+- recommendation-ready: **2,088 / 4,514 = 46.26%**
+- recommendation-ready Movies: **1,119**
+- recommendation-ready Series: **969**
+- cross-type identity collisions: **0**
 - production mutation: **false**
 
-This yield is useful enough to continue P1, but it is not yet authorization for production writes.
+Shard-level readiness has remained consistently around the mid-40% range, so the source contract has clearly useful yield. Final authorization still waits for the official 8-shard aggregate summary.
+
+## India-language cohort audit
+
+Workflow: `Recommendation Metadata India Cohort Audit`  
+Run: `35204143430`
+
+This audit uses the same production catalogue projection with language fields added only for cohort grouping. The preserved India snapshot was compared row-for-row with the authoritative global snapshot after removing `language_name`:
+
+- Movies: **3,114 / 3,114 rows identical**
+- catalogue Movies: **1,428 / 1,428 rows identical**
+- Series: **7,921 / 7,921 rows identical**
+
+Therefore the India cohort evidence is tied to the same canonical projection fingerprint: **`86da6c202ca5013d595596226a80e9dbe008b25a4a7c6b656c61b7c3a1a17786`**.
+
+Validated through shards 0–5; shard 6 is currently active. Final language-specific readiness percentages will come from the workflow aggregate rather than hand-summed partial results.
 
 ## Dry-run materializer
 
@@ -74,33 +90,40 @@ Important safety behavior:
 
 Tests: `tests/test_recommendation_metadata_enrichment.py`.
 
-## Read-only materialization workflow
+## Fingerprint-bound materialization
 
-`Recommendation Metadata Materialization V1` is manual-only and read-only. It:
+`Recommendation Metadata Materialization V1` remains manual-only and read-only. The materialization path is now hardened so:
 
-1. captures stable QID-backed production snapshots
-2. validates the shared projection
-3. resolves allowed claims + entity labels in 8 bounded sequential shards
-4. generates JSON + SQL artifacts per shard
-5. verifies emitted relationship counts never exceed explicit source relationship counts
-6. aggregates materialization evidence
+1. it captures the canonical production projection
+2. it builds the deterministic projection manifest
+3. each shard output carries the projection SHA-256
+4. generated SQL includes the projection fingerprint as evidence metadata
+5. aggregate materialization fails if shard projection fingerprints drift
+6. aggregate candidate counts must match the manifest
+7. explicit source relations must partition into emitted or missing-label relations
 
-It has no D1 write path.
+The latest hardening commit passed full Python tests, catalogue audit, web typecheck, and production web build.
+
+## Migration numbering rule
+
+The active Recommendation Metadata Foundation owns migration number **0021**.
+
+A dormant `feature/series-native-title-enrichment-v1` branch also contains an unmerged `0021_series_native_title_provenance.sql`. That branch has no open PR and must be rebased/renumbered to **0022 or later** before any future merge. Recommendation P1 keeps `0021` because it is the locked active product phase and will merge first.
 
 ## Remaining P1 gates
 
 Before production enrichment:
 
-1. complete the full global 8-shard coverage audit
-2. add and run India-language cohort coverage breakdown required by the locked roadmap
-3. run main-branch read-only materialization analysis
-4. quantify unresolved labels and relationship volume
-5. create immutable analysis evidence / operator write request gate
-6. verify the production catalogue projection has not drifted since analysis
-7. only then apply migration `0021` and bounded shard SQL
-8. verify normalized row counts and referential integrity
-9. run Catalogue Quality V1 and keep S0/S1 at zero
-10. document final recommendation-ready coverage and unresolved backlog
+1. complete the global 8-shard aggregate coverage audit
+2. complete the India-language cohort aggregate audit
+3. run fingerprint-bound read-only materialization analysis on the final P1 implementation
+4. quantify unresolved labels and total relationship volume
+5. create immutable analysis evidence and an explicit operator write-request gate
+6. recapture production catalogue projection and require an exact fingerprint match
+7. only then apply migration `0021` and bounded/resumable metadata writes
+8. verify normalized row counts, referential integrity, provenance, and idempotency
+9. rerun Catalogue Quality V1 and keep S0/S1 at zero
+10. document final production recommendation-ready coverage and unresolved backlog
 
 ## P1 exit rule
 
