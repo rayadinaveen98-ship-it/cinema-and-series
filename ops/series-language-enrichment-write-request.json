@@ -1,0 +1,15 @@
+{
+  "schema_version": "series-language-enrichment-write-request-v1",
+  "apply_writes": true,
+  "target_ref": "main",
+  "target_workflow": "series-language-enrichment-v1.yml",
+  "validated_analysis_run_id": 35138082917,
+  "validated_analysis_head_sha": "0521583de2083286cc303d7058643ffca0be0270",
+  "expected_summary": {
+    "candidates": 7676,
+    "updates": 3807,
+    "ambiguous": 107,
+    "missing_claim": 3762,
+    "missing_label": 0
+  }
+}
