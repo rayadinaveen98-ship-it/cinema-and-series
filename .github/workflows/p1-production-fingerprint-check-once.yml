@@ -1,0 +1,86 @@
+name: P1 Production Fingerprint Check Once
+
+on:
+  push:
+    branches: ["feature/recommendation-metadata-foundation-v1"]
+    paths:
+      - ".github/workflows/p1-production-fingerprint-check-once.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  fingerprint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Check Cloudflare credentials
+        shell: bash
+        run: |
+          if [[ -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "Cloudflare credentials are required."
+            exit 1
+          fi
+
+      - name: Install Wrangler and bind D1
+        run: |
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Capture current QID-backed projection
+        shell: bash
+        run: |
+          mkdir -p data/generated
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title FROM movies WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/recommendation-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,source_url FROM catalogue_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/recommendation-catalogue.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,source_url FROM series_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/recommendation-series.json
+
+      - name: Build and validate projection fingerprint
+        shell: bash
+        run: |
+          python scripts/recommendation_projection_manifest.py \
+            --movies data/generated/recommendation-movies.json \
+            --catalogue data/generated/recommendation-catalogue.json \
+            --series data/generated/recommendation-series.json \
+            --out-json data/generated/recommendation-projection-manifest.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.recommendation_projection_manifest import fingerprint
+
+          manifest = json.loads(Path("data/generated/recommendation-projection-manifest.json").read_text(encoding="utf-8"))
+          if fingerprint(manifest.get("entries") or []) != manifest.get("sha256"):
+              raise SystemExit("projection fingerprint is internally inconsistent")
+          print("P1_CURRENT_PRODUCTION_FINGERPRINT=" + json.dumps({
+              "candidate_count": manifest["candidate_count"],
+              "movie_qid_count": manifest["movie_qid_count"],
+              "series_qid_count": manifest["series_qid_count"],
+              "sha256": manifest["sha256"],
+          }, sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: p1-current-production-fingerprint
+          path: data/generated/recommendation-projection-manifest.json
+          if-no-files-found: error
+          retention-days: 7
