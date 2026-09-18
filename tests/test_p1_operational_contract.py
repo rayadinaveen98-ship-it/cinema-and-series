@@ -8,6 +8,8 @@ STATUS = ROOT / "docs/10-execution/RECOMMENDATION_METADATA_FOUNDATION_P1_STATUS.
 DAILY = ROOT / ".github/workflows/p1-quota-safe-daily-resume.yml"
 WRITER = ROOT / ".github/workflows/recommendation-metadata-production-write-v2.yml"
 COORDINATOR = ROOT / ".github/workflows/p1-background-write-coordinator.yml"
+YOUTUBE_MONITOR = ROOT / ".github/workflows/youtube-monitor.yml"
+WEBSITE_MONITOR = ROOT / ".github/workflows/website-monitor.yml"
 MIGRATIONS = ROOT / "migrations"
 
 EXPECTED_ANALYSIS_RUN_ID = "35252106776"
@@ -34,6 +36,8 @@ class P1OperationalContractTests(unittest.TestCase):
         self.daily = read(DAILY)
         self.writer = read(WRITER)
         self.coordinator = read(COORDINATOR)
+        self.youtube_monitor = read(YOUTUBE_MONITOR)
+        self.website_monitor = read(WEBSITE_MONITOR)
 
     def test_p1_population_is_explicitly_in_progress(self):
         self.assertIn("PRODUCTION POPULATION IN PROGRESS", self.status)
@@ -114,6 +118,17 @@ class P1OperationalContractTests(unittest.TestCase):
         self.assertIn('action = "resume" if verified else "pause"', self.coordinator)
         self.assertIn("p1-background-write-coordinator.yml", self.coordinator)
         self.assertIn("/disable", self.coordinator)
+
+    def test_observation_monitors_preserve_artifacts_but_skip_d1_writes_on_p1_quota_day(self):
+        for workflow in (self.youtube_monitor, self.website_monitor):
+            self.assertIn("Respect P1 UTC-day D1 write reservation", workflow)
+            self.assertIn("recommendation_materialization_daily_guard", workflow)
+            self.assertIn("steps.p1_quota.outputs.reserved != 'true'", workflow)
+            self.assertIn("Apply D1 migrations", workflow)
+        self.assertIn("official-youtube-release-candidates", self.youtube_monitor)
+        self.assertIn("official-website-release-candidates", self.website_monitor)
+        self.assertIn("P1_D1_WRITE_QUOTA_RESERVED", self.youtube_monitor)
+        self.assertIn("P1_D1_WRITE_QUOTA_RESERVED", self.website_monitor)
 
 
 if __name__ == "__main__":

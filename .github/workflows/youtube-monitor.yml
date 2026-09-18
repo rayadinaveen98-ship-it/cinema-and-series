@@ -91,12 +91,38 @@ jobs:
         if: steps.youtube.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
         run: python scripts/cloudflare_bootstrap.py
 
-      - name: Apply D1 migrations
+      - name: Respect P1 UTC-day D1 write reservation
         if: steps.youtube.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
+        id: p1_quota
+        shell: bash
+        run: |
+          set -euo pipefail
+          UTC_DATE="$(date -u +%F)"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS count FROM recommendation_materialization_daily_guard WHERE utc_date='${UTC_DATE}';" \
+            > /tmp/p1-daily-guard.json
+          python - <<'PY'
+          import json, os
+          payload=json.load(open('/tmp/p1-daily-guard.json', encoding='utf-8'))
+          rows=[]
+          for batch in payload if isinstance(payload,list) else [payload]:
+              if isinstance(batch,dict): rows.extend(batch.get('results') or [])
+          if len(rows)!=1: raise SystemExit(f'unexpected P1 daily guard response: {len(rows)} rows')
+          reserved=int(rows[0].get('count') or 0)>0
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as fh:
+              fh.write(f"reserved={'true' if reserved else 'false'}\n")
+          if reserved:
+              print('P1_D1_WRITE_QUOTA_RESERVED: keeping YouTube evidence artifact; D1 migration/sync skipped today')
+          else:
+              print('P1_D1_WRITE_QUOTA_AVAILABLE_FOR_BACKGROUND_SYNC')
+          PY
+
+      - name: Apply D1 migrations
+        if: steps.youtube.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true' && steps.p1_quota.outputs.reserved != 'true'
         run: npx wrangler d1 migrations apply cinema-and-series --remote
 
       - name: Sync review candidates to D1
-        if: steps.youtube.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true'
+        if: steps.youtube.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true' && steps.p1_quota.outputs.reserved != 'true'
         shell: bash
         run: |
           if [[ -s data/generated/youtube-candidates-upsert.sql ]]; then
