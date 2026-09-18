@@ -1,0 +1,231 @@
+name: P1 Quota-Safe Daily Resume
+
+on:
+  schedule:
+    # Free D1 write quotas reset at 00:00 UTC. Run away from the top of the hour
+    # to reduce scheduled-workflow congestion while preserving a fresh quota day.
+    - cron: "25 0 * * *"
+  workflow_dispatch:
+    inputs:
+      apply_production_write:
+        description: "Acquire today's UTC lock and dispatch exactly one shard"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: p1-quota-safe-daily-resume
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+env:
+  ANALYSIS_RUN_ID: "35252106776"
+  EXPECTED_PROJECTION_SHA256: "4a9d095ca258d3718d2c189c8bd6596d20af46a434f38ab60ba2f2ddbea18448"
+  MAX_SHARD_ROWS_WRITTEN: "80000"
+
+jobs:
+  plan-and-dispatch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      APPLY_PRODUCTION_WRITE: ${{ github.event_name == 'schedule' || inputs.apply_production_write }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore immutable reviewed P1 materialization
+        uses: actions/download-artifact@v4
+        with:
+          name: recommendation-metadata-materialization-v1-run-once
+          path: data/generated/reviewed
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35252106776
+
+      - name: Check Cloudflare credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_API_TOKEN" ]] || {
+            echo "Cloudflare credentials required"
+            exit 1
+          }
+
+      - name: Install Wrangler and bind production D1
+        run: |
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Ensure quota-guard schema is current
+        run: npx wrangler d1 migrations apply cinema-and-series --remote
+
+      - name: Refuse a second shard in the same UTC quota day
+        id: daily_guard
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/quota-plan
+          UTC_DATE="$(date -u +%F)"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT utc_date,shard_index,projection_sha256,workflow_run_id,created_at FROM recommendation_materialization_daily_guard WHERE utc_date='${UTC_DATE}';" \
+            > data/generated/quota-plan/daily-guard.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          payload=json.loads(Path('data/generated/quota-plan/daily-guard.json').read_text(encoding='utf-8'))
+          rows=[]
+          for batch in payload if isinstance(payload,list) else [payload]:
+              if isinstance(batch,dict): rows.extend(batch.get('results') or [])
+          if len(rows)>1: raise SystemExit('daily guard returned multiple rows')
+          blocked=bool(rows)
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as fh:
+              fh.write(f"blocked={'true' if blocked else 'false'}\n")
+          if blocked:
+              print('P1_DAILY_WRITE_ALREADY_USED='+json.dumps(rows[0],sort_keys=True))
+          else:
+              print('P1_DAILY_WRITE_WINDOW_AVAILABLE')
+          PY
+
+      - name: Find first incomplete reviewed shard
+        if: steps.daily_guard.outputs.blocked != 'true'
+        id: shard_plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          NEXT=""
+          mkdir -p data/generated/quota-plan
+          for SHARD in 0 1 2 3 4 5 6 7; do
+            python scripts/p1_shard_status.py plan \
+              --input "data/generated/reviewed/recommendation-materialization-shard-${SHARD}.sql" \
+              --expected-fingerprint "$EXPECTED_PROJECTION_SHA256" \
+              --query-out "data/generated/quota-plan/shard-${SHARD}-status.sql" \
+              --meta-out "data/generated/quota-plan/shard-${SHARD}-status-meta.json"
+            QUERY="$(cat "data/generated/quota-plan/shard-${SHARD}-status.sql")"
+            npx wrangler d1 execute cinema-and-series --remote --json \
+              --command "$QUERY" \
+              > "data/generated/quota-plan/shard-${SHARD}-status-d1.json"
+            python scripts/p1_shard_status.py evaluate \
+              --meta "data/generated/quota-plan/shard-${SHARD}-status-meta.json" \
+              --d1-json "data/generated/quota-plan/shard-${SHARD}-status-d1.json" \
+              --state-out "data/generated/quota-plan/shard-${SHARD}-state.txt" \
+              --result-out "data/generated/quota-plan/shard-${SHARD}-status-result.json"
+            STATE="$(tr -d '\r\n' < "data/generated/quota-plan/shard-${SHARD}-state.txt")"
+            case "$STATE" in
+              complete)
+                echo "Shard ${SHARD} already complete."
+                ;;
+              not_started)
+                NEXT="$SHARD"
+                echo "Shard ${SHARD} is the next untouched shard."
+                break
+                ;;
+              unsafe_partial|unsafe_overfilled)
+                echo "Unsafe materialization state detected for shard ${SHARD}: ${STATE}"
+                exit 1
+                ;;
+              *)
+                echo "Unexpected shard state for ${SHARD}: ${STATE}"
+                exit 1
+                ;;
+            esac
+          done
+          if [[ -z "$NEXT" ]]; then
+            echo "All reviewed P1 shards are complete."
+            echo "next_shard=complete" >> "$GITHUB_OUTPUT"
+          else
+            echo "next_shard=$NEXT" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Compute and enforce next-shard write cost
+        if: steps.daily_guard.outputs.blocked != 'true' && steps.shard_plan.outputs.next_shard != 'complete'
+        id: write_cost
+        shell: bash
+        env:
+          NEXT_SHARD: ${{ steps.shard_plan.outputs.next_shard }}
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/quota-plan/executable
+          python scripts/prepare_d1_reviewed_import.py \
+            --input "data/generated/reviewed/recommendation-materialization-shard-${NEXT_SHARD}.sql" \
+            --output "data/generated/quota-plan/executable/shard-${NEXT_SHARD}.sql" \
+            --manifest "data/generated/quota-plan/executable/shard-${NEXT_SHARD}-manifest.json" \
+            --expected-fingerprint "$EXPECTED_PROJECTION_SHA256"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          shard=os.environ['NEXT_SHARD']
+          manifest=json.loads(Path(f'data/generated/quota-plan/executable/shard-{shard}-manifest.json').read_text(encoding='utf-8'))
+          estimated=int(manifest['estimated_rows_written'])
+          maximum=int(os.environ['MAX_SHARD_ROWS_WRITTEN'])
+          if estimated>maximum:
+              raise SystemExit(f'shard {shard} exceeds quota-safe ceiling: {estimated}>{maximum}')
+          print('P1_QUOTA_SAFE_SHARD='+json.dumps({
+              'shard':int(shard),
+              'estimated_rows_written':estimated,
+              'hard_ceiling':maximum,
+              'free_daily_limit':int(manifest['free_daily_rows_written_limit']),
+              'free_daily_headroom':int(manifest['free_daily_rows_written_headroom']),
+          },sort_keys=True))
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as fh:
+              fh.write(f'estimated_rows_written={estimated}\n')
+          PY
+
+      - name: Dry-run plan only
+        if: steps.daily_guard.outputs.blocked != 'true' && steps.shard_plan.outputs.next_shard != 'complete' && env.APPLY_PRODUCTION_WRITE != 'true'
+        shell: bash
+        run: |
+          echo "Dry run only. Planned shard: ${{ steps.shard_plan.outputs.next_shard }}"
+          echo "Estimated rows written: ${{ steps.write_cost.outputs.estimated_rows_written }}"
+
+      - name: Acquire UTC-day production write lock
+        if: steps.daily_guard.outputs.blocked != 'true' && steps.shard_plan.outputs.next_shard != 'complete' && env.APPLY_PRODUCTION_WRITE == 'true'
+        shell: bash
+        env:
+          NEXT_SHARD: ${{ steps.shard_plan.outputs.next_shard }}
+        run: |
+          set -euo pipefail
+          UTC_DATE="$(date -u +%F)"
+          npx wrangler d1 execute cinema-and-series --remote --yes \
+            --command "INSERT INTO recommendation_materialization_daily_guard (utc_date,shard_index,projection_sha256,workflow_run_id) VALUES ('${UTC_DATE}',${NEXT_SHARD},'${EXPECTED_PROJECTION_SHA256}','${GITHUB_RUN_ID}');"
+          echo "Acquired P1 UTC-day lock for ${UTC_DATE}, shard ${NEXT_SHARD}."
+
+      - name: Dispatch existing guarded production writer
+        if: steps.daily_guard.outputs.blocked != 'true' && steps.shard_plan.outputs.next_shard != 'complete' && env.APPLY_PRODUCTION_WRITE == 'true'
+        shell: bash
+        env:
+          NEXT_SHARD: ${{ steps.shard_plan.outputs.next_shard }}
+        run: |
+          set -euo pipefail
+          gh workflow run recommendation-metadata-production-write-v2.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f mode=write_shard \
+            -f shard_index="$NEXT_SHARD" \
+            -f apply_production_write=true
+          echo "Dispatched guarded writer for shard ${NEXT_SHARD}."
+
+      - name: Report complete P1 population
+        if: steps.daily_guard.outputs.blocked != 'true' && steps.shard_plan.outputs.next_shard == 'complete'
+        run: |
+          echo "All eight reviewed P1 shards are already present in production."
+          echo "Run the separate verify_final gate to close P1."
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p1-quota-safe-daily-resume-${{ github.run_id }}
+          path: data/generated/quota-plan/**
+          if-no-files-found: warn
+          retention-days: 30
