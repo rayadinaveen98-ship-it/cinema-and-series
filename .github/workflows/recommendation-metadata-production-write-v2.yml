@@ -1,0 +1,266 @@
+name: Recommendation Metadata Production Write V2
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Write one reviewed shard or verify complete P1 production state"
+        required: true
+        default: "write_shard"
+        type: choice
+        options: [write_shard, verify_final]
+      shard_index:
+        description: "Shard 0-7; ignored by verify_final"
+        required: true
+        default: "0"
+        type: string
+      apply_production_write:
+        description: "Explicit production mutation authorization"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: recommendation-metadata-production-write-v2
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  ANALYSIS_RUN_ID: "35252106776"
+  ANALYSIS_COMMIT: "0e319f86a4a9c7ca085de93bb5b3246606b7d6d0"
+  EXPECTED_PROJECTION_SHA256: "4a9d095ca258d3718d2c189c8bd6596d20af46a434f38ab60ba2f2ddbea18448"
+  EXPECTED_CANDIDATES: "14115"
+  EXPECTED_MOVIES: "5235"
+  EXPECTED_SERIES: "8880"
+  EXPECTED_GENRE_RELATIONS: "13689"
+  EXPECTED_CREDIT_RELATIONS: "58069"
+
+jobs:
+  guarded-write:
+    if: github.ref == 'refs/heads/main' && inputs.apply_production_write == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      WRITE_MODE: ${{ inputs.mode }}
+      SHARD_INDEX: ${{ inputs.shard_index }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate request and reviewed analysis provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$WRITE_MODE" == "write_shard" ]] && ! [[ "$SHARD_INDEX" =~ ^[0-7]$ ]]; then
+            echo "shard_index must be 0-7"
+            exit 1
+          fi
+          if [[ "$WRITE_MODE" != "write_shard" && "$WRITE_MODE" != "verify_final" ]]; then
+            echo "unsupported mode: $WRITE_MODE"
+            exit 1
+          fi
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ANALYSIS_RUN_ID}" > /tmp/analysis-run.json
+          python - <<'PY'
+          import json, os
+          run=json.load(open('/tmp/analysis-run.json', encoding='utf-8'))
+          if run.get('conclusion') != 'success': raise SystemExit('reviewed analysis run is not successful')
+          if run.get('head_sha') != os.environ['ANALYSIS_COMMIT']: raise SystemExit('reviewed analysis commit mismatch')
+          if run.get('path') != '.github/workflows/p1-materialization-run-once.yml': raise SystemExit('reviewed analysis workflow mismatch')
+          if run.get('head_branch') != 'feature/recommendation-metadata-foundation-v1': raise SystemExit('reviewed analysis branch mismatch')
+          print('P1_ANALYSIS_RUN_VERIFIED')
+          PY
+          git fetch origin "$ANALYSIS_COMMIT" --depth=1
+          git merge-base --is-ancestor "$ANALYSIS_COMMIT" "$GITHUB_SHA" || {
+            echo "Reviewed analysis commit is not in production ancestry."; exit 1;
+          }
+
+      - name: Restore immutable reviewed materialization
+        uses: actions/download-artifact@v4
+        with:
+          name: recommendation-metadata-materialization-v1-run-once
+          path: data/generated/reviewed
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: 35252106776
+
+      - name: Validate immutable reviewed evidence
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          root=Path('data/generated/reviewed')
+          summary=json.loads((root/'recommendation-metadata-materialization-v1-summary.json').read_text(encoding='utf-8'))
+          manifest=json.loads((root/'recommendation-projection-manifest.json').read_text(encoding='utf-8'))
+          expected=os.environ['EXPECTED_PROJECTION_SHA256']
+          if summary.get('state')!='complete' or summary.get('production_mutation') is not False:
+              raise SystemExit('reviewed materialization is not complete/read-only')
+          if manifest.get('sha256')!=expected or (summary.get('projection_manifest') or {}).get('sha256')!=expected:
+              raise SystemExit('reviewed projection fingerprint mismatch')
+          expected_counts={
+              'candidate_count': int(os.environ['EXPECTED_CANDIDATES']),
+              'movie_qid_count': int(os.environ['EXPECTED_MOVIES']),
+              'series_qid_count': int(os.environ['EXPECTED_SERIES']),
+          }
+          for key,value in expected_counts.items():
+              if int(manifest.get(key) or 0)!=value: raise SystemExit(f'{key} mismatch')
+          totals=summary.get('totals') or {}
+          if int(totals.get('missing_title_entities') or 0)!=0: raise SystemExit('materialization has missing title entities')
+          if int(totals.get('emitted_genre_relations') or 0)!=int(os.environ['EXPECTED_GENRE_RELATIONS']): raise SystemExit('genre count mismatch')
+          if int(totals.get('emitted_credit_relations') or 0)!=int(os.environ['EXPECTED_CREDIT_RELATIONS']): raise SystemExit('credit count mismatch')
+          if os.environ['WRITE_MODE']=='write_shard':
+              shard=int(os.environ['SHARD_INDEX'])
+              report=json.loads((root/f'recommendation-materialization-shard-{shard}.json').read_text(encoding='utf-8'))
+              if report.get('production_mutation') is not False: raise SystemExit('shard is not read-only evidence')
+              if int(report.get('shard_index',-1))!=shard or int(report.get('shard_count',0))!=8: raise SystemExit('shard identity mismatch')
+              if (report.get('projection_manifest') or {}).get('sha256')!=expected: raise SystemExit('shard fingerprint mismatch')
+          print('P1_REVIEWED_EVIDENCE_VERIFIED')
+          PY
+
+      - name: Check Cloudflare credentials
+        shell: bash
+        run: |
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_API_TOKEN" ]] || { echo "Cloudflare credentials required"; exit 1; }
+
+      - name: Install Wrangler and bind production D1
+        run: |
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Recapture and require exact current production projection
+        shell: bash
+        run: |
+          mkdir -p data/generated/current
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title FROM movies WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" > data/generated/current/recommendation-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title,source_url FROM catalogue_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" > data/generated/current/recommendation-catalogue.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title,source_url FROM series_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" > data/generated/current/recommendation-series.json
+          python scripts/recommendation_projection_manifest.py \
+            --movies data/generated/current/recommendation-movies.json \
+            --catalogue data/generated/current/recommendation-catalogue.json \
+            --series data/generated/current/recommendation-series.json \
+            --out-json data/generated/current/recommendation-projection-manifest.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          current=json.loads(Path('data/generated/current/recommendation-projection-manifest.json').read_text(encoding='utf-8'))
+          if current.get('sha256')!=os.environ['EXPECTED_PROJECTION_SHA256']:
+              raise SystemExit(f"production projection drifted: {current.get('sha256')}")
+          if int(current.get('candidate_count') or 0)!=int(os.environ['EXPECTED_CANDIDATES']): raise SystemExit('production candidate count drifted')
+          if int(current.get('cross_type_collision_count') or 0): raise SystemExit('cross-type identity collision detected')
+          print('P1_CURRENT_PROJECTION_EXACT_MATCH')
+          PY
+
+      - name: Ensure recommendation schema is current
+        if: inputs.mode == 'write_shard'
+        run: npx wrangler d1 migrations apply cinema-and-series --remote
+
+      - name: Prepare D1-compatible derivative of reviewed shard
+        if: inputs.mode == 'write_shard'
+        shell: bash
+        run: |
+          mkdir -p data/generated/executable
+          python scripts/prepare_d1_reviewed_import.py \
+            --input "data/generated/reviewed/recommendation-materialization-shard-${SHARD_INDEX}.sql" \
+            --output "data/generated/executable/recommendation-materialization-shard-${SHARD_INDEX}.sql" \
+            --manifest "data/generated/executable/recommendation-materialization-shard-${SHARD_INDEX}-manifest.json" \
+            --expected-fingerprint "$EXPECTED_PROJECTION_SHA256"
+
+      - name: Apply exactly one reviewed shard using D1 import semantics
+        if: inputs.mode == 'write_shard'
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute cinema-and-series --remote --yes \
+            --file="data/generated/executable/recommendation-materialization-shard-${SHARD_INDEX}.sql"
+
+      - name: Capture and validate production recommendation state
+        shell: bash
+        run: |
+          mkdir -p data/generated/post-write
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT (SELECT COUNT(*) FROM recommendation_titles) AS titles, (SELECT COUNT(*) FROM genres) AS genres, (SELECT COUNT(*) FROM people) AS people, (SELECT COUNT(*) FROM title_genres) AS title_genres, (SELECT COUNT(*) FROM title_credits) AS title_credits;" > data/generated/post-write/recommendation-counts.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT (SELECT COUNT(*) FROM title_genres tg LEFT JOIN recommendation_titles rt ON rt.id=tg.title_id LEFT JOIN genres g ON g.id=tg.genre_id WHERE rt.id IS NULL OR g.id IS NULL) AS orphan_genres, (SELECT COUNT(*) FROM title_credits tc LEFT JOIN recommendation_titles rt ON rt.id=tc.title_id LEFT JOIN people p ON p.id=tc.person_id WHERE rt.id IS NULL OR p.id IS NULL) AS orphan_credits, (SELECT COUNT(*) FROM title_genres WHERE source_property <> 'P136' OR source_url NOT LIKE 'https://www.wikidata.org/wiki/Q%') AS invalid_genre_provenance, (SELECT COUNT(*) FROM title_credits WHERE NOT ((role='director' AND source_property='P57') OR (role='creator' AND source_property='P170') OR (role='cast' AND source_property='P161')) OR source_url NOT LIKE 'https://www.wikidata.org/wiki/Q%') AS invalid_credit_provenance;" > data/generated/post-write/recommendation-integrity.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          def row(path):
+              payload=json.loads(Path(path).read_text(encoding='utf-8')); rows=[]
+              for batch in payload if isinstance(payload,list) else [payload]:
+                  if isinstance(batch,dict): rows.extend(batch.get('results') or [])
+              if len(rows)!=1: raise SystemExit(f'unexpected D1 response for {path}')
+              return rows[0]
+          counts=row('data/generated/post-write/recommendation-counts.json')
+          integrity=row('data/generated/post-write/recommendation-integrity.json')
+          bad={k:int(v or 0) for k,v in integrity.items() if int(v or 0)!=0}
+          if bad: raise SystemExit(f'recommendation integrity violation: {bad}')
+          print('P1_PRODUCTION_COUNTS='+json.dumps(counts,sort_keys=True))
+          print('P1_PRODUCTION_INTEGRITY='+json.dumps(integrity,sort_keys=True))
+          PY
+
+      - name: Require complete P1 counts
+        if: inputs.mode == 'verify_final'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          payload=json.loads(Path('data/generated/post-write/recommendation-counts.json').read_text(encoding='utf-8')); rows=[]
+          for batch in payload if isinstance(payload,list) else [payload]:
+              if isinstance(batch,dict): rows.extend(batch.get('results') or [])
+          if len(rows)!=1: raise SystemExit('unexpected count response')
+          got={k:int(v or 0) for k,v in rows[0].items()}
+          expected={'titles':int(os.environ['EXPECTED_CANDIDATES']),'title_genres':int(os.environ['EXPECTED_GENRE_RELATIONS']),'title_credits':int(os.environ['EXPECTED_CREDIT_RELATIONS'])}
+          mismatches={k:(expected[k],got.get(k)) for k in expected if got.get(k)!=expected[k]}
+          if mismatches: raise SystemExit(f'P1 materialization incomplete: {mismatches}')
+          print('P1_COMPLETE_RELATION_COUNTS_VERIFIED='+json.dumps(expected,sort_keys=True))
+          PY
+
+      - name: Run post-write Catalogue Quality V1
+        if: inputs.mode == 'verify_final'
+        shell: bash
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title,native_title,language_name,country_code,release_date,verification_status,release_date_source,poster_url FROM movies;" > data/generated/post-write/quality-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year,language_name,country_code,source_category,source_url,verification_status FROM catalogue_titles;" > data/generated/post-write/quality-catalogue-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,wikipedia_page_id,title,native_title,series_kind,language_name,country_code,first_air_year,last_air_year,lifecycle_status,season_count,episode_count,source_category,source_url,verification_status FROM series_titles;" > data/generated/post-write/quality-series.json
+          python scripts/production_catalogue_quality.py --movies data/generated/post-write/quality-movies.json --catalogue data/generated/post-write/quality-catalogue-movies.json --series data/generated/post-write/quality-series.json --out-json data/generated/post-write/catalogue-quality-v1.json --out-md data/generated/post-write/catalogue-quality-v1.md --fail-on-critical
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('data/generated/post-write/catalogue-quality-v1.json').read_text(encoding='utf-8'))
+          sev=(report.get('finding_summary') or {}).get('by_severity') or {}
+          if int(sev.get('S0') or 0) or int(sev.get('S1') or 0): raise SystemExit(f"quality regression: {sev}")
+          print('P1_POST_WRITE_QUALITY='+json.dumps({'counts':report['counts'],'findings':report['finding_summary']},sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recommendation-metadata-production-write-v2-${{ inputs.mode }}-${{ inputs.shard_index }}
+          path: |
+            data/generated/current/recommendation-projection-manifest.json
+            data/generated/executable/*-manifest.json
+            data/generated/post-write/*.json
+            data/generated/post-write/*.md
+          if-no-files-found: warn
+          retention-days: 30
+
+  reject-unsafe-request:
+    if: github.ref != 'refs/heads/main' || inputs.apply_production_write != true
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          echo "Production write refused: run from main with apply_production_write=true."
+          exit 1
