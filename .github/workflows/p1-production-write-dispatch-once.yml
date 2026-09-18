@@ -1,0 +1,30 @@
+name: P1 Production Write Dispatch Once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/p1-production-write-dispatch-once.yml"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch guarded P1 production shard 0
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run recommendation-metadata-production-write-v1.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f mode=write_shard \
+            -f shard_index=0 \
+            -f analysis_run_id=35252106776 \
+            -f analysis_commit=0e319f86a4a9c7ca085de93bb5b3246606b7d6d0 \
+            -f expected_projection_sha256=4a9d095ca258d3718d2c189c8bd6596d20af46a434f38ab60ba2f2ddbea18448 \
+            -f apply_production_write=true
