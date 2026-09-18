@@ -7,6 +7,7 @@ ROOT = Path(__file__).resolve().parents[1]
 STATUS = ROOT / "docs/10-execution/RECOMMENDATION_METADATA_FOUNDATION_P1_STATUS.md"
 DAILY = ROOT / ".github/workflows/p1-quota-safe-daily-resume.yml"
 WRITER = ROOT / ".github/workflows/recommendation-metadata-production-write-v2.yml"
+COORDINATOR = ROOT / ".github/workflows/p1-background-write-coordinator.yml"
 MIGRATIONS = ROOT / "migrations"
 
 EXPECTED_ANALYSIS_RUN_ID = "35252106776"
@@ -14,6 +15,13 @@ EXPECTED_FINGERPRINT = "4a9d095ca258d3718d2c189c8bd6596d20af46a434f38ab60ba2f2dd
 EXPECTED_CANDIDATES = "14115"
 EXPECTED_GENRE_RELATIONS = "13689"
 EXPECTED_CREDIT_RELATIONS = "58069"
+PAUSED_CATALOGUE_WORKFLOWS = (
+    "catalogue-growth-15k.yml",
+    "series-catalogue.yml",
+    "wikidata-backfill.yml",
+    "wikidata-refresh.yml",
+    "wikipedia-year-catalogue.yml",
+)
 
 
 def read(path: Path) -> str:
@@ -25,6 +33,7 @@ class P1OperationalContractTests(unittest.TestCase):
         self.status = read(STATUS)
         self.daily = read(DAILY)
         self.writer = read(WRITER)
+        self.coordinator = read(COORDINATOR)
 
     def test_p1_population_is_explicitly_in_progress(self):
         self.assertIn("PRODUCTION POPULATION IN PROGRESS", self.status)
@@ -81,6 +90,30 @@ class P1OperationalContractTests(unittest.TestCase):
         self.assertIn("Retire P1 daily resume after successful final verification", self.daily)
         self.assertIn("steps.final_verify_state.outputs.verified == 'true'", self.daily)
         self.assertIn("p1-quota-safe-daily-resume.yml/disable", self.daily)
+
+    def test_catalogue_mutators_are_paused_before_daily_p1_population(self):
+        self.assertIn('cron: "5 0 * * *"', self.coordinator)
+        self.assertIn('workflows: ["Recommendation Metadata Production Write V2"]', self.coordinator)
+        self.assertIn("actions: write", self.coordinator)
+        for workflow in PAUSED_CATALOGUE_WORKFLOWS:
+            self.assertIn(workflow, self.coordinator)
+        self.assertNotIn("youtube-monitor.yml\n", self.coordinator)
+        self.assertNotIn("website-monitor.yml\n", self.coordinator)
+
+    def test_catalogue_mutators_resume_only_after_successful_final_verification(self):
+        self.assertIn(
+            'FINAL_VERIFY_ARTIFACT_NAME: "recommendation-metadata-production-write-v2-verify_final-0"',
+            self.coordinator,
+        )
+        self.assertIn('run.get("conclusion") == "success"', self.coordinator)
+        self.assertIn('run.get("head_branch") == "main"', self.coordinator)
+        self.assertIn(
+            'run.get("path") == ".github/workflows/recommendation-metadata-production-write-v2.yml"',
+            self.coordinator,
+        )
+        self.assertIn('action = "resume" if verified else "pause"', self.coordinator)
+        self.assertIn("p1-background-write-coordinator.yml", self.coordinator)
+        self.assertIn("/disable", self.coordinator)
 
 
 if __name__ == "__main__":
