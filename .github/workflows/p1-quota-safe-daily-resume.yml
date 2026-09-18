@@ -213,8 +213,9 @@ jobs:
             --ref main \
             -f mode=write_shard \
             -f shard_index="$NEXT_SHARD" \
+            -f quota_guard_run_id="$GITHUB_RUN_ID" \
             -f apply_production_write=true
-          echo "Dispatched guarded writer for shard ${NEXT_SHARD}."
+          echo "Dispatched guarded writer for shard ${NEXT_SHARD} with quota guard owner ${GITHUB_RUN_ID}."
 
       - name: Report complete P1 population
         if: steps.daily_guard.outputs.blocked != 'true' && steps.shard_plan.outputs.next_shard == 'complete'
