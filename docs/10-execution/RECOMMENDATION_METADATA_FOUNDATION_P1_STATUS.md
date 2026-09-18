@@ -1,6 +1,6 @@
 # Recommendation Metadata Foundation P1 — Execution Status
 
-**Status:** READY FOR GUARDED, RESUMABLE PRODUCTION WRITE  
+**Status:** PRODUCTION POPULATION IN PROGRESS — SHARD 0/8 COMPLETE  
 **Date:** 2026-09-18  
 **Parent roadmap:** `PERSONALIZED_DISCOVERY_ACTIVE_ROADMAP_V1.md`
 
@@ -26,6 +26,8 @@ Migration `0021_recommendation_metadata_foundation.sql` defines:
 - `title_credits`
 
 The shared title registry is keyed by stable Wikidata identity. Exact-date `movies` rows take precedence over duplicate QIDs in `catalogue_titles`; Series remains a distinct media type. A QID appearing as both Movie and Series is a hard audit failure.
+
+Migration `0022_recommendation_materialization_daily_guard.sql` adds the production-population UTC-day safety lock. It prevents more than one P1 shard from being authorized in the same D1 Free quota day and seeds the already verified 2026-09-18 shard-0 production write.
 
 ## Read-only source-yield audits — COMPLETE
 
@@ -138,32 +140,100 @@ Current production projection:
 
 Result: **exact match to the successful reviewed materialization**.
 
-The permanent production gate is stricter than a count check. It validates the reviewed analysis run and commit, restores the immutable evidence artifact, verifies the analyzed SHA-256, and recaptures the live projection immediately before each write. Pure append-only catalogue growth may continue only when all analyzed entries remain byte-for-byte compatible; removed or changed analyzed entries hard-stop the write.
+The permanent production gate validates the reviewed analysis run and commit, restores the immutable evidence artifact, verifies the analyzed SHA-256, and recaptures the live projection immediately before each write. Catalogue drift hard-stops the production writer.
+
+## Production population checkpoint — SHARD 0 COMPLETE
+
+Migration `0021` was applied successfully by the normal production deploy. The first guarded V1 write attempt then failed safely because Cloudflare D1 remote SQL-file imports reject explicit SQLite `BEGIN`/`COMMIT` controls. D1 reported that a failed import returns the database to its original state, and no recommendation rows were left behind by that attempt.
+
+The execution layer was corrected without changing any reviewed data statement. `scripts/prepare_d1_reviewed_import.py` removes only:
+
+- `PRAGMA foreign_keys = ON;`
+- `BEGIN;`
+- `COMMIT;`
+
+The executable derivative preserves every reviewed P1 insert statement byte-for-byte and records both original and executable SHA-256 values.
+
+Successful shard-0 production write:
+
+- workflow: `Recommendation Metadata Production Write V2`
+- run: **`35323383185`**
+- shard: **0 / 7**
+- reviewed projection exact-match gate: **passed**
+- data statements executed: **16,735**
+- D1 rows written: **65,299**
+- recommendation titles after shard: **1,744**
+- genres after shard: **235**
+- people after shard: **6,184**
+- title-genre relations after shard: **1,641**
+- title-credit relations after shard: **6,931**
+- orphan genre relations: **0**
+- orphan credit relations: **0**
+- invalid genre provenance: **0**
+- invalid credit provenance: **0**
+
+## D1 Free quota-safe shard plan
+
+Cloudflare Workers Free D1 currently allows **100,000 rows written per UTC day** and resets the Free daily quota at **00:00 UTC**. P1 therefore permits exactly one reviewed shard per UTC day.
+
+The deterministic write-cost model is derived from migration `0021`'s table/index layout and matched the observed shard-0 result exactly:
+
+- `recommendation_titles`: 4 D1 rows written per logical statement
+- `genres`: 4
+- `people`: 4
+- `title_genres`: 3
+- `title_credits`: 4
+
+Reviewed shard plan:
+
+| Shard | Planned D1 rows written | State |
+|---:|---:|---|
+| 0 | 65,299 | **production complete** |
+| 1 | 65,839 | next |
+| 2 | 62,370 | pending |
+| 3 | 76,087 | pending |
+| 4 | 62,148 | pending |
+| 5 | 76,905 | pending |
+| 6 | 67,608 | pending |
+| 7 | 64,703 | pending |
+
+Largest planned shard: **76,905**, leaving **23,095** rows of Free daily write headroom before unrelated traffic. A separate hard safety ceiling of **80,000 rows/shard** is enforced by the resume controller.
+
+`.github/workflows/p1-quota-safe-daily-resume.yml` runs at **00:25 UTC** on fresh quota days. It:
+
+1. restores the immutable reviewed artifact
+2. verifies Cloudflare access and current schema
+3. checks the per-UTC-day D1 write lock
+4. evaluates each shard as `complete`, `not_started`, or unsafe partial/overfilled
+5. chooses only the first untouched shard
+6. computes the deterministic rows-written cost
+7. refuses any shard above 80,000 rows
+8. acquires the UTC-day lock before dispatching a production write
+9. dispatches the existing guarded V2 writer for exactly one shard
+10. no-ops when the current UTC day already has a P1 write lock
+
+Any partial/overfilled shard state hard-stops automation rather than advancing.
 
 ## Production write gate
 
-`.github/workflows/recommendation-metadata-production-write-v1.yml` is the only authorized recommendation-metadata mutation path.
+`.github/workflows/recommendation-metadata-production-write-v2.yml` is the guarded mutation worker. The quota-safe daily controller is the preferred production-population entry point.
 
 Safety behavior:
 
-1. workflow dispatch only
-2. `main` branch only
-3. explicit `apply_production_write=true` required
-4. reviewed run ID, analysis commit, candidate counts, relation counts, and projection SHA-256 are locked
-5. reviewed materialization commit must remain an ancestor of the production write commit
-6. materialization artifact must be complete and read-only
-7. requested shard must be one of `0..7` and must carry the reviewed fingerprint
-8. SQL is allow-listed to P1 insert statements only
+1. `main` branch only
+2. explicit production-write authorization required by V2
+3. reviewed run ID, analysis commit, candidate counts, relation counts, and projection SHA-256 are locked
+4. reviewed materialization commit must remain an ancestor of the production write commit
+5. materialization artifact must be complete and read-only
+6. requested shard must be one of `0..7` and carry the reviewed fingerprint
+7. reviewed SQL is transformed only by removing D1-incompatible execution controls
+8. every data statement is preserved byte-for-byte
 9. current production projection is recaptured before every write
-10. removed/changed analyzed catalogue entries hard-stop the write; safe append-only growth is reported separately
-11. migration `0021` is applied idempotently before shard writes
-12. exactly one reviewed shard is written per production dispatch
-13. writes are idempotent and resumable
-14. referential-integrity and provenance checks run after every shard
-15. final verification requires exactly **14,115 titles**, **13,689 title-genre relations**, and **58,069 title-credit relations**
-16. final Catalogue Quality V1 must retain **S0 = 0** and **S1 = 0**
-
-Single-shard dispatch is deliberate. The current normalized P1 dataset exceeds a single Workers Free-plan daily write budget when table/index writes are considered, so production population must remain bounded rather than attempting one giant mutation.
+10. migration `0021`/`0022` application is idempotent
+11. exactly one reviewed shard is dispatched by the daily controller per UTC quota day
+12. referential-integrity and provenance checks run after every shard
+13. final verification requires exactly **14,115 titles**, **13,689 title-genre relations**, and **58,069 title-credit relations**
+14. final Catalogue Quality V1 must retain **S0 = 0** and **S1 = 0**
 
 ## Materializer behavior
 
@@ -177,26 +247,31 @@ Single-shard dispatch is deliberate. The current normalized P1 dataset exceeds a
 - relationship SQL is idempotent (`INSERT OR IGNORE`)
 - entities use QID-stable IDs
 - every relationship retains source property + Wikidata entity URL
-- generated SQL is transaction wrapped and projection-fingerprint bound
+- generated reviewed SQL is transaction wrapped and projection-fingerprint bound
 
-The P1 audit/materializer/projection tests and full Fast V1 App CI are green on the active branch.
+`scripts/prepare_d1_reviewed_import.py` validates that reviewed artifact, removes only the D1-incompatible execution controls, preserves every data statement, and computes the schema-derived write-cost estimate.
+
+`scripts/p1_shard_status.py` derives a title-scoped status query directly from each reviewed shard. `complete` is allowed to advance, `not_started` is eligible to write, and any mixed state is unsafe.
 
 ## Migration numbering rule
 
-The active Recommendation Metadata Foundation owns migration number **0021**.
+Recommendation Metadata Foundation P1 now owns migrations:
 
-A dormant `feature/series-native-title-enrichment-v1` branch also contains an unmerged `0021_series_native_title_provenance.sql`. That branch must be rebased/renumbered to **0022 or later** before any future merge. Recommendation P1 keeps `0021` because it is the locked active product phase and merges first.
+- **0021** — recommendation metadata foundation
+- **0022** — recommendation materialization UTC-day guard
+
+A dormant `feature/series-native-title-enrichment-v1` branch contains an unmerged migration previously numbered `0021_series_native_title_provenance.sql`. Before any future merge it must now be rebased/renumbered to **0023 or later**.
 
 ## Remaining P1 gates
 
-1. merge P1 with commit ancestry preserved; do **not** squash the reviewed analysis lineage
-2. allow the normal production deploy path to apply migration `0021`
-3. execute reviewed metadata shards through the guarded production-write workflow, bounded by D1 quota
-4. run `verify_final`
+1. ~~merge P1 with reviewed analysis ancestry preserved~~ ✅
+2. ~~apply migration `0021` and verify production schema~~ ✅
+3. populate reviewed shards under D1 quota — **in progress; shard 0/8 complete**
+4. run `verify_final` after all 8 shards are present
 5. require exact normalized relationship counts and zero orphan/provenance violations
 6. require Catalogue Quality V1 **S0 = 0 / S1 = 0**
 7. record final production counts and close P1
 
 ## P1 exit rule
 
-Phase P2/onboarding logic does not begin merely because the schema exists. P1 exits only after the reviewed recommendation metadata is present in production, referential/provenance checks pass, and post-write catalogue quality remains clean.
+Phase P2/onboarding logic does not begin merely because the schema exists. P1 exits only after all reviewed recommendation metadata is present in production, referential/provenance checks pass, and post-write catalogue quality remains clean.
