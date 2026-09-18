@@ -1,0 +1,161 @@
+name: Recommendation Metadata India Cohort Audit
+
+on:
+  push:
+    branches: ["feature/recommendation-metadata-foundation-v1"]
+    paths:
+      - "scripts/recommendation_metadata_india_cohort_audit.py"
+      - "tests/test_recommendation_metadata_india_cohort_audit.py"
+      - ".github/workflows/recommendation-metadata-india-cohort-audit.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: recommendation-metadata-india-cohort-audit
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  SHARD_COUNT: "8"
+  MAX_TITLES_PER_SHARD: "2000"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Run cohort tests
+        run: python -m unittest tests.test_recommendation_metadata_india_cohort_audit -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install --no-audit --no-fund
+      - run: python scripts/cloudflare_bootstrap.py
+      - name: Capture language-aware snapshots
+        run: |
+          mkdir -p data/generated
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,language_name FROM movies WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/cohort-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,language_name,source_url FROM catalogue_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/cohort-catalogue.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,language_name,source_url FROM series_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/cohort-series.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-metadata-india-cohort-snapshots
+          path: data/generated/cohort-*.json
+          if-no-files-found: error
+          retention-days: 30
+
+  audit:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          name: recommendation-metadata-india-cohort-snapshots
+          path: data/generated
+      - name: Audit India-language cohort
+        run: |
+          python scripts/recommendation_metadata_india_cohort_audit.py \
+            --movies data/generated/cohort-movies.json \
+            --catalogue data/generated/cohort-catalogue.json \
+            --series data/generated/cohort-series.json \
+            --shard-index "${{ matrix.shard }}" \
+            --shard-count "${SHARD_COUNT}" \
+            --max-titles "${MAX_TITLES_PER_SHARD}" \
+            --out-json "data/generated/cohort-shard-${{ matrix.shard }}.json"
+      - name: Verify read-only shard
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("data/generated/cohort-shard-${{ matrix.shard }}.json")
+          report = json.loads(p.read_text())
+          if report.get("production_mutation") is not False:
+              raise SystemExit("cohort audit must remain read-only")
+          print("INDIA_COHORT_SHARD=" + json.dumps({
+              "shard": "${{ matrix.shard }}",
+              "candidates": report.get("candidate_count", 0),
+              "telugu_ready": report["cohorts"]["Telugu"]["ready"],
+              "tamil_ready": report["cohorts"]["Tamil"]["ready"],
+              "malayalam_ready": report["cohorts"]["Malayalam"]["ready"],
+              "hindi_ready": report["cohorts"]["Hindi"]["ready"],
+          }, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-metadata-india-cohort-shard-${{ matrix.shard }}
+          path: data/generated/cohort-shard-${{ matrix.shard }}.json
+          if-no-files-found: error
+          retention-days: 30
+
+  summarize:
+    needs: audit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: recommendation-metadata-india-cohort-shard-*
+          path: shards
+          merge-multiple: true
+      - name: Aggregate cohort report
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          reports = [json.loads(p.read_text()) for p in sorted(Path("shards").glob("*.json"))]
+          if len(reports) != 8:
+              raise SystemExit(f"expected 8 cohort reports, found {len(reports)}")
+          names = list(reports[0]["cohorts"])
+          out = {}
+          for name in names:
+              totals = {k: 0 for k in ("titles","genre","people","ready","movie_titles","movie_ready","series_titles","series_ready")}
+              for report in reports:
+                  block = report["cohorts"][name]
+                  for key in totals:
+                      totals[key] += int(block.get(key) or 0)
+              total = totals["titles"]
+              out[name] = {
+                  **totals,
+                  "genre_percent": round(totals["genre"] / total * 100.0, 2) if total else 0.0,
+                  "people_percent": round(totals["people"] / total * 100.0, 2) if total else 0.0,
+                  "ready_percent": round(totals["ready"] / total * 100.0, 2) if total else 0.0,
+              }
+          summary = {
+              "schema_version": "recommendation-metadata-india-cohort-summary-v1",
+              "candidate_count": sum(int(r["candidate_count"]) for r in reports),
+              "cohorts": out,
+              "production_mutation": False,
+          }
+          Path("recommendation-metadata-india-cohort-summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+          print("INDIA_COHORT_SUMMARY=" + json.dumps(summary, sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-metadata-india-cohort-summary
+          path: recommendation-metadata-india-cohort-summary.json
+          if-no-files-found: error
+          retention-days: 30

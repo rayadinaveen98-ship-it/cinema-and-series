@@ -1,0 +1,369 @@
+name: P1 Materialization Run Once
+
+on:
+  push:
+    branches: ["feature/recommendation-metadata-foundation-v1"]
+    paths:
+      - ".github/workflows/p1-materialization-run-once.yml"
+
+concurrency:
+  group: p1-materialization-run-once
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  SHARD_COUNT: "8"
+  MAX_TITLES_PER_SHARD: "2000"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate materializer code
+        run: |
+          python -m unittest tests.test_recommendation_metadata_audit tests.test_recommendation_metadata_enrichment tests.test_recommendation_projection_manifest -v
+
+      - name: Check Cloudflare credentials
+        shell: bash
+        run: |
+          if [[ -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "Cloudflare credentials are required for the read-only production snapshot."
+            exit 1
+          fi
+
+      - name: Install Wrangler and bind D1
+        run: |
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Capture stable QID-backed catalogue snapshots
+        shell: bash
+        run: |
+          mkdir -p data/generated
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title FROM movies WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/recommendation-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,source_url FROM catalogue_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/recommendation-catalogue.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,source_url FROM series_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/recommendation-series.json
+
+      - name: Build immutable catalogue projection manifest
+        run: |
+          python scripts/recommendation_projection_manifest.py \
+            --movies data/generated/recommendation-movies.json \
+            --catalogue data/generated/recommendation-catalogue.json \
+            --series data/generated/recommendation-series.json \
+            --out-json data/generated/recommendation-projection-manifest.json
+
+      - name: Validate stable projection
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.recommendation_metadata_audit import load_d1_rows, build_catalogue_projection
+          from scripts.recommendation_projection_manifest import fingerprint
+
+          projection = build_catalogue_projection(
+              load_d1_rows("data/generated/recommendation-movies.json"),
+              load_d1_rows("data/generated/recommendation-catalogue.json"),
+              load_d1_rows("data/generated/recommendation-series.json"),
+          )
+          manifest = json.loads(Path("data/generated/recommendation-projection-manifest.json").read_text())
+          if projection["cross_type_collision_qids"]:
+              raise SystemExit(f"cross-type Wikidata identity collision detected: {projection['cross_type_collision_qids'][:20]}")
+          if not projection["candidates"]:
+              raise SystemExit("no QID-backed recommendation candidates available")
+          if manifest.get("schema_version") != "recommendation-projection-manifest-v1":
+              raise SystemExit("unexpected projection manifest schema")
+          if fingerprint(manifest.get("entries") or []) != manifest.get("sha256"):
+              raise SystemExit("projection manifest fingerprint is internally inconsistent")
+          if manifest.get("candidate_count") != len(projection["candidates"]):
+              raise SystemExit("projection manifest candidate count mismatch")
+          print("P1_PROJECTION=" + json.dumps({
+              "candidate_count": manifest["candidate_count"],
+              "movie_qid_count": manifest["movie_qid_count"],
+              "series_qid_count": manifest["series_qid_count"],
+              "sha256": manifest["sha256"],
+          }, sort_keys=True))
+          PY
+
+      - name: Preserve immutable snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-metadata-p1-snapshot
+          path: |
+            data/generated/recommendation-movies.json
+            data/generated/recommendation-catalogue.json
+            data/generated/recommendation-series.json
+            data/generated/recommendation-projection-manifest.json
+          if-no-files-found: error
+          retention-days: 30
+
+  materialize:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Restore immutable snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: recommendation-metadata-p1-snapshot
+          path: data/generated
+
+      - name: Resolve explicit recommendation metadata with bounded retries
+        shell: bash
+        run: |
+          set -uo pipefail
+          shard="${{ matrix.shard }}"
+          success=0
+          for attempt in 1 2 3; do
+            echo "=== shard ${shard}/7 attempt ${attempt}/3 ==="
+            rm -f "data/generated/recommendation-materialization-shard-${shard}.json" \
+                  "data/generated/recommendation-materialization-shard-${shard}.sql"
+            if python scripts/enrich_recommendation_metadata.py \
+              --movies data/generated/recommendation-movies.json \
+              --catalogue data/generated/recommendation-catalogue.json \
+              --series data/generated/recommendation-series.json \
+              --shard-index "$shard" \
+              --shard-count "$SHARD_COUNT" \
+              --max-titles "$MAX_TITLES_PER_SHARD" \
+              --out-json "data/generated/recommendation-materialization-shard-${shard}.json" \
+              --out-sql "data/generated/recommendation-materialization-shard-${shard}.sql"; then
+              success=1
+              break
+            fi
+            if [[ "$attempt" -lt 3 ]]; then
+              cooldown=$((attempt * 60))
+              echo "Transient materialization failure; cooling down for ${cooldown}s before retry."
+              sleep "$cooldown"
+            fi
+          done
+          if [[ "$success" -ne 1 ]]; then
+            echo "Shard ${shard} failed after 3 bounded attempts. Other shards remain independently reusable."
+            exit 1
+          fi
+
+      - name: Bind shard to immutable projection
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from scripts.recommendation_projection_manifest import fingerprint
+
+          shard = int(os.environ["SHARD"])
+          manifest_path = Path("data/generated/recommendation-projection-manifest.json")
+          report_path = Path(f"data/generated/recommendation-materialization-shard-{shard}.json")
+          sql_path = Path(f"data/generated/recommendation-materialization-shard-{shard}.sql")
+          manifest = json.loads(manifest_path.read_text())
+          report = json.loads(report_path.read_text())
+
+          if fingerprint(manifest.get("entries") or []) != manifest.get("sha256"):
+              raise SystemExit("projection manifest fingerprint is internally inconsistent")
+          if report.get("production_mutation") is not False:
+              raise SystemExit("materialization shard is not read-only")
+          if report.get("schema_version") != "recommendation-metadata-foundation-v1-materialization":
+              raise SystemExit("unexpected materialization schema")
+          projection = report.get("projection") or {}
+          if int(projection.get("movie_qid_count") or 0) != int(manifest["movie_qid_count"]):
+              raise SystemExit("movie projection mismatch")
+          if int(projection.get("series_qid_count") or 0) != int(manifest["series_qid_count"]):
+              raise SystemExit("series projection mismatch")
+
+          bound_manifest = {
+              "schema_version": manifest["schema_version"],
+              "candidate_count": manifest["candidate_count"],
+              "movie_qid_count": manifest["movie_qid_count"],
+              "series_qid_count": manifest["series_qid_count"],
+              "sha256": manifest["sha256"],
+          }
+          report["projection_manifest"] = bound_manifest
+          report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+
+          sql = sql_path.read_text()
+          prefix = (
+              f"-- Projection manifest SHA-256: {manifest['sha256']}\n"
+              f"-- Projection candidate count: {manifest['candidate_count']}\n"
+          )
+          if f"-- Projection manifest SHA-256: {manifest['sha256']}" not in sql:
+              sql_path.write_text(prefix + sql)
+              sql = prefix + sql
+          if "BEGIN;" not in sql or not sql.rstrip().endswith("COMMIT;"):
+              raise SystemExit("generated SQL is not transaction wrapped")
+
+          emitted = int(report["stats"].get("emitted_genre_relations") or 0) + int(report["stats"].get("emitted_credit_relations") or 0)
+          if emitted > int(report.get("raw_relation_count") or 0):
+              raise SystemExit("emitted more than explicit source relations")
+          print(f"P1_SHARD_{shard}_BOUND_TO={manifest['sha256']}")
+          PY
+        env:
+          SHARD: ${{ matrix.shard }}
+
+      - name: Preserve shard evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-materialization-shard-${{ matrix.shard }}
+          path: |
+            data/generated/recommendation-materialization-shard-${{ matrix.shard }}.json
+            data/generated/recommendation-materialization-shard-${{ matrix.shard }}.sql
+          if-no-files-found: error
+          retention-days: 30
+
+  aggregate:
+    needs: [prepare, materialize]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Restore immutable snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: recommendation-metadata-p1-snapshot
+          path: data/generated
+
+      - name: Restore all successful shard evidence
+        uses: actions/download-artifact@v4
+        with:
+          pattern: recommendation-materialization-shard-*
+          path: data/generated
+          merge-multiple: true
+
+      - name: Validate and summarize read-only evidence
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.recommendation_projection_manifest import fingerprint
+
+          manifest = json.loads(Path("data/generated/recommendation-projection-manifest.json").read_text())
+          if fingerprint(manifest.get("entries") or []) != manifest.get("sha256"):
+              raise SystemExit("projection manifest fingerprint is internally inconsistent")
+
+          bound_manifest = {
+              "schema_version": manifest["schema_version"],
+              "candidate_count": manifest["candidate_count"],
+              "movie_qid_count": manifest["movie_qid_count"],
+              "series_qid_count": manifest["series_qid_count"],
+              "sha256": manifest["sha256"],
+          }
+          fields = (
+              "candidate_titles",
+              "missing_title_entities",
+              "unusable_claims",
+              "genre_relations",
+              "director_relations",
+              "creator_relations",
+              "cast_relations",
+              "resolved_genres",
+              "resolved_people",
+              "missing_label_entities",
+              "skipped_relations_missing_label",
+              "emitted_genre_relations",
+              "emitted_credit_relations",
+          )
+          totals = {field: 0 for field in fields}
+
+          for shard in range(8):
+              report_path = Path(f"data/generated/recommendation-materialization-shard-{shard}.json")
+              sql_path = Path(f"data/generated/recommendation-materialization-shard-{shard}.sql")
+              if not report_path.exists() or not sql_path.exists():
+                  raise SystemExit(f"missing shard evidence: {shard}")
+              report = json.loads(report_path.read_text())
+              if report.get("production_mutation") is not False:
+                  raise SystemExit(f"shard {shard} is not read-only")
+              if report.get("schema_version") != "recommendation-metadata-foundation-v1-materialization":
+                  raise SystemExit(f"shard {shard} has unexpected schema")
+              if int(report["stats"].get("candidate_titles") or 0) > 2000:
+                  raise SystemExit(f"shard {shard} exceeded safety cap")
+              shard_manifest = report.get("projection_manifest") or {}
+              if shard_manifest.get("sha256") != manifest.get("sha256"):
+                  raise SystemExit(f"shard {shard} projection fingerprint mismatch")
+
+              sql = sql_path.read_text()
+              if f"-- Projection manifest SHA-256: {manifest['sha256']}" not in sql:
+                  raise SystemExit(f"shard {shard} SQL lacks projection binding")
+              if "BEGIN;" not in sql or not sql.rstrip().endswith("COMMIT;"):
+                  raise SystemExit(f"shard {shard} SQL is not transaction wrapped")
+
+              emitted = int(report["stats"].get("emitted_genre_relations") or 0) + int(report["stats"].get("emitted_credit_relations") or 0)
+              if emitted > int(report.get("raw_relation_count") or 0):
+                  raise SystemExit(f"shard {shard} emitted more than explicit source relations")
+              for field in fields:
+                  totals[field] += int(report["stats"].get(field) or 0)
+
+          expected = int(manifest["movie_qid_count"]) + int(manifest["series_qid_count"])
+          if totals["candidate_titles"] != expected or totals["candidate_titles"] != int(manifest["candidate_count"]):
+              raise SystemExit("candidate partition does not match immutable projection")
+
+          explicit_relations = (
+              totals["genre_relations"]
+              + totals["director_relations"]
+              + totals["creator_relations"]
+              + totals["cast_relations"]
+          )
+          emitted_relations = totals["emitted_genre_relations"] + totals["emitted_credit_relations"]
+          if emitted_relations + totals["skipped_relations_missing_label"] != explicit_relations:
+              raise SystemExit("resolved + missing-label relations do not partition explicit relationships")
+
+          summary = {
+              "schema_version": "recommendation-metadata-materialization-v1-summary",
+              "state": "complete",
+              "production_mutation": False,
+              "projection_manifest": bound_manifest,
+              "totals": totals,
+              "explicit_relation_count": explicit_relations,
+              "emitted_relation_count": emitted_relations,
+          }
+          Path("data/generated/recommendation-metadata-materialization-v1-summary.json").write_text(
+              json.dumps(summary, indent=2, sort_keys=True) + "\n"
+          )
+          print("P1_MATERIALIZATION_SUMMARY=" + json.dumps(summary, sort_keys=True))
+          PY
+
+      - name: Preserve aggregate read-only materialization evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-metadata-materialization-v1-run-once
+          path: |
+            data/generated/recommendation-projection-manifest.json
+            data/generated/recommendation-materialization-shard-*.json
+            data/generated/recommendation-materialization-shard-*.sql
+            data/generated/recommendation-metadata-materialization-v1-summary.json
+          if-no-files-found: error
+          retention-days: 30
