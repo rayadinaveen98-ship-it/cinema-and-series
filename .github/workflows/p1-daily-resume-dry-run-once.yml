@@ -1,0 +1,26 @@
+name: P1 Daily Resume Dry Run Once
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/p1-daily-resume-dry-run-once.yml"
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  dispatch:
+    if: contains(github.event.head_commit.message, 'dispatch quota-safe daily resume dry run')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Dispatch quota-safe controller without production authorization
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run p1-quota-safe-daily-resume.yml \
+            --repo "${{ github.repository }}" \
+            --ref main \
+            -f apply_production_write=false
