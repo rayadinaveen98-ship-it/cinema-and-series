@@ -25,6 +25,7 @@ env:
   ANALYSIS_RUN_ID: "35252106776"
   EXPECTED_PROJECTION_SHA256: "4a9d095ca258d3718d2c189c8bd6596d20af46a434f38ab60ba2f2ddbea18448"
   MAX_SHARD_ROWS_WRITTEN: "80000"
+  FINAL_VERIFY_ARTIFACT_NAME: "recommendation-metadata-production-write-v2-verify_final-0"
 
 jobs:
   plan-and-dispatch:
@@ -217,11 +218,77 @@ jobs:
             -f apply_production_write=true
           echo "Dispatched guarded writer for shard ${NEXT_SHARD} with quota guard owner ${GITHUB_RUN_ID}."
 
-      - name: Report complete P1 population
+      - name: Check whether final P1 verification already succeeded
         if: steps.daily_guard.outputs.blocked != 'true' && steps.shard_plan.outputs.next_shard == 'complete'
+        id: final_verify_state
+        shell: bash
         run: |
-          echo "All eight reviewed P1 shards are already present in production."
-          echo "Run the separate verify_final gate to close P1."
+          set -euo pipefail
+          mkdir -p data/generated/quota-plan
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${FINAL_VERIFY_ARTIFACT_NAME}&per_page=100" \
+            > data/generated/quota-plan/final-verify-artifacts.json
+          python - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          payload=json.loads(Path('data/generated/quota-plan/final-verify-artifacts.json').read_text(encoding='utf-8'))
+          verified=False
+          successful_run_id=''
+          for artifact in payload.get('artifacts') or []:
+              if artifact.get('expired'):
+                  continue
+              run=(artifact.get('workflow_run') or {})
+              run_id=run.get('id')
+              if not run_id:
+                  continue
+              raw=subprocess.check_output([
+                  'gh','api',f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{run_id}"
+              ], text=True)
+              workflow_run=json.loads(raw)
+              if workflow_run.get('conclusion')=='success':
+                  verified=True
+                  successful_run_id=str(run_id)
+                  break
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as fh:
+              fh.write(f"verified={'true' if verified else 'false'}\n")
+              fh.write(f"successful_run_id={successful_run_id}\n")
+          if verified:
+              print(f'P1_FINAL_VERIFICATION_ALREADY_SUCCEEDED_RUN={successful_run_id}')
+          else:
+              print('P1_FINAL_VERIFICATION_NOT_YET_SUCCEEDED')
+          PY
+
+      - name: Dispatch final P1 verification
+        if: steps.daily_guard.outputs.blocked != 'true' && steps.shard_plan.outputs.next_shard == 'complete' && steps.final_verify_state.outputs.verified != 'true' && env.APPLY_PRODUCTION_WRITE == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh workflow run recommendation-metadata-production-write-v2.yml \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref main \
+            -f mode=verify_final \
+            -f shard_index=0 \
+            -f apply_production_write=true
+          echo "All eight reviewed shards are present; dispatched final P1 verification."
+
+      - name: Report complete P1 population in dry-run mode
+        if: steps.daily_guard.outputs.blocked != 'true' && steps.shard_plan.outputs.next_shard == 'complete' && steps.final_verify_state.outputs.verified != 'true' && env.APPLY_PRODUCTION_WRITE != 'true'
+        run: |
+          echo "All eight reviewed P1 shards are present."
+          echo "Dry run only: final P1 verification would be dispatched in production-authorized mode."
+
+      - name: Retire P1 daily resume after successful final verification
+        if: steps.daily_guard.outputs.blocked != 'true' && steps.shard_plan.outputs.next_shard == 'complete' && steps.final_verify_state.outputs.verified == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Final P1 verification already succeeded in run ${{ steps.final_verify_state.outputs.successful_run_id }}."
+          gh api \
+            --method PUT \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/p1-quota-safe-daily-resume.yml/disable"
+          echo "P1 daily resume workflow disabled after verified completion."
 
       - uses: actions/upload-artifact@v4
         if: always()
