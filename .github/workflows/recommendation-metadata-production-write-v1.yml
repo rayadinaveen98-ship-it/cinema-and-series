@@ -1,0 +1,373 @@
+name: Recommendation Metadata Production Write V1
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Write one reviewed shard or verify the complete production materialization"
+        required: true
+        default: "write_shard"
+        type: choice
+        options:
+          - write_shard
+          - verify_final
+      shard_index:
+        description: "Shard to write (0-7); ignored by verify_final"
+        required: true
+        default: "0"
+        type: string
+      analysis_run_id:
+        description: "Successful immutable materialization run ID"
+        required: true
+        default: "35252106776"
+        type: string
+      analysis_commit:
+        description: "Commit SHA used by the materialization run"
+        required: true
+        default: "0e319f86a4a9c7ca085de93bb5b3246606b7d6d0"
+        type: string
+      expected_projection_sha256:
+        description: "Immutable analyzed projection fingerprint"
+        required: true
+        default: "4a9d095ca258d3718d2c189c8bd6596d20af46a434f38ab60ba2f2ddbea18448"
+        type: string
+      apply_production_write:
+        description: "Explicit production mutation authorization"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: recommendation-metadata-production-write-v1
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  EXPECTED_CANDIDATES: "14115"
+  EXPECTED_MOVIES: "5235"
+  EXPECTED_SERIES: "8880"
+  EXPECTED_GENRE_RELATIONS: "13689"
+  EXPECTED_CREDIT_RELATIONS: "58069"
+  EXPECTED_TOTAL_RELATIONS: "71758"
+
+jobs:
+  guarded-write:
+    if: github.ref == 'refs/heads/main' && inputs.apply_production_write == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      ANALYSIS_RUN_ID: ${{ inputs.analysis_run_id }}
+      ANALYSIS_COMMIT: ${{ inputs.analysis_commit }}
+      EXPECTED_PROJECTION_SHA256: ${{ inputs.expected_projection_sha256 }}
+      WRITE_MODE: ${{ inputs.mode }}
+      SHARD_INDEX: ${{ inputs.shard_index }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Reject invalid write request
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$WRITE_MODE" == "write_shard" ]]; then
+            if ! [[ "$SHARD_INDEX" =~ ^[0-7]$ ]]; then
+              echo "shard_index must be an integer from 0 through 7"
+              exit 1
+            fi
+          elif [[ "$WRITE_MODE" != "verify_final" ]]; then
+            echo "unsupported mode: $WRITE_MODE"
+            exit 1
+          fi
+          if [[ "$EXPECTED_PROJECTION_SHA256" != "4a9d095ca258d3718d2c189c8bd6596d20af46a434f38ab60ba2f2ddbea18448" ]]; then
+            echo "unexpected reviewed projection fingerprint"
+            exit 1
+          fi
+          if [[ "$ANALYSIS_RUN_ID" != "35252106776" || "$ANALYSIS_COMMIT" != "0e319f86a4a9c7ca085de93bb5b3246606b7d6d0" ]]; then
+            echo "write request does not reference the reviewed P1 materialization"
+            exit 1
+          fi
+
+      - name: Verify reviewed analysis run and ancestry
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ANALYSIS_RUN_ID}" > /tmp/analysis-run.json
+          python - <<'PY'
+          import json, os
+          run = json.load(open('/tmp/analysis-run.json', encoding='utf-8'))
+          expected_sha = os.environ['ANALYSIS_COMMIT']
+          if run.get('conclusion') != 'success':
+              raise SystemExit(f"analysis run is not successful: {run.get('conclusion')}")
+          if run.get('head_sha') != expected_sha:
+              raise SystemExit('analysis run head SHA mismatch')
+          if run.get('path') != '.github/workflows/p1-materialization-run-once.yml':
+              raise SystemExit(f"unexpected analysis workflow path: {run.get('path')}")
+          if run.get('head_branch') != 'feature/recommendation-metadata-foundation-v1':
+              raise SystemExit(f"unexpected analysis branch: {run.get('head_branch')}")
+          print('P1_ANALYSIS_RUN_VERIFIED')
+          PY
+          git fetch origin "$ANALYSIS_COMMIT" --depth=1
+          if ! git merge-base --is-ancestor "$ANALYSIS_COMMIT" "$GITHUB_SHA"; then
+            echo "Reviewed materialization commit is not an ancestor of this production write commit."
+            echo "Merge P1 with commit ancestry preserved; do not squash the evidence chain."
+            exit 1
+          fi
+
+      - name: Restore reviewed materialization evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: recommendation-metadata-materialization-v1-run-once
+          path: data/generated/reviewed
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ inputs.analysis_run_id }}
+
+      - name: Validate reviewed evidence and requested shard
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os, re
+          from pathlib import Path
+          root = Path('data/generated/reviewed')
+          expected_sha = os.environ['EXPECTED_PROJECTION_SHA256']
+          summary = json.loads((root/'recommendation-metadata-materialization-v1-summary.json').read_text(encoding='utf-8'))
+          manifest = json.loads((root/'recommendation-projection-manifest.json').read_text(encoding='utf-8'))
+          if summary.get('state') != 'complete' or summary.get('production_mutation') is not False:
+              raise SystemExit('reviewed materialization is not a complete read-only analysis')
+          if manifest.get('sha256') != expected_sha or (summary.get('projection_manifest') or {}).get('sha256') != expected_sha:
+              raise SystemExit('reviewed evidence fingerprint mismatch')
+          expected = {
+              'candidate_count': int(os.environ['EXPECTED_CANDIDATES']),
+              'movie_qid_count': int(os.environ['EXPECTED_MOVIES']),
+              'series_qid_count': int(os.environ['EXPECTED_SERIES']),
+          }
+          for key, value in expected.items():
+              if int(manifest.get(key) or 0) != value:
+                  raise SystemExit(f'reviewed manifest {key} mismatch')
+          totals = summary.get('totals') or {}
+          if int(totals.get('missing_title_entities') or 0) != 0:
+              raise SystemExit('reviewed materialization contains missing title entities')
+          if int(totals.get('emitted_genre_relations') or 0) != int(os.environ['EXPECTED_GENRE_RELATIONS']):
+              raise SystemExit('reviewed genre-relation count mismatch')
+          if int(totals.get('emitted_credit_relations') or 0) != int(os.environ['EXPECTED_CREDIT_RELATIONS']):
+              raise SystemExit('reviewed credit-relation count mismatch')
+          if int(summary.get('emitted_relation_count') or 0) != int(os.environ['EXPECTED_TOTAL_RELATIONS']):
+              raise SystemExit('reviewed total relation count mismatch')
+
+          if os.environ['WRITE_MODE'] == 'write_shard':
+              shard = int(os.environ['SHARD_INDEX'])
+              report_path = root/f'recommendation-materialization-shard-{shard}.json'
+              sql_path = root/f'recommendation-materialization-shard-{shard}.sql'
+              report = json.loads(report_path.read_text(encoding='utf-8'))
+              sql = sql_path.read_text(encoding='utf-8')
+              if report.get('production_mutation') is not False or int(report.get('shard_index', -1)) != shard or int(report.get('shard_count', 0)) != 8:
+                  raise SystemExit('requested shard evidence is invalid')
+              if (report.get('projection_manifest') or {}).get('sha256') != expected_sha:
+                  raise SystemExit('requested shard fingerprint mismatch')
+              if f'-- Projection manifest SHA-256: {expected_sha}' not in sql:
+                  raise SystemExit('requested SQL is not bound to the reviewed projection')
+              allowed = (
+                  '--', 'PRAGMA foreign_keys = ON;', 'BEGIN;', 'COMMIT;',
+                  'INSERT INTO recommendation_titles ', 'INSERT INTO genres ', 'INSERT INTO people ',
+                  'INSERT OR IGNORE INTO title_genres ', 'INSERT OR IGNORE INTO title_credits ',
+              )
+              for line in sql.splitlines():
+                  line = line.strip()
+                  if not line:
+                      continue
+                  if not line.startswith(allowed):
+                      raise SystemExit(f'unsafe SQL line in reviewed shard: {line[:120]}')
+              if not sql.rstrip().endswith('COMMIT;'):
+                  raise SystemExit('requested shard SQL is not transaction wrapped')
+          print('P1_REVIEWED_EVIDENCE_VERIFIED')
+          PY
+
+      - name: Check Cloudflare credentials
+        shell: bash
+        run: |
+          if [[ -z "$CLOUDFLARE_ACCOUNT_ID" || -z "$CLOUDFLARE_API_TOKEN" ]]; then
+            echo "Cloudflare credentials are required for production write mode."
+            exit 1
+          fi
+
+      - name: Install Wrangler and bind production D1
+        run: |
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Recapture current production projection
+        shell: bash
+        run: |
+          mkdir -p data/generated/current
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title FROM movies WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/current/recommendation-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,source_url FROM catalogue_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/current/recommendation-catalogue.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,source_url FROM series_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" \
+            > data/generated/current/recommendation-series.json
+          python scripts/recommendation_projection_manifest.py \
+            --movies data/generated/current/recommendation-movies.json \
+            --catalogue data/generated/current/recommendation-catalogue.json \
+            --series data/generated/current/recommendation-series.json \
+            --out-json data/generated/current/recommendation-projection-manifest.json
+
+      - name: Require analyzed projection compatibility
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          reviewed = json.loads(Path('data/generated/reviewed/recommendation-projection-manifest.json').read_text(encoding='utf-8'))
+          current = json.loads(Path('data/generated/current/recommendation-projection-manifest.json').read_text(encoding='utf-8'))
+          if int(current.get('cross_type_collision_count') or 0):
+              raise SystemExit('current projection contains movie/series identity collisions')
+          rb = {row['wikidata_qid']: row for row in reviewed.get('entries') or []}
+          cb = {row['wikidata_qid']: row for row in current.get('entries') or []}
+          missing = sorted(set(rb) - set(cb))
+          changed = sorted(qid for qid in set(rb) & set(cb) if rb[qid] != cb[qid])
+          if missing or changed:
+              raise SystemExit(f'analyzed projection is stale: missing={missing[:10]} changed={changed[:10]}')
+          print('P1_CURRENT_PROJECTION_COMPATIBLE=' + json.dumps({
+              'reviewed_candidates': len(rb),
+              'current_candidates': len(cb),
+              'new_current_candidates_allowed': len(set(cb) - set(rb)),
+              'reviewed_sha256': reviewed['sha256'],
+              'current_sha256': current['sha256'],
+          }, sort_keys=True))
+          PY
+
+      - name: Apply recommendation metadata schema migration
+        if: inputs.mode == 'write_shard'
+        run: npx wrangler d1 migrations apply cinema-and-series --remote
+
+      - name: Apply exactly one idempotent reviewed shard
+        if: inputs.mode == 'write_shard'
+        shell: bash
+        run: |
+          set -euo pipefail
+          SQL="data/generated/reviewed/recommendation-materialization-shard-${SHARD_INDEX}.sql"
+          echo "Applying reviewed recommendation metadata shard ${SHARD_INDEX}/7"
+          npx wrangler d1 execute cinema-and-series --remote --file="$SQL"
+
+      - name: Capture recommendation metadata production counts
+        shell: bash
+        run: |
+          mkdir -p data/generated/post-write
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT (SELECT COUNT(*) FROM recommendation_titles) AS titles, (SELECT COUNT(*) FROM genres) AS genres, (SELECT COUNT(*) FROM people) AS people, (SELECT COUNT(*) FROM title_genres) AS title_genres, (SELECT COUNT(*) FROM title_credits) AS title_credits;" \
+            > data/generated/post-write/recommendation-counts.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT (SELECT COUNT(*) FROM title_genres tg LEFT JOIN recommendation_titles rt ON rt.id=tg.title_id LEFT JOIN genres g ON g.id=tg.genre_id WHERE rt.id IS NULL OR g.id IS NULL) AS orphan_genres, (SELECT COUNT(*) FROM title_credits tc LEFT JOIN recommendation_titles rt ON rt.id=tc.title_id LEFT JOIN people p ON p.id=tc.person_id WHERE rt.id IS NULL OR p.id IS NULL) AS orphan_credits, (SELECT COUNT(*) FROM title_genres WHERE source_property <> 'P136' OR source_url NOT LIKE 'https://www.wikidata.org/wiki/Q%') AS invalid_genre_provenance, (SELECT COUNT(*) FROM title_credits WHERE NOT ((role='director' AND source_property='P57') OR (role='creator' AND source_property='P170') OR (role='cast' AND source_property='P161')) OR source_url NOT LIKE 'https://www.wikidata.org/wiki/Q%') AS invalid_credit_provenance;" \
+            > data/generated/post-write/recommendation-integrity.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          def rows(path):
+              payload=json.loads(Path(path).read_text(encoding='utf-8'))
+              out=[]
+              for batch in payload if isinstance(payload,list) else [payload]:
+                  if isinstance(batch,dict): out.extend(batch.get('results') or [])
+              return out
+          counts=rows('data/generated/post-write/recommendation-counts.json')
+          integrity=rows('data/generated/post-write/recommendation-integrity.json')
+          if len(counts)!=1 or len(integrity)!=1:
+              raise SystemExit('unexpected D1 verification response')
+          bad={k:int(v or 0) for k,v in integrity[0].items() if int(v or 0)!=0}
+          if bad:
+              raise SystemExit(f'recommendation integrity violation: {bad}')
+          print('P1_PRODUCTION_COUNTS=' + json.dumps(counts[0], sort_keys=True))
+          print('P1_PRODUCTION_INTEGRITY=' + json.dumps(integrity[0], sort_keys=True))
+          PY
+
+      - name: Require complete materialization in final verification mode
+        if: inputs.mode == 'verify_final'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          payload=json.loads(Path('data/generated/post-write/recommendation-counts.json').read_text(encoding='utf-8'))
+          rows=[]
+          for batch in payload if isinstance(payload,list) else [payload]:
+              if isinstance(batch,dict): rows.extend(batch.get('results') or [])
+          if len(rows)!=1: raise SystemExit('unexpected production count response')
+          got={k:int(v or 0) for k,v in rows[0].items()}
+          expected={
+              'titles': int(os.environ['EXPECTED_CANDIDATES']),
+              'title_genres': int(os.environ['EXPECTED_GENRE_RELATIONS']),
+              'title_credits': int(os.environ['EXPECTED_CREDIT_RELATIONS']),
+          }
+          mismatches={k:(expected[k],got.get(k)) for k in expected if got.get(k)!=expected[k]}
+          if mismatches:
+              raise SystemExit(f'P1 materialization incomplete: {mismatches}')
+          print('P1_COMPLETE_RELATION_COUNTS_VERIFIED=' + json.dumps(expected, sort_keys=True))
+          PY
+
+      - name: Run post-write Catalogue Quality V1
+        if: inputs.mode == 'verify_final'
+        shell: bash
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,native_title,language_name,country_code,release_date,verification_status,release_date_source,poster_url FROM movies;" \
+            > data/generated/post-write/quality-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year,language_name,country_code,source_category,source_url,verification_status FROM catalogue_titles;" \
+            > data/generated/post-write/quality-catalogue-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,wikipedia_page_id,title,native_title,series_kind,language_name,country_code,first_air_year,last_air_year,lifecycle_status,season_count,episode_count,source_category,source_url,verification_status FROM series_titles;" \
+            > data/generated/post-write/quality-series.json
+          python scripts/production_catalogue_quality.py \
+            --movies data/generated/post-write/quality-movies.json \
+            --catalogue data/generated/post-write/quality-catalogue-movies.json \
+            --series data/generated/post-write/quality-series.json \
+            --out-json data/generated/post-write/catalogue-quality-v1.json \
+            --out-md data/generated/post-write/catalogue-quality-v1.md \
+            --fail-on-critical
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('data/generated/post-write/catalogue-quality-v1.json').read_text(encoding='utf-8'))
+          sev=(report.get('finding_summary') or {}).get('by_severity') or {}
+          if int(sev.get('S0') or 0) != 0 or int(sev.get('S1') or 0) != 0:
+              raise SystemExit(f'P1 post-write quality regression: S0={sev.get("S0")} S1={sev.get("S1")}')
+          print('P1_POST_WRITE_QUALITY=' + json.dumps({
+              'counts': report['counts'],
+              'findings': report['finding_summary'],
+          }, sort_keys=True))
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recommendation-metadata-production-write-v1-${{ inputs.mode }}-${{ inputs.shard_index }}
+          path: |
+            data/generated/current/recommendation-projection-manifest.json
+            data/generated/post-write/*.json
+            data/generated/post-write/*.md
+          if-no-files-found: warn
+          retention-days: 30
+
+  reject-unsafe-request:
+    if: github.ref != 'refs/heads/main' || inputs.apply_production_write != true
+    runs-on: ubuntu-24.04
+    steps:
+      - run: |
+          echo "Production write refused: run this workflow from main with apply_production_write=true."
+          exit 1
