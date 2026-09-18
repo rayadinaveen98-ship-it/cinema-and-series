@@ -7,6 +7,11 @@ atomic import handling and rejects explicit BEGIN/COMMIT statements. This
 helper validates the reviewed SQL, removes only the redundant execution-control
 lines, and writes a D1-compatible derivative without changing any data
 statement.
+
+It also computes a deterministic D1 rows-written estimate from the normalized
+P1 schema/index layout. The estimate is used as a safety gate for the Workers
+Free daily rows-written limit; it is not a billing forecast for unrelated app
+traffic.
 """
 from __future__ import annotations
 
@@ -28,9 +33,31 @@ DATA_PREFIXES = (
     "INSERT OR IGNORE INTO title_credits ",
 )
 
+# D1 counts the table row plus affected SQLite index rows. These multipliers
+# are derived from migration 0021's normalized schema/index layout and matched
+# the observed shard-0 import exactly (65,299 rows written).
+D1_WRITE_MULTIPLIERS = {
+    "INSERT INTO recommendation_titles": 4,
+    "INSERT INTO genres": 4,
+    "INSERT INTO people": 4,
+    "INSERT OR IGNORE INTO title_genres": 3,
+    "INSERT OR IGNORE INTO title_credits": 4,
+}
+FREE_DAILY_ROWS_WRITTEN = 100_000
+
 
 def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def estimate_rows_written(statement_counts: dict[str, int]) -> int:
+    unknown = sorted(set(statement_counts) - set(D1_WRITE_MULTIPLIERS))
+    if unknown:
+        raise ValueError(f"unknown P1 statement types for D1 cost model: {unknown}")
+    return sum(
+        int(statement_counts.get(statement, 0)) * multiplier
+        for statement, multiplier in D1_WRITE_MULTIPLIERS.items()
+    )
 
 
 def prepare_sql(sql: str, expected_fingerprint: str) -> tuple[str, dict[str, object]]:
@@ -91,8 +118,9 @@ def prepare_sql(sql: str, expected_fingerprint: str) -> tuple[str, dict[str, obj
     if expected_executable_noncomment != original_data_noncomment:
         raise ValueError("D1 transformation changed reviewed data statements")
 
+    estimated_rows = estimate_rows_written(counts)
     manifest: dict[str, object] = {
-        "schema_version": "p1-d1-reviewed-import-v1",
+        "schema_version": "p1-d1-reviewed-import-v2",
         "expected_projection_sha256": expected_fingerprint,
         "original_sha256": sha256_text(sql),
         "executable_sha256": sha256_text(executable),
@@ -101,6 +129,10 @@ def prepare_sql(sql: str, expected_fingerprint: str) -> tuple[str, dict[str, obj
         "data_statement_count": len(data_lines),
         "removed_controls": ["PRAGMA foreign_keys = ON;", "BEGIN;", "COMMIT;"],
         "statement_counts": counts,
+        "write_cost_model": D1_WRITE_MULTIPLIERS,
+        "estimated_rows_written": estimated_rows,
+        "free_daily_rows_written_limit": FREE_DAILY_ROWS_WRITTEN,
+        "free_daily_rows_written_headroom": FREE_DAILY_ROWS_WRITTEN - estimated_rows,
     }
     return executable, manifest
 
