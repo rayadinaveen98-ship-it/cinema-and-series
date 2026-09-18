@@ -1,0 +1,159 @@
+name: P1 Background Write Coordinator
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/p1-background-write-coordinator.yml"
+  schedule:
+    # Runs before the earliest paused catalogue writer (00:17 UTC).
+    - cron: "5 0 * * *"
+  workflow_run:
+    workflows: ["Recommendation Metadata Production Write V2"]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      force_pause:
+        description: "Force the P1 catalogue-write freeze even if final verification already succeeded"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: p1-background-write-coordinator
+  cancel-in-progress: false
+
+permissions:
+  actions: write
+  contents: read
+
+env:
+  FINAL_VERIFY_ARTIFACT_NAME: "recommendation-metadata-production-write-v2-verify_final-0"
+  COORDINATOR_WORKFLOW: "p1-background-write-coordinator.yml"
+  TARGET_WORKFLOWS: |-
+    catalogue-growth-15k.yml
+    series-catalogue.yml
+    wikidata-backfill.yml
+    wikidata-refresh.yml
+    wikipedia-year-catalogue.yml
+
+jobs:
+  coordinate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      FORCE_PAUSE: ${{ github.event_name == 'workflow_dispatch' && inputs.force_pause || false }}
+    steps:
+      - name: Determine whether P1 final verification has succeeded
+        id: decision
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/p1-background-write-coordinator
+
+          if [[ "$FORCE_PAUSE" == "true" ]]; then
+            echo "action=pause" >> "$GITHUB_OUTPUT"
+            echo "P1_BACKGROUND_WRITES_FORCE_PAUSED"
+            exit 0
+          fi
+
+          gh api \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${FINAL_VERIFY_ARTIFACT_NAME}&per_page=100" \
+            > data/generated/p1-background-write-coordinator/final-verify-artifacts.json
+
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+
+          payload = json.loads(
+              Path("data/generated/p1-background-write-coordinator/final-verify-artifacts.json")
+              .read_text(encoding="utf-8")
+          )
+          verified = False
+          verified_run_id = ""
+          for artifact in payload.get("artifacts") or []:
+              if artifact.get("expired"):
+                  continue
+              run_id = (artifact.get("workflow_run") or {}).get("id")
+              if not run_id:
+                  continue
+              raw = subprocess.check_output(
+                  ["gh", "api", f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{run_id}"],
+                  text=True,
+              )
+              run = json.loads(raw)
+              if (
+                  run.get("conclusion") == "success"
+                  and run.get("head_branch") == "main"
+                  and run.get("path") == ".github/workflows/recommendation-metadata-production-write-v2.yml"
+              ):
+                  verified = True
+                  verified_run_id = str(run_id)
+                  break
+
+          action = "resume" if verified else "pause"
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as fh:
+              fh.write(f"action={action}\n")
+              fh.write(f"verified_run_id={verified_run_id}\n")
+
+          if verified:
+              print(f"P1_FINAL_VERIFIED_RUN={verified_run_id}; catalogue writers may resume")
+          else:
+              print("P1_FINAL_NOT_VERIFIED; catalogue writers stay paused")
+          PY
+
+      - name: Apply catalogue-write workflow state
+        shell: bash
+        env:
+          ACTION: ${{ steps.decision.outputs.action }}
+        run: |
+          set -euo pipefail
+          if [[ "$ACTION" == "pause" ]]; then
+            ENDPOINT="disable"
+            EXPECTED_STATE="disabled_manually"
+          elif [[ "$ACTION" == "resume" ]]; then
+            ENDPOINT="enable"
+            EXPECTED_STATE="active"
+          else
+            echo "Unexpected coordinator action: $ACTION"
+            exit 1
+          fi
+
+          while IFS= read -r WORKFLOW; do
+            [[ -n "$WORKFLOW" ]] || continue
+            gh api \
+              --method PUT \
+              -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/${ENDPOINT}"
+            STATE="$(gh api -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}" --jq '.state')"
+            if [[ "$STATE" != "$EXPECTED_STATE" ]]; then
+              echo "Workflow state verification failed: ${WORKFLOW} expected=${EXPECTED_STATE} actual=${STATE}"
+              exit 1
+            fi
+            echo "${WORKFLOW}: ${STATE}"
+          done <<< "$TARGET_WORKFLOWS"
+
+      - name: Retire coordinator after verified P1 completion
+        if: steps.decision.outputs.action == 'resume'
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "P1 final verification succeeded in run ${{ steps.decision.outputs.verified_run_id }}."
+          gh api \
+            --method PUT \
+            -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/${COORDINATOR_WORKFLOW}/disable"
+          echo "P1 background-write coordinator retired after restoring catalogue workflows."
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p1-background-write-coordinator-${{ github.run_id }}
+          path: data/generated/p1-background-write-coordinator/**
+          if-no-files-found: warn
+          retention-days: 30
