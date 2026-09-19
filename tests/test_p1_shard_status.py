@@ -23,6 +23,22 @@ COMMIT;
 """
 
 
+def production_sized_sql(title_count: int = 2000) -> str:
+    lines = [f"-- Projection manifest SHA-256: {FINGERPRINT}", "BEGIN;"]
+    for index in range(1, title_count + 1):
+        lines.append(
+            f"INSERT INTO recommendation_titles (id,wikidata_qid) VALUES ('wikidata:Q{index}','Q{index}');"
+        )
+        lines.append(
+            f"INSERT OR IGNORE INTO title_genres (title_id) VALUES ('wikidata:Q{index}');"
+        )
+        lines.append(
+            f"INSERT OR IGNORE INTO title_credits (title_id) VALUES ('wikidata:Q{index}');"
+        )
+    lines.append("COMMIT;")
+    return "\n".join(lines) + "\n"
+
+
 def payload(titles: int, title_genres: int, title_credits: int):
     return [{"results": [{"titles": titles, "title_genres": title_genres, "title_credits": title_credits}]}]
 
@@ -30,10 +46,18 @@ def payload(titles: int, title_genres: int, title_credits: int):
 class P1ShardStatusTests(unittest.TestCase):
     def test_builds_title_scoped_query_and_expected_counts(self) -> None:
         query, meta = build_status_query(sample_sql(), FINGERPRINT)
+        self.assertIn("WITH shard_ids(id) AS (VALUES", query)
         self.assertIn("wikidata:Q1", query)
         self.assertIn("wikidata:Q2", query)
         self.assertEqual(meta["expected"], {"titles": 2, "title_genres": 2, "title_credits": 1})
         self.assertLess(meta["query_bytes"], 100_000)
+
+    def test_production_sized_query_stays_below_d1_statement_limit(self) -> None:
+        query, meta = build_status_query(production_sized_sql(), FINGERPRINT)
+        self.assertEqual(meta["title_id_count"], 2000)
+        self.assertEqual(meta["expected"], {"titles": 2000, "title_genres": 2000, "title_credits": 2000})
+        self.assertLess(meta["query_bytes"], 100_000)
+        self.assertEqual(query.count("wikidata:Q2000"), 1)
 
     def test_complete_state(self) -> None:
         _, meta = build_status_query(sample_sql(), FINGERPRINT)
