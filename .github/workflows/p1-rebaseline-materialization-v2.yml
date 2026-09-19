@@ -1,0 +1,223 @@
+name: P1 Rebaseline Materialization V2
+
+on:
+  push:
+    branches: ["p1/rebaseline-16380"]
+    paths:
+      - ".github/workflows/p1-rebaseline-materialization-v2.yml"
+
+concurrency:
+  group: p1-rebaseline-materialization-v2
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  PARENT_RUN_ID: "35252106776"
+  PARENT_ARTIFACT: "recommendation-metadata-materialization-v1-run-once"
+  CURRENT_PROJECTION_RUN_ID: "35421313646"
+  CURRENT_PROJECTION_ARTIFACT: "p1-corrected-projection-35421313646"
+  PARENT_SHA256: "4a9d095ca258d3718d2c189c8bd6596d20af46a434f38ab60ba2f2ddbea18448"
+  CURRENT_SHA256: "f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6"
+  EXPECTED_CURRENT_CANDIDATES: "16380"
+  EXPECTED_UNCHANGED: "14114"
+  EXPECTED_ADDED: "2266"
+  EXPECTED_REMOVED: "1"
+  SHARD_COUNT: "8"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate rebaseline code
+        run: |
+          python -m unittest \
+            tests.test_media_identity_corrections \
+            tests.test_recommendation_projection_manifest \
+            tests.test_recommendation_delta_materialization \
+            tests.test_merge_recommendation_materialization -v
+      - name: Restore parent reviewed materialization
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.PARENT_ARTIFACT }}
+          path: data/generated/parent
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.PARENT_RUN_ID }}
+      - name: Restore corrected current projection
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.CURRENT_PROJECTION_ARTIFACT }}
+          path: data/generated/current
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.CURRENT_PROJECTION_RUN_ID }}
+      - name: Validate exact reusable lineage
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp data/generated/current/manifest.json data/generated/current/recommendation-projection-manifest.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from scripts.recommendation_delta_materialization import manifest_delta
+          parent=json.loads(Path('data/generated/parent/recommendation-projection-manifest.json').read_text())
+          current=json.loads(Path('data/generated/current/recommendation-projection-manifest.json').read_text())
+          if parent.get('sha256') != os.environ['PARENT_SHA256']: raise SystemExit('parent fingerprint mismatch')
+          if current.get('sha256') != os.environ['CURRENT_SHA256']: raise SystemExit('current fingerprint mismatch')
+          if int(current.get('candidate_count') or 0) != int(os.environ['EXPECTED_CURRENT_CANDIDATES']): raise SystemExit('current candidate count mismatch')
+          d=manifest_delta(parent,current)
+          expected=(int(os.environ['EXPECTED_UNCHANGED']),int(os.environ['EXPECTED_ADDED']),int(os.environ['EXPECTED_REMOVED']))
+          actual=(d['unchanged_count'],d['added_count'],d['removed_count'])
+          if actual != expected: raise SystemExit(f'projection delta mismatch: expected={expected} actual={actual}')
+          if d['removed_qids'] != ['Q3049630']: raise SystemExit(f'unexpected removed identities: {d["removed_qids"]}')
+          print('P1_REBASELINE_LINEAGE='+json.dumps({
+              'parent_sha256':parent['sha256'],'current_sha256':current['sha256'],
+              'unchanged_count':d['unchanged_count'],'added_count':d['added_count'],
+              'removed_qids':d['removed_qids']},sort_keys=True))
+          PY
+      - name: Preserve compact rebaseline inputs
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1-rebaseline-inputs
+          path: |
+            data/generated/parent/recommendation-projection-manifest.json
+            data/generated/current/recommendation-projection-manifest.json
+          retention-days: 30
+          if-no-files-found: error
+
+  delta:
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/download-artifact@v4
+        with:
+          name: p1-rebaseline-inputs
+          path: data/generated/rebaseline-inputs
+      - name: Materialize only newly added identities with bounded retries
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p data/generated/delta
+          shard="${{ matrix.shard }}"
+          success=0
+          for attempt in 1 2 3; do
+            echo "=== delta shard ${shard}/7 attempt ${attempt}/3 ==="
+            rm -f "data/generated/delta/recommendation-delta-shard-${shard}.json" \
+                  "data/generated/delta/recommendation-delta-shard-${shard}.sql"
+            if python scripts/recommendation_delta_materialization.py \
+              --parent-manifest data/generated/rebaseline-inputs/parent/recommendation-projection-manifest.json \
+              --current-manifest data/generated/rebaseline-inputs/current/recommendation-projection-manifest.json \
+              --shard-index "$shard" --shard-count "$SHARD_COUNT" --max-titles 500 \
+              --out-json "data/generated/delta/recommendation-delta-shard-${shard}.json" \
+              --out-sql "data/generated/delta/recommendation-delta-shard-${shard}.sql"; then
+              success=1
+              break
+            fi
+            if [[ "$attempt" -lt 3 ]]; then sleep $((attempt * 60)); fi
+          done
+          [[ "$success" -eq 1 ]] || { echo "delta shard ${shard} failed after retries"; exit 1; }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-delta-shard-${{ matrix.shard }}
+          path: data/generated/delta/*${{ matrix.shard }}.*
+          retention-days: 30
+          if-no-files-found: error
+
+  merge:
+    needs: [prepare, delta]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Restore parent materialization
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.PARENT_ARTIFACT }}
+          path: data/generated/parent
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.PARENT_RUN_ID }}
+      - name: Restore corrected projection
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.CURRENT_PROJECTION_ARTIFACT }}
+          path: data/generated/current
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.CURRENT_PROJECTION_RUN_ID }}
+      - name: Restore delta shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: recommendation-delta-shard-*
+          path: data/generated/delta
+          merge-multiple: true
+      - name: Merge immutable parent and reviewed delta
+        run: |
+          python scripts/merge_recommendation_materialization.py \
+            --parent-dir data/generated/parent \
+            --delta-dir data/generated/delta \
+            --current-manifest data/generated/current/manifest.json \
+            --out-dir data/generated/rebaseline \
+            --shard-count "$SHARD_COUNT"
+      - name: Compute D1 write-cost plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/rebaseline/executable
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          summary=json.loads(Path('data/generated/rebaseline/recommendation-metadata-materialization-v2-summary.json').read_text())
+          if int(summary['totals']['candidate_titles']) != 16380: raise SystemExit('rebaseline candidate total mismatch')
+          if summary['projection_manifest']['sha256'] != 'f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6': raise SystemExit('rebaseline fingerprint mismatch')
+          PY
+          for SHARD in 0 1 2 3 4 5 6 7; do
+            python scripts/prepare_d1_reviewed_import.py \
+              --input "data/generated/rebaseline/recommendation-materialization-shard-${SHARD}.sql" \
+              --output "data/generated/rebaseline/executable/shard-${SHARD}.sql" \
+              --manifest "data/generated/rebaseline/executable/shard-${SHARD}-cost.json" \
+              --expected-fingerprint "$CURRENT_SHA256"
+          done
+          python scripts/prepare_d1_reviewed_import.py \
+            --input data/generated/delta/recommendation-delta-shard-0.sql \
+            --output data/generated/rebaseline/executable/shard-0-topup.sql \
+            --manifest data/generated/rebaseline/executable/shard-0-topup-cost.json \
+            --expected-fingerprint "$CURRENT_SHA256"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          costs={}
+          for shard in range(8):
+              p=Path(f'data/generated/rebaseline/executable/shard-{shard}-cost.json')
+              costs[str(shard)]=int(json.loads(p.read_text())['estimated_rows_written'])
+          topup=int(json.loads(Path('data/generated/rebaseline/executable/shard-0-topup-cost.json').read_text())['estimated_rows_written'])
+          report={'full_shard_rows_written':costs,'shard_0_topup_rows_written':topup,'hard_ceiling':80000}
+          Path('data/generated/rebaseline/write-cost-plan.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print('P1_REBASELINE_WRITE_COSTS='+json.dumps(report,sort_keys=True))
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-metadata-materialization-v2-rebaseline
+          path: |
+            data/generated/rebaseline/**
+            data/generated/delta/recommendation-delta-shard-0.sql
+            data/generated/delta/recommendation-delta-shard-0.json
+          retention-days: 30
+          if-no-files-found: error
