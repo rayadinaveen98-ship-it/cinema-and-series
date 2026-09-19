@@ -34,12 +34,14 @@ jobs:
           npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT * FROM movies WHERE wikidata_qid IN (${QIDS}) ORDER BY wikidata_qid,id;" > data/generated/p1-collision-diagnostic/movies.json
           npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT * FROM catalogue_titles WHERE wikidata_qid IN (${QIDS}) ORDER BY wikidata_qid,id;" > data/generated/p1-collision-diagnostic/catalogue_titles.json
           npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT * FROM series_titles WHERE wikidata_qid IN (${QIDS}) ORDER BY wikidata_qid,id;" > data/generated/p1-collision-diagnostic/series_titles.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT * FROM recommendation_titles WHERE wikidata_qid IN (${QIDS}) ORDER BY wikidata_qid,id;" > data/generated/p1-collision-diagnostic/recommendation_titles.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT * FROM recommendation_materialization_daily_guard ORDER BY utc_date DESC LIMIT 5;" > data/generated/p1-collision-diagnostic/daily_guard.json
           python - <<'PY'
           import json
           from pathlib import Path
           root=Path('data/generated/p1-collision-diagnostic')
           out={}
-          for name in ('movies','catalogue_titles','series_titles'):
+          for name in ('movies','catalogue_titles','series_titles','recommendation_titles','daily_guard'):
               payload=json.loads((root/f'{name}.json').read_text(encoding='utf-8'))
               rows=[]
               for batch in payload if isinstance(payload,list) else [payload]:
