@@ -7,11 +7,15 @@ current reviewed materialization globally, removes only provenance-backed
 reviewed exclusions, then repartitions by a configurable physical shard count.
 
 This lets production move from the original 8 logical shards to smaller physical
-shards without re-querying Wikidata or weakening evidence lineage.
+shards without re-querying Wikidata or weakening evidence lineage. In addition
+to the title-projection fingerprint, V3 records deterministic SHA-256 hashes for
+the complete normalized metadata graph and for every physical shard so a later
+production writer can lock the exact reviewed relationships, not only titles.
 """
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Iterable, Mapping
@@ -24,6 +28,14 @@ except ModuleNotFoundError:
     from scripts import enrich_recommendation_metadata as enrich
     from scripts import recommendation_metadata_audit as audit
     from scripts import recommendation_delta_materialization as delta_module
+
+MATERIALIZATION_KEYS = (
+    "title_rows",
+    "genre_rows",
+    "people_rows",
+    "title_genre_rows",
+    "title_credit_rows",
+)
 
 
 def dedupe_rows(rows: Iterable[Mapping[str, Any]], key_fields: tuple[str, ...]) -> list[dict[str, Any]]:
@@ -38,14 +50,20 @@ def dedupe_rows(rows: Iterable[Mapping[str, Any]], key_fields: tuple[str, ...]) 
     return [by_key[key] for key in sorted(by_key)]
 
 
+def materialization_fingerprint(rows: Mapping[str, list[dict[str, Any]]]) -> str:
+    """Hash the complete normalized graph in a deterministic JSON form."""
+    canonical_rows = {key: rows.get(key) or [] for key in MATERIALIZATION_KEYS}
+    canonical = json.dumps(
+        canonical_rows,
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+
 def load_reviewed_rows(directory: Path, *, prefix: str, shard_count: int) -> dict[str, list[dict[str, Any]]]:
-    buckets = {
-        "title_rows": [],
-        "genre_rows": [],
-        "people_rows": [],
-        "title_genre_rows": [],
-        "title_credit_rows": [],
-    }
+    buckets = {key: [] for key in MATERIALIZATION_KEYS}
     for shard in range(shard_count):
         payload = json.loads((directory / f"{prefix}-{shard}.json").read_text(encoding="utf-8"))
         if payload.get("production_mutation") is not False:
@@ -184,6 +202,7 @@ def main() -> int:
     global_rows = rebuild_global(
         parent_rows, delta_rows, removed_qids=removed, current_manifest=current_manifest
     )
+    global_materialization_sha256 = materialization_fingerprint(global_rows)
 
     all_qids: set[str] = set()
     shard_summaries: list[dict[str, Any]] = []
@@ -194,11 +213,14 @@ def main() -> int:
         if overlap:
             raise SystemExit(f"physical shards overlap: {sorted(overlap, key=audit.qid_number)[:20]}")
         all_qids |= shard_qids
+        shard_materialization_sha256 = materialization_fingerprint(rows)
         report = {
             "schema_version": "recommendation-metadata-materialization-v3-repartitioned",
             "production_mutation": False,
             "shard_index": shard,
             "shard_count": args.output_shard_count,
+            "materialization_sha256": shard_materialization_sha256,
+            "global_materialization_sha256": global_materialization_sha256,
             **rows,
             "stats": {
                 "candidate_titles": len(rows["title_rows"]),
@@ -228,6 +250,8 @@ def main() -> int:
         (out_dir / f"recommendation-materialization-physical-shard-{shard}.sql").write_text(
             f"-- Projection manifest SHA-256: {current_manifest['sha256']}\n"
             f"-- Projection candidate count: {current_manifest['candidate_count']}\n"
+            f"-- Global materialization SHA-256: {global_materialization_sha256}\n"
+            f"-- Shard materialization SHA-256: {shard_materialization_sha256}\n"
             f"-- Rebaseline parent SHA-256: {parent_manifest['sha256']}\n"
             f"-- Physical partition: QID modulo {args.output_shard_count} = {shard}\n"
             + sql,
@@ -238,6 +262,7 @@ def main() -> int:
             "titles": len(rows["title_rows"]),
             "genre_relations": len(rows["title_genre_rows"]),
             "credit_relations": len(rows["title_credit_rows"]),
+            "materialization_sha256": shard_materialization_sha256,
         })
 
     expected_qids = {str(row["wikidata_qid"]) for row in current_manifest["entries"]}
@@ -248,6 +273,7 @@ def main() -> int:
         "schema_version": "recommendation-metadata-materialization-v3-repartitioned-summary",
         "state": "complete",
         "production_mutation": False,
+        "materialization_sha256": global_materialization_sha256,
         "projection_manifest": {
             "schema_version": current_manifest["schema_version"],
             "candidate_count": current_manifest["candidate_count"],
@@ -265,6 +291,8 @@ def main() -> int:
         "physical_shard_count": args.output_shard_count,
         "totals": {
             "candidate_titles": len(global_rows["title_rows"]),
+            "genres": len(global_rows["genre_rows"]),
+            "people": len(global_rows["people_rows"]),
             "emitted_genre_relations": len(global_rows["title_genre_rows"]),
             "emitted_credit_relations": len(global_rows["title_credit_rows"]),
         },
