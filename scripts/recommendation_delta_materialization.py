@@ -13,9 +13,14 @@ import json
 from pathlib import Path
 from typing import Any
 
-from scripts import enrich_recommendation_metadata as enrich
-from scripts import media_identity_corrections as identity
-from scripts import recommendation_metadata_audit as audit
+try:
+    import enrich_recommendation_metadata as enrich
+    import media_identity_corrections as identity
+    import recommendation_metadata_audit as audit
+except ModuleNotFoundError:
+    from scripts import enrich_recommendation_metadata as enrich
+    from scripts import media_identity_corrections as identity
+    from scripts import recommendation_metadata_audit as audit
 
 
 def load_manifest(path: str | Path) -> dict[str, Any]:
