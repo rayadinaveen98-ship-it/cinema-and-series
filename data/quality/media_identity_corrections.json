@@ -1,0 +1,43 @@
+{
+  "schema_version": "media-identity-corrections-v1",
+  "reviewed_at": "2026-09-19",
+  "canonical_policy": "Explicit Wikidata P31 evidence only. Non-audiovisual entities are excluded. When an entity is explicitly both a miniseries and a television-film form, Series is the canonical product identity because the miniseries classification is episodic and the Series catalogue is the more specific projection.",
+  "corrections": {
+    "Q3049630": {
+      "disposition": "exclude",
+      "canonical_media_type": null,
+      "reason": "Wikidata identifies this entity as a manga series, not an audiovisual Movie or TV Series identity.",
+      "evidence": {
+        "source": "Wikidata",
+        "entity_url": "https://www.wikidata.org/wiki/Q3049630",
+        "p31": [
+          {
+            "qid": "Q21198342",
+            "label": "manga series"
+          }
+        ],
+        "verified_run_id": "35420861375"
+      }
+    },
+    "Q3146368": {
+      "disposition": "canonicalize",
+      "canonical_media_type": "series",
+      "reason": "Wikidata explicitly identifies this work as a miniseries and a television film broadcast in two parts. The project canonicalizes an explicit miniseries identity to Series and suppresses duplicate Movie projection rows.",
+      "evidence": {
+        "source": "Wikidata",
+        "entity_url": "https://www.wikidata.org/wiki/Q3146368",
+        "p31": [
+          {
+            "qid": "Q1259759",
+            "label": "miniseries"
+          },
+          {
+            "qid": "Q98701476",
+            "label": "television film broadcast in two parts"
+          }
+        ],
+        "verified_run_id": "35420861375"
+      }
+    }
+  }
+}

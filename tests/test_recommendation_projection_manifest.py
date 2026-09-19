@@ -48,6 +48,27 @@ class RecommendationProjectionManifestTests(unittest.TestCase):
                 [{"id": "s1", "wikidata_qid": "Q10", "title": "Series", "source_url": "https://example.com/s1"}],
             )
 
+    def test_non_audiovisual_reviewed_identity_is_excluded_from_both_media_types(self):
+        result = manifest.build_manifest(
+            [{"id": "wd-Q3049630", "wikidata_qid": "Q3049630", "title": "Eko Eko Azarak (manga)"}],
+            [],
+            [{"id": "series-wd-Q3049630", "wikidata_qid": "Q3049630", "title": "Eko Eko Azarak (manga)"}],
+        )
+        self.assertEqual(result["candidate_count"], 0)
+        self.assertEqual(result["cross_type_collision_count"], 0)
+        self.assertEqual(result["suppressed_media_identity_correction_qids"], ["Q3049630"])
+
+    def test_reviewed_miniseries_dual_type_canonicalizes_to_series(self):
+        result = manifest.build_manifest(
+            [],
+            [{"id": "wd-Q3146368", "wikidata_qid": "Q3146368", "title": "Shattered City"}],
+            [{"id": "series-wd-Q3146368", "wikidata_qid": "Q3146368", "title": "Shattered City"}],
+        )
+        self.assertEqual(result["candidate_count"], 1)
+        self.assertEqual(result["entries"][0]["media_type"], "series")
+        self.assertEqual(result["entries"][0]["source_table"], "series_titles")
+        self.assertEqual(result["suppressed_media_identity_correction_qids"], ["Q3146368"])
+
 
 if __name__ == "__main__":
     unittest.main()
