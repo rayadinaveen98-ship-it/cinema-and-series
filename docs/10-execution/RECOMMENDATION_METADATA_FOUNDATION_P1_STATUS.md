@@ -1,8 +1,23 @@
 # Recommendation Metadata Foundation P1 — Execution Status
 
-**Status:** PRODUCTION POPULATION IN PROGRESS — SHARD 0/8 COMPLETE  
-**Date:** 2026-09-18  
+**Status:** PRODUCTION POPULATION IN PROGRESS — 16,380-TITLE REBASELINE ACTIVE  
+**Date:** 2026-09-19  
 **Parent roadmap:** `PERSONALIZED_DISCOVERY_ACTIVE_ROADMAP_V1.md`
+
+## Current authoritative state
+
+P1 is still active. Production population began from an earlier reviewed 14,115-title projection, but catalogue growth before the write freeze made that projection obsolete before shard 1 could be applied. Safety gates stopped the stale write before recommendation metadata mutation.
+
+The corrected frozen production projection is now:
+
+- candidates: **16,380**
+- Movie QIDs: **6,562**
+- Series QIDs: **9,818**
+- suppressed exact/year movie overlaps: **375**
+- projection SHA-256: **`f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6`**
+- authoritative read-only projection run: **`35421313646`**
+
+This fingerprint supersedes the previous 14,115-title production-population fingerprint for all future P1 writes.
 
 ## Locked source contract
 
@@ -15,7 +30,18 @@ Only explicit Wikidata relationships are admissible for P1 recommendation metada
 
 No title text, country, language, script, page category, popularity, or model inference may create canonical genre/credit relationships.
 
-## Shared schema
+## Reviewed media-identity corrections
+
+The 2026-09-19 production recapture surfaced two Movie/Series QID collisions. The write gate failed closed before mutation and both identities were verified directly against Wikidata in read-only run **`35420861375`**.
+
+- **`Q3049630` — Eko Eko Azarak**: explicit `P31=Q21198342` (`manga series`). This is non-audiovisual for this product and is excluded from both Movie and Series recommendation identities.
+- **`Q3146368` — Shattered City: The Halifax Explosion**: explicit `P31=Q1259759` (`miniseries`) plus `Q98701476` (`television film broadcast in two parts`). Under the reviewed deterministic precedence rule it canonicalizes to **Series**.
+
+The durable registry is `data/quality/media_identity_corrections.json`, consumed by `scripts/media_identity_corrections.py`. Recommendation projection building applies reviewed corrections before cross-type collision detection. Unknown/unreviewed collisions still hard-fail.
+
+The correction implementation passed the full test suite, catalogue audit, typecheck and build and was merged through PR **#31** (`df52e0679456b07f5e8779294901c18c88d9685e`).
+
+## Schema
 
 Migration `0021_recommendation_metadata_foundation.sql` defines:
 
@@ -25,253 +51,200 @@ Migration `0021_recommendation_metadata_foundation.sql` defines:
 - `title_genres`
 - `title_credits`
 
-The shared title registry is keyed by stable Wikidata identity. Exact-date `movies` rows take precedence over duplicate QIDs in `catalogue_titles`; Series remains a distinct media type. A QID appearing as both Movie and Series is a hard audit failure.
+Migration `0022_recommendation_materialization_daily_guard.sql` defines the UTC-day D1 write reservation used by guarded production population.
 
-Migration `0022_recommendation_materialization_daily_guard.sql` adds the production-population UTC-day safety lock. It prevents more than one P1 shard from being authorized in the same D1 Free quota day and seeds the already verified 2026-09-18 shard-0 production write.
+Exact-date `movies` rows take precedence over duplicate QIDs in `catalogue_titles`. Generic Movie/Series same-QID collisions remain hard failures unless an explicit reviewed correction is present.
 
-## Read-only source-yield audits — COMPLETE
+## Historical source-yield audits — COMPLETE
 
-### Global coverage
+Global source-yield audit run **`35204375729`** was read-only and established that explicit Wikidata metadata coverage was sufficient to proceed. Its then-current 12,264-title analysis projection had:
 
-Workflow: `Recommendation Metadata Foundation V1`  
-Run: `35204375729`  
-State: **complete / read-only / production mutation false**
-
-Fingerprint-bound audit projection at the time of source-yield analysis:
-
-- Movie QIDs: **4,343**
-- Series QIDs: **7,921**
-- total candidates: **12,264**
-- suppressed duplicate movie projections: **199**
-- Movie/Series cross-type identity collisions: **0**
-- projection SHA-256: `86da6c202ca5013d595596226a80e9dbe008b25a4a7c6b656c61b7c3a1a17786`
-
-Final coverage:
-
-- Movies genre: **73.96%**
-- Movies people: **90.42%**
 - Movies recommendation-ready: **70.30% (3,053 / 4,343)**
-- Series genre: **53.59%**
-- Series people: **48.90%**
 - Series recommendation-ready: **35.00% (2,772 / 7,921)**
-- explicit `P136` relations observed: **11,960**
-- explicit `P57` relations observed: **5,386**
-- explicit Series `P170` relations observed: **1,312**
-- explicit `P161` relations observed: **42,689**
+- explicit `P136`: **11,960**
+- explicit `P57`: **5,386**
+- explicit Series `P170`: **1,312**
+- explicit `P161`: **42,689**
 - missing title entities: **0**
-- unusable claims: **35**
-- high-fanout cast titles surfaced for review: **42**
 
-The audit established enough explicit metadata yield to proceed with production materialization.
+India cohort audit run **`35204143430`** was also read-only and row-for-row attested to the same canonical snapshot used by that audit after removing the cohort-only language field. These audits are source-yield evidence; their old projection fingerprints are not current production-write locks.
 
-### India-language cohorts
+## Immutable parent materialization — PRESERVED AS REVIEWED EVIDENCE
 
-Workflow: `Recommendation Metadata India Cohort Audit`  
-Run: `35204143430`  
-State: **complete / read-only / production mutation false**
+The first complete reviewed materialization remains valuable immutable evidence:
 
-The preserved India snapshot was row-for-row attested to the same global canonical projection after removing the cohort-only `language_name` field.
-
-Recommendation-ready coverage:
-
-- Bengali: **49.06% (78 / 159)**
-- Gujarati: **50.00% (6 / 12)**
-- Hindi: **42.90% (284 / 662)**
-- Kannada: **57.29% (55 / 96)**
-- Malayalam: **33.33% (81 / 243)**
-- Marathi: **30.36% (17 / 56)**
-- Punjabi: **16.67% (2 / 12)**
-- Tamil: **65.44% (142 / 217)**
-- Telugu: **52.40% (109 / 208)**
-
-These are cohort quality signals, not ranking weights and not inferred metadata.
-
-## Production materialization evidence — COMPLETE
-
-The first monolithic materialization attempt correctly stopped on persistent Wikidata `maxlag`; production was never mutated. The workflow was then rebuilt as a resumable 8-shard process with bounded retries, immutable-snapshot restoration, shard fingerprint binding, and aggregate validation.
-
-Authoritative successful materialization:
-
-- workflow run: **`35252106776`**
+- run: **`35252106776`**
 - analysis commit: **`0e319f86a4a9c7ca085de93bb5b3246606b7d6d0`**
-- all 8 materialization shards: **success**
-- aggregate: **success**
+- candidates: **14,115**
+- Movie QIDs: **5,235**
+- Series QIDs: **8,880**
+- parent SHA-256: **`4a9d095ca258d3718d2c189c8bd6596d20af46a434f38ab60ba2f2ddbea18448`**
+- emitted genre relationships: **13,689**
+- emitted credit relationships: **58,069**
+- missing title entities: **0**
 - production mutation: **false**
 
-Immutable analyzed projection:
+This parent artifact is no longer sufficient by itself for production, but its unchanged title evidence is reusable after exact manifest lineage verification.
 
-- candidates: **14,115**
-- Movie QIDs: **5,235**
-- Series QIDs: **8,880**
-- projection SHA-256: **`4a9d095ca258d3718d2c189c8bd6596d20af46a434f38ab60ba2f2ddbea18448`**
+## Rebaseline lineage — VERIFIED
 
-Materialized explicit relationships:
+The parent 14,115-title manifest was compared entry-for-entry against the corrected 16,380-title manifest.
 
-- genre relationships emitted: **13,689**
-- credit relationships emitted: **58,069**
-- total provenance-backed relationships emitted: **71,758**
-- explicit relationships before label filtering: **71,808**
-- relationships skipped only because a related entity label was unavailable: **50**
-- missing label entities: **49**
-- missing title entities: **0**
-- unusable claims: **37**
+Exact result:
 
-Resolved entity observations across shards:
+- unchanged entries safe to inherit: **14,114**
+- newly added identities requiring fresh materialization: **2,266**
+- removed identities: **1**
+- removed QIDs: **`Q3049630` only**
+- changed common entries: **0**
 
-- genre-label resolutions: **2,072 shard-local observations**
-- people-label resolutions: **50,717 shard-local observations**
+The same result was independently enforced inside `P1 Rebaseline Materialization V2` prepare job. A common entry changing any manifest field would hard-fail rather than silently reuse parent evidence.
 
-Those two resolution figures are intentionally not treated as global distinct entity counts because the same genre/person may appear in more than one title shard.
+Therefore P1 does **not** re-query Wikidata for all 16,380 titles. It preserves the 14,114 byte-equivalent reviewed parent identities and materializes only the 2,266-title delta.
 
-## Current production compatibility — VERIFIED
+## Delta materialization — ACTIVE
 
-A fresh production-only fingerprint check was run after materialization to ensure the live catalogue had not drifted before authorizing any write.
+Workflow: `P1 Rebaseline Materialization V2`  
+Run: **`35421562708`**  
+Branch event SHA: **`0c53cbbe7195bff137a497b9bb3ec28f040378f6`**  
+Production mutation: **false**
 
-Workflow: `P1 Production Fingerprint Check Once`  
-Run: **`35320178069`**  
-State: **success / read-only**
+The delta is partitioned by QID modulo 8 and runs sequentially with bounded retries to remain polite to Wikidata.
 
-Current production projection:
+Checkpoint recorded on 2026-09-19:
 
-- candidates: **14,115**
-- Movie QIDs: **5,235**
-- Series QIDs: **8,880**
-- SHA-256: **`4a9d095ca258d3718d2c189c8bd6596d20af46a434f38ab60ba2f2ddbea18448`**
+| Delta shard | New titles | Genre rels | Credit rels | Missing title entities | Missing-label rels | State |
+|---:|---:|---:|---:|---:|---:|---|
+| 0 | 250 | 317 | 1,695 | 0 | 0 | **complete** |
+| 1 | 278 | 333 | 1,403 | 0 | 0 | **complete** |
+| 2 | 279 expected | — | — | — | — | running |
+| 3 | 292 expected | — | — | — | — | queued |
+| 4 | 292 expected | — | — | — | — | queued |
+| 5 | 297 expected | — | — | — | — | queued |
+| 6 | 276 expected | — | — | — | — | queued |
+| 7 | 302 expected | — | — | — | — | queued |
 
-Result: **exact match to the successful reviewed materialization**.
+Completed delta shards 0 and 1 both had **zero unusable claims**, **zero missing title entities**, and **zero skipped relationships from unresolved labels** at this checkpoint.
 
-The permanent production gate validates the reviewed analysis run and commit, restores the immutable evidence artifact, verifies the analyzed SHA-256, and recaptures the live projection immediately before each write. Catalogue drift hard-stops the production writer.
+Delta shard 0's exact D1 top-up cost model is **15,531 rows written**. That top-up is important because the parent shard-0 data already exists in production and must not be wastefully rewritten.
 
-## Production population checkpoint — SHARD 0 COMPLETE
+## Existing production recommendation state — PRESERVED
 
-Migration `0021` was applied successfully by the normal production deploy. The first guarded V1 write attempt then failed safely because Cloudflare D1 remote SQL-file imports reject explicit SQLite `BEGIN`/`COMMIT` controls. D1 reported that a failed import returns the database to its original state, and no recommendation rows were left behind by that attempt.
+The only recommendation materialization currently present in production is the original reviewed parent shard 0:
 
-The execution layer was corrected without changing any reviewed data statement. `scripts/prepare_d1_reviewed_import.py` removes only:
-
-- `PRAGMA foreign_keys = ON;`
-- `BEGIN;`
-- `COMMIT;`
-
-The executable derivative preserves every reviewed P1 insert statement byte-for-byte and records both original and executable SHA-256 values.
-
-Successful shard-0 production write:
-
-- workflow: `Recommendation Metadata Production Write V2`
-- run: **`35323383185`**
-- shard: **0 / 7**
-- reviewed projection exact-match gate: **passed**
-- data statements executed: **16,735**
+- production writer run: **`35323383185`**
+- parent logical shard: **0 / 7**
+- recommendation titles: **1,744**
+- genres: **235**
+- people: **6,184**
+- title-genre relations: **1,641**
+- title-credit relations: **6,931**
 - D1 rows written: **65,299**
-- recommendation titles after shard: **1,744**
-- genres after shard: **235**
-- people after shard: **6,184**
-- title-genre relations after shard: **1,641**
-- title-credit relations after shard: **6,931**
 - orphan genre relations: **0**
 - orphan credit relations: **0**
 - invalid genre provenance: **0**
 - invalid credit provenance: **0**
 
-## D1 Free quota-safe shard plan
+No stale shard-1 recommendation metadata was written on 2026-09-19. The collision gate stopped the attempt before mutation.
 
-Cloudflare Workers Free D1 currently allows **100,000 rows written per UTC day** and resets the Free daily quota at **00:00 UTC**. P1 therefore permits exactly one reviewed shard per UTC day.
+Because parent shard 0 is QID modulo 8 = 0, it corresponds exactly to physical modulo-16 partitions **0 and 8**. Those inherited rows will be preserved. Only the new delta identities belonging to that parent shard need a top-up.
 
-The deterministic write-cost model is derived from migration `0021`'s table/index layout and matched the observed shard-0 result exactly:
+## Quota-safe V3 repartition — IMPLEMENTED, FINAL ARTIFACT PENDING
 
-- `recommendation_titles`: 4 D1 rows written per logical statement
-- `genres`: 4
-- `people`: 4
-- `title_genres`: 3
-- `title_credits`: 4
+The old 8-shard production plan is retired for future writes. Before the rebaseline, parent shards 3 and 5 already had estimated costs of **76,087** and **76,905** D1 rows written. Adding the new catalogue delta could push an 8-way shard over the conservative **80,000 rows/day** P1 ceiling.
 
-Reviewed shard plan:
+`scripts/repartition_recommendation_materialization.py` therefore reconstructs the exact reviewed current materialization and repartitions it into **16 physical shards** by numeric QID modulo 16 without re-querying Wikidata.
 
-| Shard | Planned D1 rows written | State |
-|---:|---:|---|
-| 0 | 65,299 | **production complete** |
-| 1 | 65,839 | next |
-| 2 | 62,370 | pending |
-| 3 | 76,087 | pending |
-| 4 | 62,148 | pending |
-| 5 | 76,905 | pending |
-| 6 | 67,608 | pending |
-| 7 | 64,703 | pending |
+The repartitioner hard-fails on:
 
-Largest planned shard: **76,905**, leaving **23,095** rows of Free daily write headroom before unrelated traffic. A separate hard safety ceiling of **80,000 rows/shard** is enforced by the resume controller.
+- conflicting duplicate entity rows
+- missing/extra title identities
+- cross-shard title overlap
+- orphan title relationships
+- genre/person entity closure mismatch
+- projection coverage mismatch
+- unreviewed removal lineage
 
-`.github/workflows/p1-quota-safe-daily-resume.yml` runs at **00:25 UTC** on fresh quota days. It:
+Parent-only cost observations for the 16 physical partitions are approximately **31k–43k rows written each**, leaving material headroom for the delta.
 
-1. restores the immutable reviewed artifact
-2. verifies Cloudflare access and current schema
-3. checks the per-UTC-day D1 write lock
-4. evaluates each shard as `complete`, `not_started`, or unsafe partial/overfilled
-5. chooses only the first untouched shard
-6. computes the deterministic rows-written cost
-7. refuses any shard above 80,000 rows
-8. acquires the UTC-day lock before dispatching a production write
-9. dispatches the existing guarded V2 writer for exactly one shard
-10. no-ops when the current UTC day already has a P1 write lock
+The intended production shape is:
 
-Any partial/overfilled shard state hard-stops automation rather than advancing.
+- preserve inherited parent data already present for physical partitions **0 and 8**
+- apply a delta-only top-up for those identities
+- write full reviewed physical shards **1–7 and 9–15**, one quota-safe shard per eligible UTC day
+- require every final physical shard plan to remain **≤80,000 estimated D1 rows written**
 
-## Production write gate
+Manual assembly workflow: `.github/workflows/p1-repartition-materialization-v3.yml`.
 
-`.github/workflows/recommendation-metadata-production-write-v2.yml` is the guarded mutation worker. The quota-safe daily controller is the preferred production-population entry point.
+It may run only after all eight delta artifacts exist. It will validate exact lineage, require all 2,266 delta titles, require zero missing title entities and zero missing-label relationship skips, build all 16 physical reviewed shards, calculate exact D1 write costs, enforce the 80k ceiling, calculate the existing-shard-0 top-up cost, and preserve one authoritative V3 artifact.
 
-Safety behavior:
+## D1 write-cost model
 
-1. `main` branch only
-2. explicit production-write authorization required by V2
-3. reviewed run ID, analysis commit, candidate counts, relation counts, and projection SHA-256 are locked
-4. reviewed materialization commit must remain an ancestor of the production write commit
-5. materialization artifact must be complete and read-only
-6. requested shard must be one of `0..7` and carry the reviewed fingerprint
-7. reviewed SQL is transformed only by removing D1-incompatible execution controls
-8. every data statement is preserved byte-for-byte
-9. current production projection is recaptured before every write
-10. migration `0021`/`0022` application is idempotent
-11. exactly one reviewed shard is dispatched by the daily controller per UTC quota day
-12. referential-integrity and provenance checks run after every shard
-13. final verification requires exactly **14,115 titles**, **13,689 title-genre relations**, and **58,069 title-credit relations**
-14. final Catalogue Quality V1 must retain **S0 = 0** and **S1 = 0**
+`scripts/prepare_d1_reviewed_import.py` uses the migration `0021` table/index layout:
 
-## Materializer behavior
+- `recommendation_titles`: **4** D1 rows written per logical insert
+- `genres`: **4**
+- `people`: **4**
+- `title_genres`: **3**
+- `title_credits`: **4**
 
-`scripts/enrich_recommendation_metadata.py`:
+The model matched the observed parent shard-0 import exactly at **65,299** rows written.
 
-- never connects to D1 directly
-- never mutates production
-- English Wikidata labels preferred; explicit `mul` label accepted as fallback
-- unresolved labels skip only the dependent relationship
-- Movie `P170` is ignored; Series `P170` is allowed
-- relationship SQL is idempotent (`INSERT OR IGNORE`)
-- entities use QID-stable IDs
-- every relationship retains source property + Wikidata entity URL
-- generated reviewed SQL is transaction wrapped and projection-fingerprint bound
+Cloudflare Free daily rows-written allowance is treated as 100,000, while P1 enforces a stricter internal ceiling of **80,000** for one production population action per UTC quota day.
 
-`scripts/prepare_d1_reviewed_import.py` validates that reviewed artifact, removes only the D1-incompatible execution controls, preserves every data statement, and computes the schema-derived write-cost estimate.
+## Automation freeze during rebaseline
 
-`scripts/p1_shard_status.py` derives a title-scoped status query directly from each reviewed shard. `complete` is allowed to advance, `not_started` is eligible to write, and any mixed state is unsafe.
+Catalogue mutation workflows remain paused by `.github/workflows/p1-background-write-coordinator.yml` while P1 is incomplete.
+
+The obsolete 14,115-title / 8-shard `.github/workflows/p1-quota-safe-daily-resume.yml` schedule was explicitly frozen through PR **#33**, merged as **`0633f7d8fa400e1ad1805a2e0ed93e31fab8ac47`**. It is manual-only and cannot acquire a quota lock or dispatch the stale writer.
+
+The old `Recommendation Metadata Production Write V2` remains locked to the parent fingerprint and must not be used for the new baseline. A V3 writer/controller will be enabled only after the authoritative V3 rebaseline artifact exists and its exact write-cost plan is reviewed.
+
+## Production-write requirements for V3
+
+The replacement production writer/controller must enforce all of the following:
+
+1. `main` only for mutation
+2. explicit mutation authorization
+3. immutable successful V3 analysis run + artifact provenance
+4. exact current projection SHA-256 **`f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6`** recaptured immediately before every write
+5. exact 16,380-title candidate identity contract
+6. no unreviewed cross-type collisions
+7. title-scoped shard status check: complete / not-started / unsafe partial / unsafe overfilled
+8. ≤80,000 deterministic estimated D1 rows written for the selected action
+9. exactly one production population action per eligible UTC quota day
+10. verified ownership of the UTC-day quota guard
+11. D1-compatible derivative must preserve every reviewed data statement
+12. idempotent inserts/upserts only
+13. post-write orphan and provenance checks after every action
+14. special top-up path for the already-present parent shard-0 identities; do not rewrite inherited physical 0/8 rows
+15. final exact title/relationship counts must come from the V3 artifact, not obsolete parent constants
+16. final Catalogue Quality V1 must retain **S0 = 0 / S1 = 0**
 
 ## Migration numbering rule
 
-Recommendation Metadata Foundation P1 now owns migrations:
+P1 owns:
 
 - **0021** — recommendation metadata foundation
 - **0022** — recommendation materialization UTC-day guard
 
-A dormant `feature/series-native-title-enrichment-v1` branch contains an unmerged migration previously numbered `0021_series_native_title_provenance.sql`. Before any future merge it must now be rebased/renumbered to **0023 or later**.
+Do not add migration `0023+` to `main` until P1 closes unless the P1 plan is explicitly revised. The dormant Series native-title branch must be rebased and renumbered before any future merge.
 
 ## Remaining P1 gates
 
-1. ~~merge P1 with reviewed analysis ancestry preserved~~ ✅
-2. ~~apply migration `0021` and verify production schema~~ ✅
-3. populate reviewed shards under D1 quota — **in progress; shard 0/8 complete**
-4. run `verify_final` after all 8 shards are present
-5. require exact normalized relationship counts and zero orphan/provenance violations
-6. require Catalogue Quality V1 **S0 = 0 / S1 = 0**
-7. record final production counts and close P1
+1. ~~apply recommendation schema and validate parent shard-0 production write~~ ✅
+2. ~~detect and review live media-identity collisions before stale shard-1 write~~ ✅
+3. ~~lock deterministic media-identity corrections~~ ✅
+4. ~~freeze catalogue mutation and obsolete daily resume paths~~ ✅
+5. complete all **2,266** delta materialization titles — **in progress**
+6. run V3 16-way repartition assembly and require exact lineage/coverage/write costs
+7. lock and merge V3 reviewed artifact + production orchestration
+8. top up existing parent shard-0 identities safely
+9. populate remaining physical shards one quota-safe UTC day at a time
+10. run final integrity/provenance verification
+11. require Catalogue Quality V1 **S0 = 0 / S1 = 0**
+12. record final normalized counts and mark P1 COMPLETE
 
 ## P1 exit rule
 
-Phase P2/onboarding logic does not begin merely because the schema exists. P1 exits only after all reviewed recommendation metadata is present in production, referential/provenance checks pass, and post-write catalogue quality remains clean.
+P1 exits only after the full corrected 16,380-title reviewed recommendation metadata foundation is present in production, referential/provenance checks pass, and post-write catalogue quality remains clean. P2/onboarding work does not begin merely because the schema or partial materialization exists.
