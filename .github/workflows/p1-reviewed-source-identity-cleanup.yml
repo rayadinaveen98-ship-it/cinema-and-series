@@ -1,0 +1,194 @@
+name: P1 Reviewed Source Identity Cleanup
+
+on:
+  workflow_dispatch:
+    inputs:
+      quota_guard_token:
+        description: "Exact UTC-day guard token acquired by the V3 controller"
+        required: true
+        default: ""
+        type: string
+      apply_cleanup:
+        description: "Explicitly delete only the three reviewed non-canonical source rows"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: p1-reviewed-source-identity-cleanup
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  EXPECTED_PROJECTION_SHA256: "f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6"
+  EXPECTED_CANDIDATES: "16380"
+
+jobs:
+  cleanup:
+    if: github.ref == 'refs/heads/main' && inputs.apply_cleanup == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      QUOTA_GUARD_TOKEN: ${{ inputs.quota_guard_token }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate reviewed identity registry and guard token
+        shell: bash
+        run: |
+          python -m unittest tests.test_media_identity_corrections -v
+          [[ "$QUOTA_GUARD_TOKEN" =~ ^[0-9]+:cleanup$ ]] || {
+            echo "cleanup requires a controller-owned quota_guard_token bound to cleanup"
+            exit 1
+          }
+
+      - name: Check Cloudflare credentials
+        shell: bash
+        run: |
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_API_TOKEN" ]] || { echo "Cloudflare credentials required"; exit 1; }
+
+      - name: Install Wrangler and bind production D1
+        run: |
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Verify cleanup owns the current UTC quota day
+        shell: bash
+        run: |
+          set -euo pipefail
+          UTC_DATE="$(date -u +%F)"
+          mkdir -p data/generated/p1-source-cleanup
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT utc_date,shard_index,projection_sha256,workflow_run_id FROM recommendation_materialization_daily_guard WHERE utc_date='${UTC_DATE}';" \
+            > data/generated/p1-source-cleanup/quota-guard.json
+          python - <<'PY'
+          import datetime, json, os
+          from pathlib import Path
+          payload=json.loads(Path('data/generated/p1-source-cleanup/quota-guard.json').read_text(encoding='utf-8')); rows=[]
+          for batch in payload if isinstance(payload,list) else [payload]:
+              if isinstance(batch,dict): rows.extend(batch.get('results') or [])
+          if len(rows)!=1: raise SystemExit(f'expected exactly one cleanup quota guard row, got {len(rows)}')
+          row=rows[0]
+          expected={
+              'utc_date':datetime.datetime.now(datetime.timezone.utc).date().isoformat(),
+              'shard_index':0,
+              'projection_sha256':os.environ['EXPECTED_PROJECTION_SHA256'],
+              'workflow_run_id':os.environ['QUOTA_GUARD_TOKEN'],
+          }
+          actual={
+              'utc_date':str(row.get('utc_date') or ''),
+              'shard_index':int(row.get('shard_index') if row.get('shard_index') is not None else -1),
+              'projection_sha256':str(row.get('projection_sha256') or ''),
+              'workflow_run_id':str(row.get('workflow_run_id') or ''),
+          }
+          if actual!=expected: raise SystemExit(f'cleanup UTC-day quota guard ownership mismatch: expected={expected} actual={actual}')
+          print('P1_SOURCE_CLEANUP_QUOTA_GUARD_VERIFIED='+json.dumps(actual,sort_keys=True))
+          PY
+
+      - name: Capture exact pre-cleanup rows
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title FROM movies WHERE wikidata_qid IN ('Q3049630','Q3146368') ORDER BY id;" > data/generated/p1-source-cleanup/movies-before.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title FROM catalogue_titles WHERE wikidata_qid IN ('Q3049630','Q3146368') ORDER BY id;" > data/generated/p1-source-cleanup/catalogue-before.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title FROM series_titles WHERE wikidata_qid IN ('Q3049630','Q3146368') ORDER BY id;" > data/generated/p1-source-cleanup/series-before.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          def rows(path):
+              payload=json.loads(Path(path).read_text(encoding='utf-8')); out=[]
+              for batch in payload if isinstance(payload,list) else [payload]:
+                  if isinstance(batch,dict): out.extend(batch.get('results') or [])
+              return out
+          movies=rows('data/generated/p1-source-cleanup/movies-before.json')
+          catalogue=rows('data/generated/p1-source-cleanup/catalogue-before.json')
+          series=rows('data/generated/p1-source-cleanup/series-before.json')
+          expected_movie=[{'id':'wd-Q3049630','wikidata_qid':'Q3049630'}]
+          expected_catalogue=[{'id':'wd-Q3146368','wikidata_qid':'Q3146368'}]
+          expected_series={('series-wd-Q3049630','Q3049630'),('series-wd-Q3146368','Q3146368')}
+          movie_pairs=[{'id':str(r.get('id') or ''),'wikidata_qid':str(r.get('wikidata_qid') or '')} for r in movies]
+          catalogue_pairs=[{'id':str(r.get('id') or ''),'wikidata_qid':str(r.get('wikidata_qid') or '')} for r in catalogue]
+          series_pairs={(str(r.get('id') or ''),str(r.get('wikidata_qid') or '')) for r in series}
+          if movie_pairs!=expected_movie: raise SystemExit(f'unexpected Movie cleanup pre-state: {movie_pairs}')
+          if catalogue_pairs!=expected_catalogue: raise SystemExit(f'unexpected catalogue cleanup pre-state: {catalogue_pairs}')
+          if series_pairs!=expected_series: raise SystemExit(f'unexpected Series cleanup pre-state: {sorted(series_pairs)}')
+          print('P1_SOURCE_CLEANUP_PRESTATE_EXACT')
+          PY
+
+      - name: Delete exactly the reviewed non-canonical source rows
+        shell: bash
+        run: |
+          cat > data/generated/p1-source-cleanup/delete-reviewed-source-rows.sql <<'SQL'
+          DELETE FROM movies
+          WHERE id='wd-Q3049630' AND wikidata_qid='Q3049630';
+          DELETE FROM series_titles
+          WHERE id='series-wd-Q3049630' AND wikidata_qid='Q3049630';
+          DELETE FROM catalogue_titles
+          WHERE id='wd-Q3146368' AND wikidata_qid='Q3146368';
+          SQL
+          npx wrangler d1 execute cinema-and-series --remote --yes --file=data/generated/p1-source-cleanup/delete-reviewed-source-rows.sql
+
+      - name: Verify exact post-cleanup state
+        shell: bash
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title FROM movies WHERE wikidata_qid IN ('Q3049630','Q3146368') ORDER BY id;" > data/generated/p1-source-cleanup/movies-after.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title FROM catalogue_titles WHERE wikidata_qid IN ('Q3049630','Q3146368') ORDER BY id;" > data/generated/p1-source-cleanup/catalogue-after.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title FROM series_titles WHERE wikidata_qid IN ('Q3049630','Q3146368') ORDER BY id;" > data/generated/p1-source-cleanup/series-after.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          def rows(path):
+              payload=json.loads(Path(path).read_text(encoding='utf-8')); out=[]
+              for batch in payload if isinstance(payload,list) else [payload]:
+                  if isinstance(batch,dict): out.extend(batch.get('results') or [])
+              return out
+          if rows('data/generated/p1-source-cleanup/movies-after.json'): raise SystemExit('reviewed Movie source identity still present after cleanup')
+          if rows('data/generated/p1-source-cleanup/catalogue-after.json'): raise SystemExit('reviewed catalogue Movie source identity still present after cleanup')
+          series=rows('data/generated/p1-source-cleanup/series-after.json')
+          pairs={(str(r.get('id') or ''),str(r.get('wikidata_qid') or '')) for r in series}
+          if pairs!={('series-wd-Q3146368','Q3146368')}: raise SystemExit(f'canonical Series retention mismatch after cleanup: {sorted(pairs)}')
+          print('P1_SOURCE_CLEANUP_POSTSTATE_EXACT')
+          PY
+
+      - name: Recapture corrected recommendation projection and require invariance
+        shell: bash
+        run: |
+          mkdir -p data/generated/p1-source-cleanup/current
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title FROM movies WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" > data/generated/p1-source-cleanup/current/movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title,source_url FROM catalogue_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" > data/generated/p1-source-cleanup/current/catalogue.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title,source_url FROM series_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" > data/generated/p1-source-cleanup/current/series.json
+          python scripts/recommendation_projection_manifest.py \
+            --movies data/generated/p1-source-cleanup/current/movies.json \
+            --catalogue data/generated/p1-source-cleanup/current/catalogue.json \
+            --series data/generated/p1-source-cleanup/current/series.json \
+            --out-json data/generated/p1-source-cleanup/current/manifest.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          manifest=json.loads(Path('data/generated/p1-source-cleanup/current/manifest.json').read_text(encoding='utf-8'))
+          if manifest.get('sha256')!=os.environ['EXPECTED_PROJECTION_SHA256']:
+              raise SystemExit(f"corrected projection changed after source cleanup: {manifest.get('sha256')}")
+          if int(manifest.get('candidate_count') or 0)!=int(os.environ['EXPECTED_CANDIDATES']): raise SystemExit('corrected candidate count changed after source cleanup')
+          if int(manifest.get('cross_type_collision_count') or 0)!=0: raise SystemExit('corrected projection has cross-type collision after cleanup')
+          print('P1_SOURCE_CLEANUP_PROJECTION_INVARIANT')
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: p1-reviewed-source-identity-cleanup-${{ github.run_id }}
+          path: data/generated/p1-source-cleanup/**
+          retention-days: 30
+          if-no-files-found: warn

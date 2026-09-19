@@ -1,0 +1,420 @@
+name: Recommendation Metadata Production Write V3
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Write one reviewed V3 operation or verify the complete P1 production graph"
+        required: true
+        default: "write_operation"
+        type: choice
+        options: [write_operation, verify_final]
+      operation:
+        description: "topup or physical shard 1-7/9-15; ignored by verify_final"
+        required: true
+        default: "topup"
+        type: string
+      quota_guard_token:
+        description: "Exact UTC-day guard token acquired by the V3 controller; required by write_operation"
+        required: false
+        default: ""
+        type: string
+      apply_production_write:
+        description: "Explicit authorization to run the guarded production workflow"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: recommendation-metadata-production-write-v3
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  ANALYSIS_RUN_ID: "35428784454"
+  ANALYSIS_COMMIT: "8fdbfeedb28e7e8624fac1a7156f953f21adb618"
+  REVIEWED_ARTIFACT: "recommendation-metadata-materialization-v3-repartitioned"
+  EXPECTED_ARTIFACT_ATTESTATION_SHA256: "8eb39db7964c03e968b26aeccaa33f4b0f85c422fe4c08471ee7ec95510e2986"
+  EXPECTED_PROJECTION_SHA256: "f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6"
+  EXPECTED_GRAPH_SHA256: "9a931b9a7ef081dd8579f67218de14d086515f4cc4bfa20cacb3edb2b8379b78"
+  EXPECTED_CANDIDATES: "16380"
+  EXPECTED_MOVIES: "6562"
+  EXPECTED_SERIES: "9818"
+  EXPECTED_GENRES: "612"
+  EXPECTED_PEOPLE: "37964"
+  EXPECTED_GENRE_RELATIONS: "16489"
+  EXPECTED_CREDIT_RELATIONS: "70551"
+  MAX_OPERATION_ROWS_WRITTEN: "80000"
+
+jobs:
+  guarded-v3:
+    if: github.ref == 'refs/heads/main' && inputs.apply_production_write == true
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      WRITE_MODE: ${{ inputs.mode }}
+      OPERATION: ${{ inputs.operation }}
+      QUOTA_GUARD_TOKEN: ${{ inputs.quota_guard_token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate request and reviewed V3 provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$WRITE_MODE" != "write_operation" && "$WRITE_MODE" != "verify_final" ]]; then
+            echo "unsupported mode: $WRITE_MODE"
+            exit 1
+          fi
+          if [[ "$WRITE_MODE" == "write_operation" ]]; then
+            case "$OPERATION" in
+              topup|1|2|3|4|5|6|7|9|10|11|12|13|14|15) ;;
+              *) echo "unsupported V3 write operation: $OPERATION"; exit 1 ;;
+            esac
+            [[ "$QUOTA_GUARD_TOKEN" =~ ^[0-9]+:(topup|1|2|3|4|5|6|7|9|10|11|12|13|14|15)$ ]] || {
+              echo "write_operation requires a controller-owned quota_guard_token bound to the exact operation"
+              exit 1
+            }
+            [[ "${QUOTA_GUARD_TOKEN##*:}" == "$OPERATION" ]] || {
+              echo "quota_guard_token operation mismatch"
+              exit 1
+            }
+          fi
+
+          gh api "repos/${GITHUB_REPOSITORY}/actions/runs/${ANALYSIS_RUN_ID}" > /tmp/v3-analysis-run.json
+          python - <<'PY'
+          import json, os
+          run=json.load(open('/tmp/v3-analysis-run.json',encoding='utf-8'))
+          if run.get('conclusion')!='success': raise SystemExit('reviewed V3 analysis run is not successful')
+          if run.get('head_sha')!=os.environ['ANALYSIS_COMMIT']: raise SystemExit('reviewed V3 analysis commit mismatch')
+          if run.get('path')!='.github/workflows/p1-repartition-materialization-v3.yml': raise SystemExit('reviewed V3 workflow mismatch')
+          if run.get('head_branch')!='p1/rebaseline-16380': raise SystemExit('reviewed V3 branch mismatch')
+          print('P1_V3_ANALYSIS_RUN_VERIFIED')
+          PY
+          git fetch origin "$ANALYSIS_COMMIT" --depth=1
+          git merge-base --is-ancestor "$ANALYSIS_COMMIT" "$GITHUB_SHA" || {
+            echo "Reviewed V3 analysis commit is not in production ancestry."
+            exit 1
+          }
+
+      - name: Restore immutable reviewed V3 artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.REVIEWED_ARTIFACT }}
+          path: data/generated/reviewed-v3
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.ANALYSIS_RUN_ID }}
+
+      - name: Validate immutable V3 attestation and selected operation
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, json, os
+          from pathlib import Path
+
+          root=Path('data/generated/reviewed-v3')
+          attestation_path=root/'artifact-attestation-v3.json'
+          attestation=json.loads(attestation_path.read_text(encoding='utf-8'))
+          actual_attestation_sha=hashlib.sha256(attestation_path.read_bytes()).hexdigest()
+          if actual_attestation_sha!=os.environ['EXPECTED_ARTIFACT_ATTESTATION_SHA256']:
+              raise SystemExit(f'V3 artifact attestation SHA mismatch: {actual_attestation_sha}')
+          if attestation.get('projection_sha256')!=os.environ['EXPECTED_PROJECTION_SHA256']:
+              raise SystemExit('V3 attestation projection mismatch')
+          if attestation.get('global_materialization_sha256')!=os.environ['EXPECTED_GRAPH_SHA256']:
+              raise SystemExit('V3 attestation graph mismatch')
+          if int(attestation.get('candidate_count') or 0)!=int(os.environ['EXPECTED_CANDIDATES']):
+              raise SystemExit('V3 attestation candidate count mismatch')
+          totals=attestation.get('totals') or {}
+          expected_totals={
+              'candidate_titles':int(os.environ['EXPECTED_CANDIDATES']),
+              'genres':int(os.environ['EXPECTED_GENRES']),
+              'people':int(os.environ['EXPECTED_PEOPLE']),
+              'emitted_genre_relations':int(os.environ['EXPECTED_GENRE_RELATIONS']),
+              'emitted_credit_relations':int(os.environ['EXPECTED_CREDIT_RELATIONS']),
+          }
+          actual_totals={key:int(totals.get(key) or 0) for key in expected_totals}
+          if actual_totals!=expected_totals:
+              raise SystemExit(f'V3 attestation totals mismatch: {actual_totals}')
+          if (attestation.get('lineage') or {}).get('removed_qids')!=['Q3049630']:
+              raise SystemExit('V3 attestation reviewed removal mismatch')
+          if (attestation.get('already_present_parent_partitions') or [])!=[0,8]:
+              raise SystemExit('V3 attestation parent-partition reuse mismatch')
+
+          if os.environ['WRITE_MODE']=='write_operation':
+              operation=os.environ['OPERATION']
+              if operation=='topup':
+                  entry=attestation.get('existing_shard_0_topup') or {}
+                  path=root/'executable'/'existing-shard-0-topup.sql'
+                  expected_sha=str(entry.get('executable_sql_sha256') or '')
+                  estimated=int(entry.get('estimated_rows_written') or 0)
+              else:
+                  shard=int(operation)
+                  entries={int(row['shard']):row for row in attestation.get('physical_shards') or []}
+                  if shard not in entries: raise SystemExit(f'physical shard {shard} absent from V3 attestation')
+                  if shard not in (attestation.get('remaining_full_physical_shards') or []):
+                      raise SystemExit(f'physical shard {shard} is not an authorized remaining write')
+                  entry=entries[shard]
+                  path=root/'executable'/f'physical-shard-{shard}.sql'
+                  expected_sha=str(entry.get('executable_sql_sha256') or '')
+                  estimated=int(entry.get('estimated_rows_written') or 0)
+              if not path.exists(): raise SystemExit(f'missing selected executable: {path}')
+              actual_sha=hashlib.sha256(path.read_bytes()).hexdigest()
+              if actual_sha!=expected_sha:
+                  raise SystemExit(f'selected executable SHA mismatch: expected={expected_sha} actual={actual_sha}')
+              maximum=int(os.environ['MAX_OPERATION_ROWS_WRITTEN'])
+              if estimated<=0 or estimated>maximum:
+                  raise SystemExit(f'operation exceeds quota-safe ceiling: {estimated}>{maximum}')
+              Path('data/generated/reviewed-v3/selected-operation.json').write_text(json.dumps({
+                  'operation':operation,
+                  'executable':str(path),
+                  'executable_sha256':actual_sha,
+                  'estimated_rows_written':estimated,
+              },indent=2,sort_keys=True)+'\n',encoding='utf-8')
+              print('P1_V3_SELECTED_OPERATION='+json.dumps({'operation':operation,'estimated_rows_written':estimated,'executable_sha256':actual_sha},sort_keys=True))
+          print('P1_V3_ARTIFACT_ATTESTATION_VERIFIED='+actual_attestation_sha)
+          PY
+
+      - name: Check Cloudflare credentials
+        shell: bash
+        run: |
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_API_TOKEN" ]] || { echo "Cloudflare credentials required"; exit 1; }
+
+      - name: Install Wrangler and bind production D1
+        run: |
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Require reviewed source identity cleanup
+        shell: bash
+        run: |
+          mkdir -p data/generated/v3-production
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid FROM movies WHERE wikidata_qid IN ('Q3049630','Q3146368') ORDER BY id;" > data/generated/v3-production/source-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid FROM catalogue_titles WHERE wikidata_qid IN ('Q3049630','Q3146368') ORDER BY id;" > data/generated/v3-production/source-catalogue.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid FROM series_titles WHERE wikidata_qid IN ('Q3049630','Q3146368') ORDER BY id;" > data/generated/v3-production/source-series.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          def rows(path):
+              payload=json.loads(Path(path).read_text(encoding='utf-8')); out=[]
+              for batch in payload if isinstance(payload,list) else [payload]:
+                  if isinstance(batch,dict): out.extend(batch.get('results') or [])
+              return out
+          movies=rows('data/generated/v3-production/source-movies.json')
+          catalogue=rows('data/generated/v3-production/source-catalogue.json')
+          series=rows('data/generated/v3-production/source-series.json')
+          if movies or catalogue:
+              raise SystemExit(f'reviewed source cleanup is incomplete: movies={movies} catalogue={catalogue}')
+          pairs={(str(r.get('id') or ''),str(r.get('wikidata_qid') or '')) for r in series}
+          if pairs!={('series-wd-Q3146368','Q3146368')}:
+              raise SystemExit(f'canonical Series cleanup state mismatch: {sorted(pairs)}')
+          print('P1_V3_SOURCE_IDENTITY_CLEANUP_VERIFIED')
+          PY
+
+      - name: Recapture and require exact corrected production projection
+        shell: bash
+        run: |
+          mkdir -p data/generated/v3-production/projection
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title FROM movies WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" > data/generated/v3-production/projection/movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title,source_url FROM catalogue_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" > data/generated/v3-production/projection/catalogue.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title,source_url FROM series_titles WHERE wikidata_qid IS NOT NULL AND trim(wikidata_qid) <> '' ORDER BY id;" > data/generated/v3-production/projection/series.json
+          python scripts/recommendation_projection_manifest.py \
+            --movies data/generated/v3-production/projection/movies.json \
+            --catalogue data/generated/v3-production/projection/catalogue.json \
+            --series data/generated/v3-production/projection/series.json \
+            --out-json data/generated/v3-production/projection/manifest.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          manifest=json.loads(Path('data/generated/v3-production/projection/manifest.json').read_text(encoding='utf-8'))
+          expected={
+              'candidate_count':int(os.environ['EXPECTED_CANDIDATES']),
+              'movie_qid_count':int(os.environ['EXPECTED_MOVIES']),
+              'series_qid_count':int(os.environ['EXPECTED_SERIES']),
+          }
+          if manifest.get('sha256')!=os.environ['EXPECTED_PROJECTION_SHA256']:
+              raise SystemExit(f"production projection drifted: {manifest.get('sha256')}")
+          for key,value in expected.items():
+              if int(manifest.get(key) or 0)!=value: raise SystemExit(f'production {key} drifted')
+          if int(manifest.get('cross_type_collision_count') or 0)!=0:
+              raise SystemExit('corrected production projection has a cross-type collision')
+          print('P1_V3_CURRENT_PROJECTION_EXACT_MATCH')
+          PY
+
+      - name: Verify UTC-day quota guard ownership
+        if: inputs.mode == 'write_operation'
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/v3-production/quota-guard
+          UTC_DATE="$(date -u +%F)"
+          if [[ "$OPERATION" == "topup" ]]; then GUARD_SLOT=0; else GUARD_SLOT=$((OPERATION % 8)); fi
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT utc_date,shard_index,projection_sha256,workflow_run_id FROM recommendation_materialization_daily_guard WHERE utc_date='${UTC_DATE}';" \
+            > data/generated/v3-production/quota-guard/row.json
+          GUARD_SLOT="$GUARD_SLOT" python - <<'PY'
+          import datetime, json, os
+          from pathlib import Path
+          payload=json.loads(Path('data/generated/v3-production/quota-guard/row.json').read_text(encoding='utf-8')); rows=[]
+          for batch in payload if isinstance(payload,list) else [payload]:
+              if isinstance(batch,dict): rows.extend(batch.get('results') or [])
+          if len(rows)!=1: raise SystemExit(f'expected exactly one UTC-day quota guard row, got {len(rows)}')
+          row=rows[0]
+          expected={
+              'utc_date':datetime.datetime.now(datetime.timezone.utc).date().isoformat(),
+              'shard_index':int(os.environ['GUARD_SLOT']),
+              'projection_sha256':os.environ['EXPECTED_PROJECTION_SHA256'],
+              'workflow_run_id':os.environ['QUOTA_GUARD_TOKEN'],
+          }
+          actual={
+              'utc_date':str(row.get('utc_date') or ''),
+              'shard_index':int(row.get('shard_index') if row.get('shard_index') is not None else -1),
+              'projection_sha256':str(row.get('projection_sha256') or ''),
+              'workflow_run_id':str(row.get('workflow_run_id') or ''),
+          }
+          if actual!=expected:
+              raise SystemExit(f'UTC-day V3 quota guard ownership mismatch: expected={expected} actual={actual}')
+          print('P1_V3_UTC_DAY_QUOTA_GUARD_VERIFIED='+json.dumps(actual,sort_keys=True))
+          PY
+
+      - name: Require selected operation to be untouched
+        if: inputs.mode == 'write_operation'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$OPERATION" == "topup" ]]; then
+            SQL_PATH="data/generated/reviewed-v3/executable/existing-shard-0-topup.sql"
+          else
+            SQL_PATH="data/generated/reviewed-v3/executable/physical-shard-${OPERATION}.sql"
+          fi
+          python scripts/p1_shard_status.py plan \
+            --input "$SQL_PATH" \
+            --expected-fingerprint "$EXPECTED_PROJECTION_SHA256" \
+            --query-out data/generated/v3-production/pre-status.sql \
+            --meta-out data/generated/v3-production/pre-status-meta.json
+          QUERY="$(cat data/generated/v3-production/pre-status.sql)"
+          npx wrangler d1 execute cinema-and-series --remote --json --command "$QUERY" > data/generated/v3-production/pre-status-d1.json
+          python scripts/p1_shard_status.py evaluate \
+            --meta data/generated/v3-production/pre-status-meta.json \
+            --d1-json data/generated/v3-production/pre-status-d1.json \
+            --state-out data/generated/v3-production/pre-state.txt \
+            --result-out data/generated/v3-production/pre-status-result.json
+          STATE="$(tr -d '\r\n' < data/generated/v3-production/pre-state.txt)"
+          [[ "$STATE" == "not_started" ]] || { echo "V3 operation is not untouched: ${OPERATION} state=${STATE}"; exit 1; }
+
+      - name: Apply exactly one attested V3 executable
+        if: inputs.mode == 'write_operation'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "$OPERATION" == "topup" ]]; then
+            SQL_PATH="data/generated/reviewed-v3/executable/existing-shard-0-topup.sql"
+          else
+            SQL_PATH="data/generated/reviewed-v3/executable/physical-shard-${OPERATION}.sql"
+          fi
+          npx wrangler d1 execute cinema-and-series --remote --yes --file="$SQL_PATH"
+
+      - name: Require selected operation complete after write
+        if: inputs.mode == 'write_operation'
+        shell: bash
+        run: |
+          QUERY="$(cat data/generated/v3-production/pre-status.sql)"
+          npx wrangler d1 execute cinema-and-series --remote --json --command "$QUERY" > data/generated/v3-production/post-status-d1.json
+          python scripts/p1_shard_status.py evaluate \
+            --meta data/generated/v3-production/pre-status-meta.json \
+            --d1-json data/generated/v3-production/post-status-d1.json \
+            --state-out data/generated/v3-production/post-state.txt \
+            --result-out data/generated/v3-production/post-status-result.json
+          STATE="$(tr -d '\r\n' < data/generated/v3-production/post-state.txt)"
+          [[ "$STATE" == "complete" ]] || { echo "V3 operation did not become complete: ${OPERATION} state=${STATE}"; exit 1; }
+          echo "P1_V3_OPERATION_COMPLETE=${OPERATION}"
+
+      - name: Capture and validate recommendation integrity
+        shell: bash
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT (SELECT COUNT(*) FROM recommendation_titles) AS titles,(SELECT COUNT(*) FROM genres) AS genres,(SELECT COUNT(*) FROM people) AS people,(SELECT COUNT(*) FROM title_genres) AS title_genres,(SELECT COUNT(*) FROM title_credits) AS title_credits;" > data/generated/v3-production/counts.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT (SELECT COUNT(*) FROM title_genres tg LEFT JOIN recommendation_titles rt ON rt.id=tg.title_id LEFT JOIN genres g ON g.id=tg.genre_id WHERE rt.id IS NULL OR g.id IS NULL) AS orphan_genres,(SELECT COUNT(*) FROM title_credits tc LEFT JOIN recommendation_titles rt ON rt.id=tc.title_id LEFT JOIN people p ON p.id=tc.person_id WHERE rt.id IS NULL OR p.id IS NULL) AS orphan_credits,(SELECT COUNT(*) FROM title_genres WHERE source_property<>'P136' OR source_url NOT LIKE 'https://www.wikidata.org/wiki/Q%') AS invalid_genre_provenance,(SELECT COUNT(*) FROM title_credits WHERE NOT ((role='director' AND source_property='P57') OR (role='creator' AND source_property='P170') OR (role='cast' AND source_property='P161')) OR source_url NOT LIKE 'https://www.wikidata.org/wiki/Q%') AS invalid_credit_provenance;" > data/generated/v3-production/integrity.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          def row(path):
+              payload=json.loads(Path(path).read_text(encoding='utf-8')); rows=[]
+              for batch in payload if isinstance(payload,list) else [payload]:
+                  if isinstance(batch,dict): rows.extend(batch.get('results') or [])
+              if len(rows)!=1: raise SystemExit(f'unexpected D1 result shape: {path}')
+              return rows[0]
+          counts={k:int(v or 0) for k,v in row('data/generated/v3-production/counts.json').items()}
+          integrity={k:int(v or 0) for k,v in row('data/generated/v3-production/integrity.json').items()}
+          bad={k:v for k,v in integrity.items() if v!=0}
+          if bad: raise SystemExit(f'V3 recommendation integrity violation: {bad}')
+          print('P1_V3_PRODUCTION_COUNTS='+json.dumps(counts,sort_keys=True))
+          print('P1_V3_PRODUCTION_INTEGRITY='+json.dumps(integrity,sort_keys=True))
+          PY
+
+      - name: Capture complete normalized recommendation graph
+        if: inputs.mode == 'verify_final'
+        shell: bash
+        run: |
+          mkdir -p data/generated/v3-production/final
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,media_type,display_title,source_table,source_id,source_url FROM recommendation_titles ORDER BY id;" > data/generated/v3-production/final/titles.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,name,source_url FROM genres ORDER BY id;" > data/generated/v3-production/final/genres.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,name,source_url FROM people ORDER BY id;" > data/generated/v3-production/final/people.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT title_id,genre_id,source_property,source_url FROM title_genres ORDER BY title_id,genre_id,source_property,source_url;" > data/generated/v3-production/final/title-genres.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT title_id,person_id,role,source_property,source_url FROM title_credits ORDER BY title_id,person_id,role,source_property,source_url;" > data/generated/v3-production/final/title-credits.json
+          python scripts/verify_p1_v3_production.py \
+            --titles data/generated/v3-production/final/titles.json \
+            --genres data/generated/v3-production/final/genres.json \
+            --people data/generated/v3-production/final/people.json \
+            --title-genres data/generated/v3-production/final/title-genres.json \
+            --title-credits data/generated/v3-production/final/title-credits.json \
+            --attestation data/generated/reviewed-v3/artifact-attestation-v3.json \
+            --out data/generated/v3-production/final/graph-verification.json
+
+      - name: Run final Catalogue Quality V1
+        if: inputs.mode == 'verify_final'
+        shell: bash
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,title,native_title,language_name,country_code,release_date,verification_status,release_date_source,poster_url FROM movies;" > data/generated/v3-production/final/quality-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year,language_name,country_code,source_category,source_url,verification_status FROM catalogue_titles;" > data/generated/v3-production/final/quality-catalogue.json
+          npx wrangler d1 execute cinema-and-series --remote --json --command "SELECT id,wikidata_qid,wikipedia_page_id,title,native_title,series_kind,language_name,country_code,first_air_year,last_air_year,lifecycle_status,season_count,episode_count,source_category,source_url,verification_status FROM series_titles;" > data/generated/v3-production/final/quality-series.json
+          python scripts/production_catalogue_quality.py \
+            --movies data/generated/v3-production/final/quality-movies.json \
+            --catalogue data/generated/v3-production/final/quality-catalogue.json \
+            --series data/generated/v3-production/final/quality-series.json \
+            --out-json data/generated/v3-production/final/catalogue-quality-v1.json \
+            --out-md data/generated/v3-production/final/catalogue-quality-v1.md \
+            --fail-on-critical
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path('data/generated/v3-production/final/catalogue-quality-v1.json').read_text(encoding='utf-8'))
+          sev=(report.get('finding_summary') or {}).get('by_severity') or {}
+          s0=int(sev.get('S0') or 0); s1=int(sev.get('S1') or 0)
+          if s0!=0 or s1!=0: raise SystemExit(f'P1 final catalogue quality failed: S0={s0} S1={s1}')
+          print(f'P1_V3_CATALOGUE_QUALITY_VERIFIED=S0:{s0},S1:{s1}')
+          PY
+
+      - name: Preserve V3 production evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: recommendation-metadata-production-write-v3-${{ inputs.mode }}-${{ inputs.operation }}
+          path: data/generated/v3-production/**
+          retention-days: 30
+          if-no-files-found: warn

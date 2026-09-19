@@ -85,6 +85,29 @@ class WikidataNormalizationTests(unittest.TestCase):
         self.assertNotIn("COMMIT;", sql)
         self.assertIn("ON CONFLICT", sql)
 
+    def test_reviewed_non_movie_identities_are_not_imported(self):
+        statements = build_statements(
+            {
+                "movies": [
+                    {
+                        "wikidata_qid": "Q3049630",
+                        "title": "Eko Eko Azarak",
+                        "release_date": "2006-12-16",
+                        "languages": ["Japanese"],
+                        "source_url": "https://www.wikidata.org/wiki/Q3049630",
+                    },
+                    {
+                        "wikidata_qid": "Q3146368",
+                        "title": "Shattered City: The Halifax Explosion",
+                        "release_date": "2003-10-26",
+                        "languages": ["English"],
+                        "source_url": "https://www.wikidata.org/wiki/Q3146368",
+                    },
+                ]
+            }
+        )
+        self.assertEqual(statements, [])
+
     def test_unresolved_qid_label_is_not_imported(self):
         statements = build_statements(
             {
