@@ -1,0 +1,190 @@
+name: P1 Repartition Materialization V3
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: p1-repartition-materialization-v3
+  cancel-in-progress: false
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  PARENT_RUN_ID: "35252106776"
+  PARENT_ARTIFACT: "recommendation-metadata-materialization-v1-run-once"
+  DELTA_RUN_ID: "35421562708"
+  CURRENT_PROJECTION_RUN_ID: "35421313646"
+  CURRENT_PROJECTION_ARTIFACT: "p1-corrected-projection-35421313646"
+  CURRENT_SHA256: "f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6"
+  EXPECTED_CANDIDATES: "16380"
+  EXPECTED_UNCHANGED: "14114"
+  EXPECTED_ADDED: "2266"
+  EXPECTED_REMOVED: "1"
+  PHYSICAL_SHARD_COUNT: "16"
+  MAX_ROWS_WRITTEN_PER_DAY: "80000"
+
+jobs:
+  assemble:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Validate repartition code
+        run: |
+          python -m unittest \
+            tests.test_media_identity_corrections \
+            tests.test_recommendation_delta_materialization \
+            tests.test_repartition_recommendation_materialization \
+            tests.test_prepare_d1_reviewed_import -v
+
+      - name: Restore immutable parent materialization
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.PARENT_ARTIFACT }}
+          path: data/generated/parent
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.PARENT_RUN_ID }}
+
+      - name: Restore corrected current projection
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.CURRENT_PROJECTION_ARTIFACT }}
+          path: data/generated/current
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.CURRENT_PROJECTION_RUN_ID }}
+
+      - name: Restore all reviewed delta shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: recommendation-delta-shard-*
+          path: data/generated/delta
+          merge-multiple: true
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.DELTA_RUN_ID }}
+
+      - name: Validate complete delta evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          candidate_total=0
+          missing_titles=0
+          missing_labels=0
+          unusable=0
+          for shard in range(8):
+              path=Path(f'data/generated/delta/recommendation-delta-shard-{shard}.json')
+              if not path.exists(): raise SystemExit(f'missing delta shard {shard}')
+              report=json.loads(path.read_text(encoding='utf-8'))
+              if report.get('production_mutation') is not False: raise SystemExit(f'delta shard {shard} is not read-only')
+              if report.get('current_projection_sha256') != os.environ['CURRENT_SHA256']:
+                  raise SystemExit(f'delta shard {shard} fingerprint mismatch')
+              stats=report.get('stats') or {}
+              candidate_total += int(stats.get('candidate_titles') or 0)
+              missing_titles += int(stats.get('missing_title_entities') or 0)
+              missing_labels += int(stats.get('skipped_relations_missing_label') or 0)
+              unusable += int(stats.get('unusable_claims') or 0)
+          if candidate_total != int(os.environ['EXPECTED_ADDED']):
+              raise SystemExit(f'delta candidate partition mismatch: {candidate_total}')
+          if missing_titles != 0: raise SystemExit(f'delta has missing title entities: {missing_titles}')
+          if missing_labels != 0: raise SystemExit(f'delta has skipped relations from missing labels: {missing_labels}')
+          print('P1_DELTA_EVIDENCE_COMPLETE='+json.dumps({
+              'candidate_titles':candidate_total,
+              'missing_title_entities':missing_titles,
+              'skipped_relations_missing_label':missing_labels,
+              'unusable_claims':unusable,
+          },sort_keys=True))
+          PY
+
+      - name: Repartition immutable reviewed evidence into 16 physical shards
+        run: |
+          python scripts/repartition_recommendation_materialization.py \
+            --parent-dir data/generated/parent \
+            --delta-dir data/generated/delta \
+            --current-manifest data/generated/current/manifest.json \
+            --out-dir data/generated/repartitioned \
+            --parent-shard-count 8 \
+            --delta-shard-count 8 \
+            --output-shard-count "$PHYSICAL_SHARD_COUNT"
+
+      - name: Validate lineage and exact projection coverage
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          summary=json.loads(Path('data/generated/repartitioned/recommendation-metadata-materialization-v3-summary.json').read_text(encoding='utf-8'))
+          if summary.get('state') != 'complete' or summary.get('production_mutation') is not False:
+              raise SystemExit('repartition summary is not complete/read-only')
+          projection=summary.get('projection_manifest') or {}
+          if projection.get('sha256') != os.environ['CURRENT_SHA256']:
+              raise SystemExit('repartition fingerprint mismatch')
+          if int(projection.get('candidate_count') or 0) != int(os.environ['EXPECTED_CANDIDATES']):
+              raise SystemExit('repartition candidate count mismatch')
+          lineage=summary.get('lineage') or {}
+          expected=(int(os.environ['EXPECTED_UNCHANGED']),int(os.environ['EXPECTED_ADDED']),int(os.environ['EXPECTED_REMOVED']))
+          actual=(int(lineage.get('unchanged_count') or 0),int(lineage.get('added_count') or 0),int(lineage.get('removed_count') or 0))
+          if actual != expected: raise SystemExit(f'repartition lineage mismatch: {actual}')
+          if lineage.get('removed_qids') != ['Q3049630']: raise SystemExit('unexpected reviewed removal')
+          if int(summary.get('physical_shard_count') or 0) != int(os.environ['PHYSICAL_SHARD_COUNT']):
+              raise SystemExit('physical shard count mismatch')
+          PY
+
+      - name: Build and enforce D1 write-cost plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/repartitioned/executable
+          for SHARD in $(seq 0 15); do
+            python scripts/prepare_d1_reviewed_import.py \
+              --input "data/generated/repartitioned/recommendation-materialization-physical-shard-${SHARD}.sql" \
+              --output "data/generated/repartitioned/executable/physical-shard-${SHARD}.sql" \
+              --manifest "data/generated/repartitioned/executable/physical-shard-${SHARD}-cost.json" \
+              --expected-fingerprint "$CURRENT_SHA256"
+          done
+          python scripts/prepare_d1_reviewed_import.py \
+            --input data/generated/delta/recommendation-delta-shard-0.sql \
+            --output data/generated/repartitioned/executable/existing-shard-0-topup.sql \
+            --manifest data/generated/repartitioned/executable/existing-shard-0-topup-cost.json \
+            --expected-fingerprint "$CURRENT_SHA256"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          ceiling=int(os.environ['MAX_ROWS_WRITTEN_PER_DAY'])
+          costs={}
+          for shard in range(16):
+              payload=json.loads(Path(f'data/generated/repartitioned/executable/physical-shard-{shard}-cost.json').read_text())
+              value=int(payload['estimated_rows_written'])
+              costs[str(shard)]=value
+              if value > ceiling:
+                  raise SystemExit(f'physical shard {shard} exceeds conservative write ceiling: {value}>{ceiling}')
+          topup=int(json.loads(Path('data/generated/repartitioned/executable/existing-shard-0-topup-cost.json').read_text())['estimated_rows_written'])
+          if topup > ceiling: raise SystemExit(f'existing shard-0 topup exceeds write ceiling: {topup}>{ceiling}')
+          report={
+              'projection_sha256':os.environ['CURRENT_SHA256'],
+              'physical_shard_rows_written':costs,
+              'existing_shard_0_topup_rows_written':topup,
+              'hard_ceiling':ceiling,
+              'already_present_parent_partitions':[0,8],
+              'remaining_full_physical_shards':[1,2,3,4,5,6,7,9,10,11,12,13,14,15],
+          }
+          Path('data/generated/repartitioned/write-cost-plan-v3.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
+          print('P1_REPARTITION_WRITE_COSTS='+json.dumps(report,sort_keys=True))
+          PY
+
+      - name: Preserve authoritative rebaseline artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: recommendation-metadata-materialization-v3-repartitioned
+          path: data/generated/repartitioned/**
+          retention-days: 30
+          if-no-files-found: error
