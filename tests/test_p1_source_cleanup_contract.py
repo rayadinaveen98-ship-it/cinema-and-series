@@ -26,20 +26,18 @@ class P1ReviewedSourceCleanupContractTests(unittest.TestCase):
         self.assertIn("P1_SOURCE_CLEANUP_PROJECTION_INVARIANT", self.workflow)
 
     def test_exact_three_noncanonical_rows_are_targeted(self):
-        for value in (
-            "wd-Q3049630",
-            "series-wd-Q3049630",
-            "wd-Q3146368",
-        ):
+        for value in ("wd-Q3049630", "series-wd-Q3049630", "wd-Q3146368"):
             self.assertIn(value, self.workflow)
         self.assertIn("series-wd-Q3146368", self.workflow)
         self.assertIn("canonical Series retention mismatch", self.workflow)
         self.assertEqual(self.workflow.count("DELETE FROM "), 3)
 
-    def test_cleanup_refuses_p1_reserved_quota_day(self):
+    def test_cleanup_requires_exact_controller_owned_quota_guard(self):
+        self.assertIn("quota_guard_token", self.workflow)
+        self.assertIn("^[0-9]+:cleanup$", self.workflow)
         self.assertIn("recommendation_materialization_daily_guard", self.workflow)
-        self.assertIn("current UTC day is reserved for P1 recommendation population", self.workflow)
-        self.assertIn("P1_SOURCE_CLEANUP_QUOTA_DAY_CLEAR", self.workflow)
+        self.assertIn("cleanup UTC-day quota guard ownership mismatch", self.workflow)
+        self.assertIn("P1_SOURCE_CLEANUP_QUOTA_GUARD_VERIFIED", self.workflow)
 
     def test_pre_and_post_state_are_fail_closed(self):
         self.assertIn("P1_SOURCE_CLEANUP_PRESTATE_EXACT", self.workflow)
