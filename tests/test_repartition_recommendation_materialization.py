@@ -83,6 +83,41 @@ class RepartitionRecommendationMaterializationTests(unittest.TestCase):
         self.assertEqual({row["id"] for row in shard0["people_rows"]}, {"wikidata:Q200"})
         self.assertEqual({row["id"] for row in shard1["people_rows"]}, {"wikidata:Q201"})
 
+    def test_materialization_fingerprint_is_stable_for_mapping_key_order(self):
+        rows = {
+            "title_rows": [{"wikidata_qid": "Q1", "id": "wikidata:Q1"}],
+            "genre_rows": [{"name": "Drama", "id": "wikidata:Q2"}],
+            "people_rows": [],
+            "title_genre_rows": [{"genre_id": "wikidata:Q2", "title_id": "wikidata:Q1"}],
+            "title_credit_rows": [],
+        }
+        reordered_values = {
+            "title_rows": [{"id": "wikidata:Q1", "wikidata_qid": "Q1"}],
+            "genre_rows": [{"id": "wikidata:Q2", "name": "Drama"}],
+            "people_rows": [],
+            "title_genre_rows": [{"title_id": "wikidata:Q1", "genre_id": "wikidata:Q2"}],
+            "title_credit_rows": [],
+        }
+        self.assertEqual(
+            module.materialization_fingerprint(rows),
+            module.materialization_fingerprint(reordered_values),
+        )
+
+    def test_materialization_fingerprint_changes_when_relationship_changes(self):
+        rows = {
+            "title_rows": [{"id": "wikidata:Q1", "wikidata_qid": "Q1"}],
+            "genre_rows": [{"id": "wikidata:Q2", "name": "Drama"}],
+            "people_rows": [],
+            "title_genre_rows": [{"title_id": "wikidata:Q1", "genre_id": "wikidata:Q2"}],
+            "title_credit_rows": [],
+        }
+        changed = {key: [dict(row) for row in values] for key, values in rows.items()}
+        changed["title_genre_rows"][0]["genre_id"] = "wikidata:Q3"
+        self.assertNotEqual(
+            module.materialization_fingerprint(rows),
+            module.materialization_fingerprint(changed),
+        )
+
     def test_conflicting_duplicate_entity_rows_fail_closed(self):
         with self.assertRaises(ValueError):
             module.dedupe_rows(
