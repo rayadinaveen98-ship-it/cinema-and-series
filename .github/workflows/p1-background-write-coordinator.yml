@@ -96,9 +96,16 @@ jobs:
           fi
           while IFS= read -r WORKFLOW; do
             [[ -n "$WORKFLOW" ]] || continue
-            gh api --method PUT -H "Accept: application/vnd.github+json" \
-              "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/${ENDPOINT}"
-            STATE="$(gh api -H "Accept: application/vnd.github+json" "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}" --jq '.state')"
+            CURRENT_STATE="$(gh api -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}" --jq '.state')"
+            if [[ "$CURRENT_STATE" != "$EXPECTED_STATE" ]]; then
+              gh api --method PUT -H "Accept: application/vnd.github+json" \
+                "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}/${ENDPOINT}"
+            else
+              echo "${WORKFLOW}: already ${EXPECTED_STATE}; no state mutation needed"
+            fi
+            STATE="$(gh api -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/${WORKFLOW}" --jq '.state')"
             if [[ "$STATE" != "$EXPECTED_STATE" ]]; then
               echo "Workflow state verification failed: ${WORKFLOW} expected=${EXPECTED_STATE} actual=${STATE}"
               exit 1

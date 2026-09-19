@@ -121,6 +121,12 @@ class P1OperationalContractTests(unittest.TestCase):
         self.assertNotIn("youtube-monitor.yml\n", self.coordinator)
         self.assertNotIn("website-monitor.yml\n", self.coordinator)
 
+    def test_catalogue_pause_is_idempotent_when_workflows_are_already_disabled(self):
+        self.assertIn("CURRENT_STATE=", self.coordinator)
+        self.assertIn('if [[ "$CURRENT_STATE" != "$EXPECTED_STATE" ]]', self.coordinator)
+        self.assertIn("already ${EXPECTED_STATE}; no state mutation needed", self.coordinator)
+        self.assertIn("Workflow state verification failed", self.coordinator)
+
     def test_catalogue_mutators_resume_only_after_successful_v3_final_verification(self):
         self.assertIn(
             'FINAL_VERIFY_ARTIFACT_NAME: "recommendation-metadata-production-write-v3-verify_final-final"',
