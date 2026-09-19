@@ -12,12 +12,21 @@ payload or movie may request `merge_strategy=earliest`, which preserves the
 earliest open-data date seen across independently fetched historical shards.
 Verified or supported release dates are never replaced by unconfirmed Wikidata
 data, and identical reruns become no-op updates to conserve D1 Free writes.
+
+Reviewed media-identity corrections are enforced at the final SQL boundary as
+defense in depth. A QID explicitly excluded from Movie, or canonicalized to
+Series, can never be reintroduced by a later catalogue refresh.
 """
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
+
+try:
+    import media_identity_corrections as identity
+except ModuleNotFoundError:
+    from scripts import media_identity_corrections as identity
 
 DEFAULT_SRC = Path("data/generated/wikidata-india.json")
 DEFAULT_OUT = Path("data/generated/wikidata-upsert.sql")
@@ -33,9 +42,11 @@ def build_statements(payload: dict) -> list[str]:
     payload_merge_strategy = str(payload.get("merge_strategy") or "replace")
 
     for movie in payload.get("movies", []):
-        raw_qid = str(movie["wikidata_qid"])
+        raw_qid = str(movie["wikidata_qid"]).strip().upper()
         raw_title = str(movie["title"]).strip()
         if not raw_title or raw_title == raw_qid:
+            continue
+        if not identity.is_media_type_allowed(raw_qid, "movie"):
             continue
 
         qid = esc(raw_qid)
