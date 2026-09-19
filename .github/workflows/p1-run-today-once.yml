@@ -19,7 +19,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh workflow run p1-background-write-coordinator.yml --repo "$GITHUB_REPOSITORY" --ref main -f force_pause=true
-      - name: Dispatch today's quota-safe P1 resume
+      - name: Dispatch today's quota-safe P1 resume after status-query fix
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
