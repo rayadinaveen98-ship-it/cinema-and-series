@@ -50,18 +50,24 @@ def build_status_query(sql: str, expected_fingerprint: str) -> tuple[str, dict[s
     if len(title_ids) != len(set(title_ids)):
         raise ValueError("reviewed shard contains duplicate recommendation title ids")
 
-    literals = ",".join(f"'{title_id}'" for title_id in title_ids)
+    # Keep the title literals in one reusable CTE instead of repeating the
+    # entire IN-list three times. Production shards contain ~1.7k titles; the
+    # repeated form can cross D1's SQL statement-size limit even though the
+    # underlying status probe is small and read-only.
+    values = ",".join(f"('{title_id}')" for title_id in title_ids)
     query = (
+        f"WITH shard_ids(id) AS (VALUES {values}) "
         "SELECT "
-        f"(SELECT COUNT(*) FROM recommendation_titles WHERE id IN ({literals})) AS titles, "
-        f"(SELECT COUNT(*) FROM title_genres WHERE title_id IN ({literals})) AS title_genres, "
-        f"(SELECT COUNT(*) FROM title_credits WHERE title_id IN ({literals})) AS title_credits;"
+        "(SELECT COUNT(*) FROM recommendation_titles r JOIN shard_ids s ON s.id=r.id) AS titles, "
+        "(SELECT COUNT(*) FROM title_genres g JOIN shard_ids s ON s.id=g.title_id) AS title_genres, "
+        "(SELECT COUNT(*) FROM title_credits c JOIN shard_ids s ON s.id=c.title_id) AS title_credits;"
     )
-    if len(query.encode("utf-8")) > MAX_D1_SQL_BYTES:
+    query_bytes = len(query.encode("utf-8"))
+    if query_bytes > MAX_D1_SQL_BYTES:
         raise ValueError("generated shard status query exceeds D1 SQL statement limit")
 
     meta: dict[str, Any] = {
-        "schema_version": "p1-shard-status-v1",
+        "schema_version": "p1-shard-status-v2",
         "projection_sha256": expected_fingerprint,
         "expected": {
             "titles": len(title_ids),
@@ -69,7 +75,7 @@ def build_status_query(sql: str, expected_fingerprint: str) -> tuple[str, dict[s
             "title_credits": title_credits,
         },
         "title_id_count": len(title_ids),
-        "query_bytes": len(query.encode("utf-8")),
+        "query_bytes": query_bytes,
     }
     return query, meta
 
