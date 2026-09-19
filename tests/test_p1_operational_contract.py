@@ -59,17 +59,29 @@ class P1OperationalContractTests(unittest.TestCase):
         self.assertTrue((MIGRATIONS / "0021_recommendation_metadata_foundation.sql").exists())
         self.assertTrue((MIGRATIONS / "0022_recommendation_materialization_daily_guard.sql").exists())
 
-    def test_daily_controller_and_writer_share_the_same_immutable_analysis_lock(self):
-        for workflow in (self.daily, self.writer):
-            self.assertIn(EXPECTED_ANALYSIS_RUN_ID, workflow)
-            self.assertIn(EXPECTED_FINGERPRINT, workflow)
+    def test_legacy_daily_controller_is_frozen_during_rebaseline(self):
+        self.assertNotIn("schedule:", self.daily)
+        self.assertIn("workflow_dispatch:", self.daily)
+        self.assertIn("Legacy 8-shard P1 daily resume is intentionally frozen.", self.daily)
+        self.assertIn("16,380-title rebaseline", self.daily)
+        self.assertNotIn("recommendation_materialization_daily_guard", self.daily)
+        self.assertNotIn("gh workflow run", self.daily)
+        self.assertNotIn("cron:", self.daily)
 
-    def test_daily_controller_keeps_one_shard_below_the_hard_write_ceiling(self):
-        self.assertIn('MAX_SHARD_ROWS_WRITTEN: "80000"', self.daily)
-        self.assertIn('cron: "25 0 * * *"', self.daily)
-        self.assertIn("recommendation_materialization_daily_guard", self.daily)
-        self.assertIn("Unsafe materialization state detected", self.daily)
-        self.assertIn("exceeds quota-safe ceiling", self.daily)
+    def test_obsolete_writer_remains_locked_to_parent_analysis_until_replacement(self):
+        self.assertIn(EXPECTED_ANALYSIS_RUN_ID, self.writer)
+        self.assertIn(EXPECTED_FINGERPRINT, self.writer)
+        self.assertIn('EXPECTED_CANDIDATES: "14115"', self.writer)
+        self.assertNotIn(EXPECTED_ANALYSIS_RUN_ID, self.daily)
+        self.assertNotIn(EXPECTED_FINGERPRINT, self.daily)
+
+    def test_frozen_daily_controller_cannot_acquire_or_dispatch_a_quota_write(self):
+        self.assertNotIn('MAX_SHARD_ROWS_WRITTEN: "80000"', self.daily)
+        self.assertNotIn("Acquire UTC-day production write lock", self.daily)
+        self.assertNotIn("Dispatch existing guarded production writer", self.daily)
+        self.assertNotIn("INSERT INTO recommendation_materialization_daily_guard", self.daily)
+        self.assertIn("Do not acquire quota locks", self.daily)
+        self.assertIn("replacement quota-safe controller", self.daily)
 
     def test_writer_cannot_bypass_daily_quota_guard(self):
         self.assertIn("quota_guard_run_id", self.writer)
@@ -85,15 +97,12 @@ class P1OperationalContractTests(unittest.TestCase):
         self.assertIn("S0", self.writer)
         self.assertIn("S1", self.writer)
 
-    def test_daily_controller_auto_verifies_and_retires_only_after_success(self):
-        self.assertIn(
-            'FINAL_VERIFY_ARTIFACT_NAME: "recommendation-metadata-production-write-v2-verify_final-0"',
-            self.daily,
-        )
-        self.assertIn("Dispatch final P1 verification", self.daily)
-        self.assertIn("Retire P1 daily resume after successful final verification", self.daily)
-        self.assertIn("steps.final_verify_state.outputs.verified == 'true'", self.daily)
-        self.assertIn("p1-quota-safe-daily-resume.yml/disable", self.daily)
+    def test_frozen_daily_controller_has_no_final_verify_or_self_retire_path(self):
+        self.assertNotIn("FINAL_VERIFY_ARTIFACT_NAME", self.daily)
+        self.assertNotIn("Dispatch final P1 verification", self.daily)
+        self.assertNotIn("Retire P1 daily resume after successful final verification", self.daily)
+        self.assertNotIn("p1-quota-safe-daily-resume.yml/disable", self.daily)
+        self.assertIn("replacement quota-safe controller will be enabled only after", self.daily)
 
     def test_catalogue_mutators_are_paused_before_daily_p1_population(self):
         self.assertIn('cron: "5 0 * * *"', self.coordinator)
