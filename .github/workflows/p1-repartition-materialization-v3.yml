@@ -42,6 +42,7 @@ jobs:
             tests.test_media_identity_corrections \
             tests.test_recommendation_delta_materialization \
             tests.test_repartition_recommendation_materialization \
+            tests.test_build_p1_v3_artifact_manifest \
             tests.test_prepare_d1_reviewed_import -v
 
       - name: Restore immutable parent materialization
@@ -115,12 +116,12 @@ jobs:
             --delta-shard-count 8 \
             --output-shard-count "$PHYSICAL_SHARD_COUNT"
 
-      - name: Validate lineage and exact projection coverage
+      - name: Validate lineage, graph fingerprint and exact projection coverage
         shell: bash
         run: |
           set -euo pipefail
           python - <<'PY'
-          import json, os
+          import json, os, re
           from pathlib import Path
           summary=json.loads(Path('data/generated/repartitioned/recommendation-metadata-materialization-v3-summary.json').read_text(encoding='utf-8'))
           if summary.get('state') != 'complete' or summary.get('production_mutation') is not False:
@@ -130,6 +131,9 @@ jobs:
               raise SystemExit('repartition fingerprint mismatch')
           if int(projection.get('candidate_count') or 0) != int(os.environ['EXPECTED_CANDIDATES']):
               raise SystemExit('repartition candidate count mismatch')
+          graph=str(summary.get('materialization_sha256') or '')
+          if not re.fullmatch(r'[0-9a-f]{64}',graph):
+              raise SystemExit('repartition graph fingerprint missing or invalid')
           lineage=summary.get('lineage') or {}
           expected=(int(os.environ['EXPECTED_UNCHANGED']),int(os.environ['EXPECTED_ADDED']),int(os.environ['EXPECTED_REMOVED']))
           actual=(int(lineage.get('unchanged_count') or 0),int(lineage.get('added_count') or 0),int(lineage.get('removed_count') or 0))
@@ -137,6 +141,7 @@ jobs:
           if lineage.get('removed_qids') != ['Q3049630']: raise SystemExit('unexpected reviewed removal')
           if int(summary.get('physical_shard_count') or 0) != int(os.environ['PHYSICAL_SHARD_COUNT']):
               raise SystemExit('physical shard count mismatch')
+          print('P1_V3_GRAPH_SHA256='+graph)
           PY
 
       - name: Build and enforce D1 write-cost plan
@@ -180,6 +185,16 @@ jobs:
           Path('data/generated/repartitioned/write-cost-plan-v3.json').write_text(json.dumps(report,indent=2,sort_keys=True)+'\n')
           print('P1_REPARTITION_WRITE_COSTS='+json.dumps(report,sort_keys=True))
           PY
+
+      - name: Build final V3 artifact attestation
+        run: |
+          python scripts/build_p1_v3_artifact_manifest.py \
+            --root data/generated/repartitioned \
+            --expected-projection-sha256 "$CURRENT_SHA256" \
+            --expected-candidates "$EXPECTED_CANDIDATES" \
+            --shard-count "$PHYSICAL_SHARD_COUNT" \
+            --out data/generated/repartitioned/artifact-attestation-v3.json \
+            --sha-out data/generated/repartitioned/artifact-attestation-v3.sha256
 
       - name: Preserve authoritative rebaseline artifact
         uses: actions/upload-artifact@v4
