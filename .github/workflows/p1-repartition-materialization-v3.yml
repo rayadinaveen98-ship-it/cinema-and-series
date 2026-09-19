@@ -2,10 +2,6 @@ name: P1 Repartition Materialization V3
 
 on:
   workflow_dispatch:
-  push:
-    branches: [p1/rebaseline-16380]
-    paths:
-      - ".github/workflows/p1-repartition-materialization-v3.yml"
 
 concurrency:
   group: p1-repartition-materialization-v3
