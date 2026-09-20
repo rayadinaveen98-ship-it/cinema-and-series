@@ -1,0 +1,156 @@
+name: P1 Production Status Snapshot
+
+on:
+  schedule:
+    - cron: "5 1 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: p1-production-status-snapshot
+  cancel-in-progress: true
+
+permissions:
+  actions: read
+  contents: read
+
+env:
+  ANALYSIS_RUN_ID: "35428784454"
+  REVIEWED_ARTIFACT: "recommendation-metadata-materialization-v3-repartitioned"
+  EXPECTED_PROJECTION_SHA256: "f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6"
+
+jobs:
+  snapshot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Restore immutable reviewed V3 materialization
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.REVIEWED_ARTIFACT }}
+          path: data/generated/reviewed-v3
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.ANALYSIS_RUN_ID }}
+
+      - name: Check Cloudflare credentials
+        shell: bash
+        run: |
+          [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_API_TOKEN" ]] || {
+            echo "Cloudflare credentials required"
+            exit 1
+          }
+
+      - name: Install Wrangler and bind existing production D1 read-only
+        shell: bash
+        run: |
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bind_existing_d1.py
+
+      - name: Capture production recommendation counts and health
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/p1-status
+          SQL="SELECT \
+            (SELECT COUNT(*) FROM recommendation_titles) AS recommendation_titles, \
+            (SELECT COUNT(*) FROM genres) AS genres, \
+            (SELECT COUNT(*) FROM people) AS people, \
+            (SELECT COUNT(*) FROM title_genres) AS title_genres, \
+            (SELECT COUNT(*) FROM title_credits) AS title_credits, \
+            (SELECT COUNT(*) FROM title_genres g LEFT JOIN recommendation_titles t ON t.id=g.title_id WHERE t.id IS NULL) AS orphan_title_genres_title, \
+            (SELECT COUNT(*) FROM title_genres g LEFT JOIN genres x ON x.id=g.genre_id WHERE x.id IS NULL) AS orphan_title_genres_genre, \
+            (SELECT COUNT(*) FROM title_credits c LEFT JOIN recommendation_titles t ON t.id=c.title_id WHERE t.id IS NULL) AS orphan_title_credits_title, \
+            (SELECT COUNT(*) FROM title_credits c LEFT JOIN people p ON p.id=c.person_id WHERE p.id IS NULL) AS orphan_title_credits_person, \
+            ((SELECT COUNT(*) FROM title_genres WHERE source_property <> 'P136') + \
+             (SELECT COUNT(*) FROM title_credits WHERE NOT ( \
+               (role='director' AND source_property='P57') OR \
+               (role='creator' AND source_property='P170') OR \
+               (role='cast' AND source_property='P161') \
+             ))) AS invalid_provenance;"
+          npx wrangler d1 execute cinema-and-series --remote --json --command "$SQL" \
+            > data/generated/p1-status/counts.json
+
+      - name: Capture reviewed source-cleanup state
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid FROM movies WHERE wikidata_qid IN ('Q3049630','Q3146368') ORDER BY id;" \
+            > data/generated/p1-status/source-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid FROM catalogue_titles WHERE wikidata_qid IN ('Q3049630','Q3146368') ORDER BY id;" \
+            > data/generated/p1-status/source-catalogue.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid FROM series_titles WHERE wikidata_qid IN ('Q3049630','Q3146368') ORDER BY id;" \
+            > data/generated/p1-status/source-series.json
+
+      - name: Capture current UTC quota-day state
+        shell: bash
+        run: |
+          set -euo pipefail
+          UTC_DATE="$(date -u +%F)"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT utc_date,shard_index,projection_sha256,workflow_run_id,created_at FROM recommendation_materialization_daily_guard WHERE utc_date='${UTC_DATE}';" \
+            > data/generated/p1-status/daily-guard.json
+
+      - name: Probe every reviewed V3 operation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/p1-status/operations
+          for OP in topup 1 2 3 4 5 6 7 9 10 11 12 13 14 15; do
+            if [[ "$OP" == "topup" ]]; then
+              SQL_PATH="data/generated/reviewed-v3/executable/existing-shard-0-topup.sql"
+            else
+              SQL_PATH="data/generated/reviewed-v3/executable/physical-shard-${OP}.sql"
+            fi
+            python scripts/p1_shard_status.py plan \
+              --input "$SQL_PATH" \
+              --expected-fingerprint "$EXPECTED_PROJECTION_SHA256" \
+              --query-out "data/generated/p1-status/operations/${OP}.sql" \
+              --meta-out "data/generated/p1-status/operations/${OP}-meta.json"
+            QUERY="$(cat "data/generated/p1-status/operations/${OP}.sql")"
+            npx wrangler d1 execute cinema-and-series --remote --json --command "$QUERY" \
+              > "data/generated/p1-status/operations/${OP}-d1.json"
+            python scripts/p1_shard_status.py evaluate \
+              --meta "data/generated/p1-status/operations/${OP}-meta.json" \
+              --d1-json "data/generated/p1-status/operations/${OP}-d1.json" \
+              --state-out "data/generated/p1-status/operations/${OP}-state.txt" \
+              --result-out "data/generated/p1-status/operations/${OP}-result.json"
+          done
+
+      - name: Build authoritative P1 status snapshot
+        shell: bash
+        run: |
+          python scripts/p1_status_snapshot.py \
+            --attestation data/generated/reviewed-v3/artifact-attestation-v3.json \
+            --operation-dir data/generated/p1-status/operations \
+            --counts-json data/generated/p1-status/counts.json \
+            --guard-json data/generated/p1-status/daily-guard.json \
+            --source-movies data/generated/p1-status/source-movies.json \
+            --source-catalogue data/generated/p1-status/source-catalogue.json \
+            --source-series data/generated/p1-status/source-series.json \
+            --out-json data/generated/p1-status/p1-production-status.json \
+            --out-md data/generated/p1-status/p1-production-status.md
+          cat data/generated/p1-status/p1-production-status.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload P1 production status snapshot
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1-production-status-${{ github.run_id }}
+          path: |
+            data/generated/p1-status/p1-production-status.json
+            data/generated/p1-status/p1-production-status.md
+          retention-days: 30
