@@ -77,6 +77,8 @@ jobs:
           import os
           import time
           import urllib.request
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
 
           root = os.environ["PRODUCTION_URL"].rstrip("/")
 
@@ -86,7 +88,7 @@ jobs:
                   try:
                       request = urllib.request.Request(
                           root + path,
-                          headers={"Accept": "application/json", "User-Agent": "CinemaAndSeries-LiveSmoke/1.4"},
+                          headers={"Accept": "application/json", "User-Agent": "CinemaAndSeries-LiveSmoke/1.5"},
                       )
                       with urllib.request.urlopen(request, timeout=20) as response:
                           if response.status != 200:
@@ -175,6 +177,25 @@ jobs:
           if malformed_evidence:
               raise RuntimeError(f"review evidence payload is malformed: {malformed_evidence[:3]}")
 
+          today = datetime.now(ZoneInfo("Asia/Kolkata")).date().isoformat()
+          on_this_day = get_json(f"/api/on-this-day?date={today}&limit=200")
+          anniversary_movies = on_this_day.get("movies")
+          if on_this_day.get("source") != "d1":
+              raise RuntimeError(f"On This Day is not backed by D1: {on_this_day.get('source')}")
+          if on_this_day.get("selectedDate") != today:
+              raise RuntimeError(f"On This Day selected date mismatch: {on_this_day.get('selectedDate')} != {today}")
+          if not isinstance(anniversary_movies, list):
+              raise RuntimeError(f"On This Day movies payload is malformed: {on_this_day}")
+          if int(on_this_day.get("count") or 0) != len(anniversary_movies):
+              raise RuntimeError("On This Day count does not match movie rows")
+          wrong_anniversary_dates = [
+              movie for movie in anniversary_movies
+              if not str(movie.get("releaseDate") or "")[5:] == today[5:]
+              or str(movie.get("releaseDate") or "") > today
+          ]
+          if wrong_anniversary_dates:
+              raise RuntimeError(f"On This Day returned mismatched release dates: {wrong_anniversary_dates[:3]}")
+
           pending_summary = [
               {
                   "id": observation.get("id"),
@@ -200,6 +221,9 @@ jobs:
                       "verifiedWithSourceName": len(verified_movies),
                       "activeSources": int(stats.get("activeSources") or 0),
                       "pendingReviewObservations": len(observations),
+                      "onThisDayDate": today,
+                      "onThisDayCount": len(anniversary_movies),
+                      "onThisDayTitles": [movie.get("title") for movie in anniversary_movies[:10]],
                       "catalogueUpdatedAt": catalogue.get("catalogueUpdatedAt"),
                       "verifiedSourceNames": sorted({movie.get("releaseSourceName") for movie in verified_movies}),
                   },
