@@ -124,6 +124,6 @@ export default {
       return onThisDay(request, env);
     }
 
-    return baseWorker.fetch(request, env);
+    return baseWorker.fetch(request as Parameters<typeof baseWorker.fetch>[0], env);
   },
 } satisfies ExportedHandler<Env>;
