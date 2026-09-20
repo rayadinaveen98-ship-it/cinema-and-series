@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-"""Find or create the production D1 database and inject its binding into wrangler.jsonc.
+"""Bind the production D1 database into wrangler.jsonc.
 
 Required environment variables:
 - CLOUDFLARE_ACCOUNT_ID
 - CLOUDFLARE_API_TOKEN
 
-This CI bootstrap intentionally delegates D1 control-plane operations to Wrangler,
-Cloudflare's supported CLI, rather than reimplementing the REST API. It never
-prints either secret.
+Production automation is fail-closed: an existing database named
+``cinema-and-series`` must be present. Database creation is allowed only when
+``ALLOW_D1_CREATE=true`` is supplied explicitly for a deliberate bootstrap
+operation.
+
+This CI helper delegates D1 control-plane operations to Wrangler, Cloudflare's
+supported CLI, rather than reimplementing the REST API. It never prints either
+secret.
 """
 from __future__ import annotations
 
@@ -20,6 +25,11 @@ from pathlib import Path
 
 ACCOUNT_ID = os.environ.get("CLOUDFLARE_ACCOUNT_ID", "").strip()
 TOKEN = os.environ.get("CLOUDFLARE_API_TOKEN", "").strip()
+ALLOW_D1_CREATE = os.environ.get("ALLOW_D1_CREATE", "").strip().lower() in {
+    "1",
+    "true",
+    "yes",
+}
 DB_NAME = "cinema-and-series"
 WRANGLER = Path("wrangler.jsonc")
 
@@ -65,20 +75,33 @@ def list_databases() -> list[dict]:
 def resolve_database_id() -> str:
     databases = list_databases()
     exact = [item for item in databases if item.get("name") == DB_NAME]
+
+    if len(exact) > 1:
+        raise RuntimeError(
+            f"Expected exactly one D1 database named {DB_NAME}; found {len(exact)}"
+        )
+
     if not exact:
-        print(f"No D1 database named {DB_NAME}; creating it in APAC")
+        if not ALLOW_D1_CREATE:
+            raise RuntimeError(
+                f"D1 database {DB_NAME} does not exist; refusing implicit creation. "
+                "Set ALLOW_D1_CREATE=true only for an explicit bootstrap operation."
+            )
+        print(f"Explicit bootstrap authorized; creating D1 database {DB_NAME} in APAC")
         run_wrangler("d1", "create", DB_NAME, "--location=apac")
         databases = list_databases()
         exact = [item for item in databases if item.get("name") == DB_NAME]
-
-    if not exact:
-        raise RuntimeError(f"D1 database {DB_NAME} was not found after creation")
+        if len(exact) != 1:
+            raise RuntimeError(
+                f"Expected exactly one D1 database named {DB_NAME} after explicit creation; "
+                f"found {len(exact)}"
+            )
 
     db_id = exact[0].get("uuid") or exact[0].get("id")
     if not db_id:
         raise RuntimeError("D1 database record did not include a UUID")
 
-    print(f"Using D1 database: {DB_NAME}")
+    print(f"Using existing D1 database: {DB_NAME}")
     return str(db_id)
 
 
