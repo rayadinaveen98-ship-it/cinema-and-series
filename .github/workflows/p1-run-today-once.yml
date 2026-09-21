@@ -1,5 +1,7 @@
 name: P1 Run Today Once
 
+# One-time guarded dispatch refreshed for the 2026-09-21 UTC quota day.
+# This workflow never writes D1 directly; the quota-safe controller owns the daily guard.
 on:
   push:
     branches: [main]
@@ -19,7 +21,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh workflow run p1-background-write-coordinator.yml --repo "$GITHUB_REPOSITORY" --ref main -f force_pause=true
-      - name: Dispatch today's quota-safe P1 resume after status-query fix
+      - name: Dispatch today's quota-safe P1 resume
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
