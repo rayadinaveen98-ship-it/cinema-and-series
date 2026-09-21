@@ -77,7 +77,8 @@ class P1RebaselineOperationalContractTests(unittest.TestCase):
         self.assertIn("P1_V3_PRODUCTION_GRAPH_VERIFIED", self.graph_verify)
 
     def test_status_explicitly_marks_parent_writer_obsolete(self):
-        self.assertIn("16,380-TITLE REBASELINE ACTIVE", self.status)
+        self.assertIn("TOP-UP COMPLETE", self.status)
+        self.assertIn("physical shard 1", self.status)
         self.assertIn(CURRENT_SHA, self.status)
         self.assertIn("14,114", self.status)
         self.assertIn("2,266", self.status)
