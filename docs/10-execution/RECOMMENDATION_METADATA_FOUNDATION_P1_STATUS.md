@@ -351,7 +351,32 @@ Integrity after shard 2:
 
 The final full-graph verifier and final Catalogue Quality exit gate were intentionally skipped by the writer because production population remains incomplete. This is the expected behavior.
 
-A Sep23 independent read-only P1 status snapshot had not yet executed when this production evidence was recorded. Its later result may be appended as secondary corroboration; absence of that later snapshot does not alter the already-proven writer post-state.
+### Independent read-only snapshot corroboration
+
+`P1 Production Status Snapshot` run **`35823982162`** (run number **3**) later read the same production state without mutation and independently confirmed:
+
+- source cleanup: **complete**
+- completed operation prefix: **`topup,1,2`**
+- completed operations: **3 / 15**
+- overall operation state: **in_progress**
+- next operation: **`3`**
+- next reviewed cost: **49,159 D1 rows**
+- physical shard 3 state: **not_started**, with **0 / 1,056 titles**, **0 / 1,041 title-genres**, and **0 / 5,384 title-credits** present
+- current UTC quota day: **used by `35820142892:2`**
+- production counts: **4,029 titles / 342 genres / 13,595 people / 3,934 title-genres / 17,214 title-credits**
+- orphan/provenance health violations: **0**
+- P1 exit-ready: **false**
+
+Snapshot evidence:
+
+- workflow run: **`35823982162`**
+- head SHA: **`eed9943894218ab3952070b5eccbd273247e8ab7`**
+- result: **success**
+- artifact: `p1-production-status-35823982162`
+- artifact ID: **`10735015860`**
+- artifact ZIP SHA-256: **`a6f5a2410ad8e10591bfd16c6c3003b0aec8f7d09f719eed08fbc12b2870695d`**
+
+This independently corroborates the writer post-state while preserving shard 3 as untouched for the next fresh UTC quota day.
 
 ## Production orchestration safety
 
@@ -370,6 +395,10 @@ PR **#42** removed the temporary Sep21 one-time bridge. The permanent scheduled 
 PR **#43** recorded Sep22 shard 1 production evidence.
 
 PR **#46** added the deterministic P1 final-exit evidence checklist.
+
+PR **#47** recorded Sep23 shard 2 production evidence and advanced the authoritative checkpoint to shard 3.
+
+PR **#48** added the reusable offline V3 operation preflight and immutable shard-3 rehearsal evidence.
 
 The V3 writer requires:
 
