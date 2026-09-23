@@ -172,7 +172,28 @@ Controller evidence artifact:
 - artifact ID: **`10732554725`**
 - artifact SHA-256: **`4f3942d74d018e3a009e52b3e7563498e227896eea55db1685fa3b6a45f70f9e`**
 
-The Sep23 read-only production status snapshot had not yet executed when this checkpoint was recorded. Append its run/artifact later as corroboration if successful; do not treat its later scheduling as a blocker to the already-proven shard-2 writer post-state.
+Independent read-only status snapshot corroboration:
+
+- workflow run: **`35823982162`**
+- run number: **3**
+- head SHA: **`eed9943894218ab3952070b5eccbd273247e8ab7`**
+- result: **success**
+- source cleanup: **complete**
+- completed prefix: **`topup,1,2`**
+- completed operations: **3 / 15**
+- overall state: **in_progress**
+- next operation: **`3`**
+- next reviewed cost: **49,159**
+- shard 3: **not_started** at **0 / 1,056 titles**, **0 / 1,041 title-genres**, **0 / 5,384 title-credits**
+- current UTC guard: **used by `35820142892:2`**
+- production totals: **4,029 / 342 / 13,595 / 3,934 / 17,214**
+- orphan/provenance health violations: **0**
+- P1 exit-ready: **false**
+- artifact: `p1-production-status-35823982162`
+- artifact ID: **`10735015860`**
+- artifact SHA-256: **`a6f5a2410ad8e10591bfd16c6c3003b0aec8f7d09f719eed08fbc12b2870695d`**
+
+This snapshot is secondary corroboration of the already-proven writer post-state; it does not replace the exact writer evidence or the eventual final graph verifier.
 
 ---
 
@@ -493,6 +514,8 @@ As of **2026-09-23 UTC**:
 - next reviewed write estimate: **49,159 rows**
 - production totals: **4,029 titles / 342 genres / 13,595 people / 3,934 title-genres / 17,214 title-credits**
 - current integrity counters: **0 / 0 / 0 / 0**
+- independent snapshot: **run `35823982162` success; artifact `10735015860`; SHA `a6f5a2410ad8e10591bfd16c6c3003b0aec8f7d09f719eed08fbc12b2870695d`**
+- current quota guard: **`35820142892:2` used**
 - P1 exit-ready: **false**
 
 This checkpoint is informational. The authoritative live state remains `RECOMMENDATION_METADATA_FOUNDATION_P1_STATUS.md` and the read-only P1 production status snapshot.
