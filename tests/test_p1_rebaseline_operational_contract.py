@@ -77,9 +77,13 @@ class P1RebaselineOperationalContractTests(unittest.TestCase):
         self.assertIn("P1_V3_PRODUCTION_GRAPH_VERIFIED", self.graph_verify)
 
     def test_status_explicitly_marks_parent_writer_obsolete(self):
-        self.assertIn("SHARD 1 COMPLETE", self.status)
-        self.assertIn("physical shard 2", self.status)
-        self.assertIn("35689533994:1", self.status)
+        self.assertIn("SHARD 2 COMPLETE", self.status)
+        self.assertIn("physical shard 3", self.status)
+        self.assertIn("35820142892:2", self.status)
+        self.assertIn("35820184949", self.status)
+        self.assertIn("39,259", self.status)
+        self.assertIn("49,159", self.status)
+        self.assertIn("3 / 15", self.status)
         self.assertIn(CURRENT_SHA, self.status)
         self.assertIn("14,114", self.status)
         self.assertIn("2,266", self.status)
