@@ -4,6 +4,17 @@ from scripts import p2_artwork_coverage_audit as audit
 
 
 class P2ArtworkCoverageAuditTests(unittest.TestCase):
+    def publishable_proof(self, *, url="https://example.test/image.jpg"):
+        return {
+            "link_exact": True,
+            "rights_verified_at": "2026-09-28T00:00:00Z",
+            "validity_eligible": True,
+            "takedown_clear": True,
+            "territory_eligible": True,
+            "delivery_url": url,
+            "attribution_required": False,
+        }
+
     def sample(self):
         return {
             "titles": [
@@ -22,6 +33,7 @@ class P2ArtworkCoverageAuditTests(unittest.TestCase):
                     "publication_state": "OPEN_LICENSE_VERIFIED",
                     "rights_basis": "OPEN_LICENSE",
                     "hosting_mode": "EXTERNAL_ALLOWED",
+                    **self.publishable_proof(url="https://commons.test/a.jpg"),
                     "attribution_required": True,
                     "attribution_text": "Creator / CC BY-SA",
                 },
@@ -46,6 +58,7 @@ class P2ArtworkCoverageAuditTests(unittest.TestCase):
                     "publication_state": "PROVIDER_LICENSED",
                     "rights_basis": "PROVIDER_CONTRACT",
                     "hosting_mode": "PROVIDER_CDN",
+                    **self.publishable_proof(url="https://provider.test/p-1.jpg"),
                     "territory_restrictions": ["IN"],
                 },
                 {
@@ -58,6 +71,7 @@ class P2ArtworkCoverageAuditTests(unittest.TestCase):
                     "publication_state": "OPEN_LICENSE_VERIFIED",
                     "rights_basis": "OPEN_LICENSE",
                     "hosting_mode": "EXTERNAL_ALLOWED",
+                    **self.publishable_proof(url="https://commons.test/b.jpg"),
                     "ambiguous_link": True,
                 },
             ],
@@ -66,6 +80,7 @@ class P2ArtworkCoverageAuditTests(unittest.TestCase):
     def test_report_separates_discovery_from_publishable_coverage(self):
         report = audit.build_report(self.sample())
         self.assertTrue(report["read_only"])
+        self.assertEqual(report["audit_version"], "p2-artwork-coverage-audit-v2")
         self.assertEqual(report["input"], {"titles": 3, "candidates": 4})
         self.assertEqual(report["coverage"]["with_candidate"], 3)
         self.assertEqual(report["coverage"]["with_publishable_poster"], 1)
@@ -74,11 +89,39 @@ class P2ArtworkCoverageAuditTests(unittest.TestCase):
         self.assertEqual(report["candidates"]["publishable_image_candidates"], 2)
         self.assertEqual(report["candidates"]["ambiguous_link_candidates"], 1)
         self.assertEqual(report["candidates"]["rejected_or_no_rights_basis_candidates"], 1)
+        self.assertEqual(report["publishability_rejection_reasons"]["ambiguous_link"], 1)
 
     def test_state_rights_pairing_fails_closed(self):
         candidate = self.sample()["candidates"][0].copy()
         candidate["rights_basis"] = "PUBLIC_DOMAIN"
         self.assertFalse(audit.is_publishable_image_candidate(candidate))
+        self.assertIn("state_rights_pairing", audit.publishability_failures(candidate))
+
+    def test_missing_positive_safety_evidence_fails_closed(self):
+        base = self.sample()["candidates"][0]
+        cases = {
+            "link_exact": "exact_link_unverified",
+            "rights_verified_at": "rights_verification_missing",
+            "validity_eligible": "validity_unverified",
+            "takedown_clear": "takedown_unverified",
+            "territory_eligible": "territory_unverified",
+            "delivery_url": "delivery_url",
+            "attribution_required": "attribution_requirement_unknown",
+        }
+        for field, reason in cases.items():
+            candidate = base.copy()
+            candidate.pop(field, None)
+            with self.subTest(field=field):
+                self.assertFalse(audit.is_publishable_image_candidate(candidate))
+                self.assertIn(reason, audit.publishability_failures(candidate))
+
+    def test_invalid_or_non_https_delivery_url_fails_closed(self):
+        base = self.sample()["candidates"][0]
+        for value in ("", "http://example.test/a.jpg", "not-a-url"):
+            candidate = base.copy()
+            candidate["delivery_url"] = value
+            with self.subTest(value=value):
+                self.assertFalse(audit.is_publishable_image_candidate(candidate))
 
     def test_embed_and_reference_only_do_not_count_as_image_publication(self):
         candidate = self.sample()["candidates"][0].copy()
@@ -91,6 +134,7 @@ class P2ArtworkCoverageAuditTests(unittest.TestCase):
         candidate = self.sample()["candidates"][0].copy()
         candidate["attribution_text"] = ""
         self.assertFalse(audit.is_publishable_image_candidate(candidate))
+        self.assertIn("attribution_missing", audit.publishability_failures(candidate))
 
     def test_takedown_expiry_territory_and_ambiguous_links_fail_closed(self):
         base = self.sample()["candidates"][0]
@@ -113,6 +157,28 @@ class P2ArtworkCoverageAuditTests(unittest.TestCase):
         payload = self.sample()
         payload["titles"].append(dict(payload["titles"][0]))
         with self.assertRaisesRegex(ValueError, "duplicate title identity"):
+            audit.build_report(payload)
+
+    def test_malformed_candidate_vocabulary_is_rejected(self):
+        mutations = {
+            "publication_state": "UNKNOWN_STATE",
+            "rights_basis": "UNKNOWN_RIGHTS",
+            "hosting_mode": "UNKNOWN_HOST",
+            "presentation_role": "thumbnail",
+        }
+        for field, value in mutations.items():
+            payload = self.sample()
+            payload["candidates"][0][field] = value
+            with self.subTest(field=field):
+                with self.assertRaises(ValueError):
+                    audit.build_report(payload)
+
+    def test_candidate_requires_stable_source_evidence_identity(self):
+        payload = self.sample()
+        candidate = payload["candidates"][0]
+        candidate.pop("source_asset_id")
+        candidate.pop("source_page_url", None)
+        with self.assertRaisesRegex(ValueError, "source_asset_id or source_page_url"):
             audit.build_report(payload)
 
     def test_duplicate_candidate_rate_and_provider_concentration_are_measured(self):
