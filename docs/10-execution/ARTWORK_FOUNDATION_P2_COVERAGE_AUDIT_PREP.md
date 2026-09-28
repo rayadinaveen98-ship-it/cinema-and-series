@@ -1,7 +1,7 @@
 # Artwork Foundation P2 — Coverage Audit Preparation
 
 **Status:** WORKING — READ-ONLY PREP; DO NOT ACTIVATE P2 PRODUCTION BEFORE P1 EXIT  
-**Date:** 2026-09-27  
+**Date:** 2026-09-28  
 **Parent:** `ARTWORK_FOUNDATION_P2_PREP.md`  
 **Selector/rights contract:** `ARTWORK_FOUNDATION_P2_SCHEMA_SELECTOR_REVIEW.md`
 
@@ -29,7 +29,9 @@ The utility is deliberately offline. It:
 - emits no SQL;
 - changes no rights state;
 - cannot approve a candidate;
-- reports metrics only from supplied evidence.
+- reports metrics only from supplied evidence;
+- rejects malformed canonical vocabulary rather than silently reclassifying it;
+- requires positive normalized safety evidence before any candidate may count as publication-eligible.
 
 This allows the audit/reporting contract to be tested while P1 remains active without starting P2 production implementation.
 
@@ -67,9 +69,9 @@ Rules:
 - title text is not identity;
 - language may be omitted/unknown, but it must not be guessed for the audit.
 
-### Candidate record
+### Candidate discovery record
 
-Minimum identity linkage:
+Every candidate requires exact title linkage plus stable source evidence:
 
 ```json
 {
@@ -79,40 +81,62 @@ Minimum identity linkage:
   "source_key": "wikimedia_commons",
   "source_asset_id": "File:Example.jpg",
   "presentation_role": "poster",
-  "publication_state": "OPEN_LICENSE_VERIFIED",
-  "rights_basis": "OPEN_LICENSE",
-  "hosting_mode": "EXTERNAL_ALLOWED"
+  "publication_state": "DISCOVERED",
+  "rights_basis": "NO_RIGHTS_BASIS",
+  "hosting_mode": "REFERENCE_ONLY"
 }
 ```
 
-Optional audit evidence may include:
+A candidate must provide `source_asset_id` or `source_page_url`. Unknown source identity is not sufficient evidence for the audit.
 
-- `source_page_url`
-- `delivery_url`
-- `attribution_required`
-- `attribution_text`
-- `territory_restrictions`
-- `territory_eligible`
-- `ambiguous_link`
-- `expired`
-- `takedown`
+The normalized vocabulary is closed:
+
+- `presentation_role`: `poster`, `backdrop`
+- `publication_state`: exactly the canonical P2 publication states
+- `rights_basis`: exactly the canonical P2 rights bases
+- `hosting_mode`: exactly the canonical P2 hosting modes
+
+Malformed or unknown vocabulary fails the audit input rather than becoming an `unknown` bucket.
+
+### Candidate seeking publication-eligible counting
+
+A candidate may count as publication-eligible only when the snapshot provides explicit positive evidence in addition to a locked public state/basis/hosting combination:
+
+```json
+{
+  "link_exact": true,
+  "rights_verified_at": "2026-09-28T00:00:00Z",
+  "validity_eligible": true,
+  "takedown_clear": true,
+  "territory_eligible": true,
+  "delivery_url": "https://...",
+  "attribution_required": false
+}
+```
 
 Rules:
 
 1. every candidate must link to an exact title identity present in `titles`;
 2. unknown title references fail the audit;
 3. `ambiguous_link=true` is measurable evidence but cannot count as publishable coverage;
-4. a discovery record with unknown/no rights basis may count as a discovered candidate, never as publishable coverage;
-5. `EMBED_ONLY` and `REFERENCE_ONLY` never count as poster/backdrop publication;
-6. missing required attribution prevents publishable counting;
-7. state/rights-basis mismatches fail closed;
-8. audit classification is not a production approval action.
+4. `link_exact` must be explicitly `true` for publication-eligible counting;
+5. a discovery record with no usable rights basis may count as a discovered candidate, never as publishable coverage;
+6. `rights_verified_at` must be present for publication-eligible counting;
+7. `validity_eligible`, `takedown_clear`, and `territory_eligible` must each be explicitly `true`; absence is unknown and therefore fails closed;
+8. `EMBED_ONLY` and `REFERENCE_ONLY` never count as poster/backdrop publication;
+9. publication-eligible image delivery requires a valid HTTPS `delivery_url`;
+10. `attribution_required` must be an explicit boolean; when true, non-empty `attribution_text` is required;
+11. state/rights-basis mismatches fail closed;
+12. legacy evidence flags such as `expired=true` or `takedown=true` also force non-public classification even when a normalized positive flag is present;
+13. audit classification is not a production approval action.
+
+The reason for requiring positive booleans is intentional: missing territory, expiry, takedown, exact-link, or attribution evaluation must never inflate publication-ready coverage.
 
 ---
 
 ## Locked publication-counting pairs
 
-The audit counts an image candidate as publication-eligible only for these exact state/basis pairs, subject to the remaining fail-closed checks:
+The audit counts an image candidate as publication-eligible only for these exact state/basis pairs, subject to all fail-closed evidence checks above:
 
 | Publication state | Rights basis |
 |---|---|
@@ -163,7 +187,8 @@ The report must preserve at least:
 - rejected/no-rights-basis candidates;
 - ambiguous-link candidates;
 - duplicate candidate occurrences;
-- provider/source concentration.
+- provider/source concentration;
+- publishability rejection-reason counts such as missing verification, unverified territory, unsafe hosting, invalid delivery URL, or missing attribution.
 
 Artwork coverage must never be presented as core catalogue identity completeness.
 
@@ -198,9 +223,9 @@ Before broad P2 writes:
 1. freeze final P2.1 schema/selector implementation;
 2. export exact Movie + Series audit identities from production using a read-only query;
 3. run discovery/rights adapters in non-mutating mode;
-4. normalize evidence into this snapshot contract;
+4. normalize evidence into this snapshot contract, including explicit safety-evaluation fields for any candidate proposed as publication-eligible;
 5. run `p2_artwork_coverage_audit.py`;
-6. review coverage, ambiguity, rights yield, fallback and concentration;
+6. review coverage, ambiguity, rights yield, fallback, rejection reasons and concentration;
 7. sample high-risk source/rights buckets manually where required;
 8. only then design a bounded/resumable P2 population mutation plan.
 
@@ -214,9 +239,11 @@ This prep is sufficient when:
 
 - offline audit utility tests pass;
 - exact title identity is required;
-- discovered vs publishable coverage are separated;
+- malformed candidate vocabulary is rejected;
+- discovered vs publication-eligible coverage are separated;
+- missing safety facts fail closed rather than being inferred;
 - Movie/Series and language breakdowns are available;
-- ambiguity, no-rights, duplicates and provider concentration are measurable;
+- ambiguity, no-rights, duplicates, rejection reasons and provider concentration are measurable;
 - no network/D1/mutation path is introduced;
 - P1 remains the active production phase.
 
