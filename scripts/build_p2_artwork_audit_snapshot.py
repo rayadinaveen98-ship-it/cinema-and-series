@@ -13,7 +13,10 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
-from scripts import p2_artwork_coverage_audit as audit
+try:
+    from scripts import p2_artwork_coverage_audit as audit
+except ModuleNotFoundError:  # direct `python scripts/...py` execution
+    import p2_artwork_coverage_audit as audit
 
 
 def _canonical_record(record: dict[str, Any]) -> str:
