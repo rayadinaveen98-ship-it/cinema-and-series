@@ -48,7 +48,20 @@ class P1ObservabilityContractTests(unittest.TestCase):
         self.assertIn("unsafe_out_of_order", self.snapshot)
         self.assertIn("unsafe_partial", self.snapshot)
         self.assertIn("unsafe_overfilled", self.snapshot)
-        self.assertIn("p1_exit_ready", self.snapshot)
+        self.assertIn("final_verification_eligible", self.snapshot)
+        self.assertIn('"p1_exit_ready": final_verification_eligible', self.snapshot)
+        self.assertIn('"p1_exit_ready_semantics": "pre-final-verification-only"', self.snapshot)
+
+    def test_snapshot_does_not_claim_p1_completion(self):
+        self.assertIn("P1 complete: **not determined by this snapshot**", self.snapshot)
+        self.assertIn("final exact graph verification", self.snapshot)
+        self.assertIn("Catalogue Quality S0=0/S1=0", self.snapshot)
+
+    def test_snapshot_validates_current_day_guard_health(self):
+        self.assertIn('violations.append("projection_sha256")', self.snapshot)
+        self.assertIn('violations.append("workflow_run_id")', self.snapshot)
+        self.assertIn('violations.append("shard_index")', self.snapshot)
+        self.assertIn('"state": "unsafe" if violations else "used"', self.snapshot)
 
     def test_status_runs_after_daily_controller_and_uploads_compact_artifact(self):
         self.assertIn('cron: "5 1 * * *"', self.workflow)
