@@ -11,7 +11,7 @@ Define the read-only coverage audit required before any broad P2 artwork populat
 
 The audit answers a different question from catalogue completeness:
 
-> Of the exact Movie and Series identities considered, how much artwork evidence exists, how much of it is actually publication-eligible under the locked rights rules, where are the gaps, and how concentrated or ambiguous are the sources?
+> Of the exact Movie and Series identities considered, how much artwork evidence exists, how much is publication-eligible under the locked rights rules for a declared territory and evaluation time, where are the gaps, and how concentrated or ambiguous are the sources?
 
 This preparation authorizes **no migration, no D1 write, no artwork ingestion, no rights approval, and no public artwork publication**.
 
@@ -31,24 +31,70 @@ The utility is deliberately offline. It:
 - cannot approve a candidate;
 - reports metrics only from supplied evidence;
 - rejects malformed canonical vocabulary rather than silently reclassifying it;
-- requires positive normalized safety evidence before any candidate may count as publication-eligible.
-
-This allows the audit/reporting contract to be tested while P1 remains active without starting P2 production implementation.
+- requires positive normalized safety evidence before any candidate may count as publication-eligible;
+- binds results to an explicit audit territory and UTC evaluation timestamp;
+- emits a deterministic SHA-256 attestation of the exact normalized input snapshot.
 
 ---
 
 ## Snapshot contract
 
-Top-level object:
+The current required snapshot contract is:
 
 ```json
 {
+  "snapshot_version": "p2-artwork-coverage-snapshot-v1",
+  "audit_context": {
+    "territory": "IN",
+    "evaluated_at": "2026-09-28T00:00:00Z"
+  },
   "titles": [],
   "candidates": []
 }
 ```
 
-### Title record
+### Snapshot version
+
+`snapshot_version` must be exactly `p2-artwork-coverage-snapshot-v1`.
+
+The audit rejects absent or unknown versions. Future incompatible snapshot shapes must receive a new explicit contract version rather than being interpreted implicitly.
+
+### Audit context
+
+`audit_context` is required because publication eligibility is context-dependent.
+
+- `territory` must be an uppercase two-letter territory code, for example `IN`;
+- `evaluated_at` must be an explicit UTC RFC3339 timestamp in `YYYY-MM-DDTHH:MM:SSZ` form;
+- normalized `territory_eligible`, `validity_eligible`, and `takedown_clear` facts are interpreted only for this declared context;
+- a different territory or evaluation time is a different audit input and therefore a different attestation.
+
+An audit report without explicit territory/time context is not acceptable evidence for P2 population planning.
+
+### Input attestation
+
+The report records:
+
+```json
+{
+  "input_attestation": {
+    "algorithm": "sha256-canonical-json-v1",
+    "sha256": "..."
+  }
+}
+```
+
+Canonicalization is UTF-8 JSON with sorted object keys, compact separators, preserved Unicode, and non-finite numeric values rejected. The SHA covers the **entire normalized snapshot**, including:
+
+- snapshot version;
+- audit context;
+- all exact title identities;
+- all candidates and supplied evidence.
+
+Object key insertion order does not change the digest. Changing territory, evaluation time, title/candidate content, or evidence changes the digest. This attestation provides reproducible audit lineage; it is not a rights approval signature.
+
+---
+
+## Title record
 
 Minimum fields:
 
@@ -69,7 +115,9 @@ Rules:
 - title text is not identity;
 - language may be omitted/unknown, but it must not be guessed for the audit.
 
-### Candidate discovery record
+---
+
+## Candidate discovery record
 
 Every candidate requires exact title linkage plus stable source evidence:
 
@@ -98,7 +146,9 @@ The normalized vocabulary is closed:
 
 Malformed or unknown vocabulary fails the audit input rather than becoming an `unknown` bucket.
 
-### Candidate seeking publication-eligible counting
+---
+
+## Candidate seeking publication-eligible counting
 
 A candidate may count as publication-eligible only when the snapshot provides explicit positive evidence in addition to a locked public state/basis/hosting combination:
 
@@ -119,24 +169,22 @@ Rules:
 1. every candidate must link to an exact title identity present in `titles`;
 2. unknown title references fail the audit;
 3. `ambiguous_link=true` is measurable evidence but cannot count as publishable coverage;
-4. `link_exact` must be explicitly `true` for publication-eligible counting;
-5. a discovery record with no usable rights basis may count as a discovered candidate, never as publishable coverage;
-6. `rights_verified_at` must be present for publication-eligible counting;
-7. `validity_eligible`, `takedown_clear`, and `territory_eligible` must each be explicitly `true`; absence is unknown and therefore fails closed;
+4. `link_exact` must be explicitly `true`;
+5. discovery/no-rights records may count as discovered candidates, never as publication-eligible coverage;
+6. `rights_verified_at` must be present;
+7. `validity_eligible`, `takedown_clear`, and `territory_eligible` must each be explicitly `true` for the declared audit context;
 8. `EMBED_ONLY` and `REFERENCE_ONLY` never count as poster/backdrop publication;
 9. publication-eligible image delivery requires a valid HTTPS `delivery_url`;
 10. `attribution_required` must be an explicit boolean; when true, non-empty `attribution_text` is required;
 11. state/rights-basis mismatches fail closed;
-12. legacy evidence flags such as `expired=true` or `takedown=true` also force non-public classification even when a normalized positive flag is present;
+12. `expired=true` or `takedown=true` force non-public classification even when normalized positive flags are also supplied;
 13. audit classification is not a production approval action.
 
-The reason for requiring positive booleans is intentional: missing territory, expiry, takedown, exact-link, or attribution evaluation must never inflate publication-ready coverage.
+Missing territory, validity, takedown, exact-link, rights-verification, delivery, or attribution evaluation must never inflate publication-ready coverage.
 
 ---
 
 ## Locked publication-counting pairs
-
-The audit counts an image candidate as publication-eligible only for these exact state/basis pairs, subject to all fail-closed evidence checks above:
 
 | Publication state | Rights basis |
 |---|---|
@@ -145,6 +193,8 @@ The audit counts an image candidate as publication-eligible only for these exact
 | `PROVIDER_LICENSED` | `PROVIDER_CONTRACT` |
 | `RIGHTS_APPROVED` | `RIGHTSHOLDER_PERMISSION` |
 | `PROMOTIONAL_PERMISSION_VERIFIED` | `PROMOTIONAL_PERMISSION` |
+
+These pairs are necessary but not sufficient: all contextual and fail-closed evidence checks above must also pass.
 
 This is reporting logic only. The future production selector remains separately gated by P2.1 implementation and tests after P1 exit.
 
@@ -190,6 +240,8 @@ The report must preserve at least:
 - provider/source concentration;
 - publishability rejection-reason counts such as missing verification, unverified territory, unsafe hosting, invalid delivery URL, or missing attribution.
 
+Every report must also echo its `snapshot_version`, `audit_context`, and input attestation so coverage numbers cannot be separated from the conditions under which they were evaluated.
+
 Artwork coverage must never be presented as core catalogue identity completeness.
 
 ---
@@ -222,12 +274,13 @@ Before broad P2 writes:
 
 1. freeze final P2.1 schema/selector implementation;
 2. export exact Movie + Series audit identities from production using a read-only query;
-3. run discovery/rights adapters in non-mutating mode;
-4. normalize evidence into this snapshot contract, including explicit safety-evaluation fields for any candidate proposed as publication-eligible;
-5. run `p2_artwork_coverage_audit.py`;
-6. review coverage, ambiguity, rights yield, fallback, rejection reasons and concentration;
-7. sample high-risk source/rights buckets manually where required;
-8. only then design a bounded/resumable P2 population mutation plan.
+3. declare audit territory and evaluation timestamp;
+4. run discovery/rights adapters in non-mutating mode;
+5. normalize evidence into the versioned snapshot contract, including explicit safety-evaluation fields for any candidate proposed as publication-eligible;
+6. run `p2_artwork_coverage_audit.py` and preserve the report plus input SHA-256;
+7. review coverage, ambiguity, rights yield, fallback, rejection reasons and concentration;
+8. sample high-risk source/rights buckets manually where required;
+9. only then design a bounded/resumable P2 population mutation plan.
 
 The audit report is evidence for deciding how to populate P2; it is not itself an ingestion artifact.
 
@@ -239,6 +292,8 @@ This prep is sufficient when:
 
 - offline audit utility tests pass;
 - exact title identity is required;
+- snapshot version and audit context are explicit;
+- report/input lineage is deterministically attested;
 - malformed candidate vocabulary is rejected;
 - discovered vs publication-eligible coverage are separated;
 - missing safety facts fail closed rather than being inferred;
