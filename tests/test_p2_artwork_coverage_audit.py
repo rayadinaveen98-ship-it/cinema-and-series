@@ -17,6 +17,11 @@ class P2ArtworkCoverageAuditTests(unittest.TestCase):
 
     def sample(self):
         return {
+            "snapshot_version": audit.SNAPSHOT_VERSION,
+            "audit_context": {
+                "territory": "IN",
+                "evaluated_at": "2026-09-28T00:00:00Z",
+            },
             "titles": [
                 {"media_type": "movie", "source_table": "movies", "source_id": "m1", "language": "Telugu"},
                 {"media_type": "series", "source_table": "series_titles", "source_id": "s1", "language": "Hindi"},
@@ -77,10 +82,27 @@ class P2ArtworkCoverageAuditTests(unittest.TestCase):
             ],
         }
 
+    def reverse_dict_order(self, value):
+        if isinstance(value, dict):
+            return {
+                key: self.reverse_dict_order(value[key])
+                for key in reversed(list(value.keys()))
+            }
+        if isinstance(value, list):
+            return [self.reverse_dict_order(item) for item in value]
+        return value
+
     def test_report_separates_discovery_from_publishable_coverage(self):
         report = audit.build_report(self.sample())
         self.assertTrue(report["read_only"])
-        self.assertEqual(report["audit_version"], "p2-artwork-coverage-audit-v2")
+        self.assertEqual(report["audit_version"], "p2-artwork-coverage-audit-v3")
+        self.assertEqual(report["snapshot_version"], audit.SNAPSHOT_VERSION)
+        self.assertEqual(
+            report["audit_context"],
+            {"territory": "IN", "evaluated_at": "2026-09-28T00:00:00Z"},
+        )
+        self.assertEqual(report["input_attestation"]["algorithm"], "sha256-canonical-json-v1")
+        self.assertEqual(len(report["input_attestation"]["sha256"]), 64)
         self.assertEqual(report["input"], {"titles": 3, "candidates": 4})
         self.assertEqual(report["coverage"]["with_candidate"], 3)
         self.assertEqual(report["coverage"]["with_publishable_poster"], 1)
@@ -90,6 +112,63 @@ class P2ArtworkCoverageAuditTests(unittest.TestCase):
         self.assertEqual(report["candidates"]["ambiguous_link_candidates"], 1)
         self.assertEqual(report["candidates"]["rejected_or_no_rights_basis_candidates"], 1)
         self.assertEqual(report["publishability_rejection_reasons"]["ambiguous_link"], 1)
+
+    def test_audit_context_is_required_and_strict(self):
+        payload = self.sample()
+        payload.pop("audit_context")
+        with self.assertRaisesRegex(ValueError, "audit_context"):
+            audit.build_report(payload)
+
+        for territory in ("in", "IND", "I1", ""):
+            payload = self.sample()
+            payload["audit_context"]["territory"] = territory
+            with self.subTest(territory=territory):
+                with self.assertRaisesRegex(ValueError, "territory"):
+                    audit.build_report(payload)
+
+        for evaluated_at in (
+            "2026-09-28T00:00:00+00:00",
+            "2026-09-28 00:00:00Z",
+            "2026-02-30T00:00:00Z",
+            "",
+        ):
+            payload = self.sample()
+            payload["audit_context"]["evaluated_at"] = evaluated_at
+            with self.subTest(evaluated_at=evaluated_at):
+                with self.assertRaisesRegex(ValueError, "evaluated_at"):
+                    audit.build_report(payload)
+
+    def test_snapshot_version_is_required_and_exact(self):
+        for value in (None, "", "p2-artwork-coverage-snapshot-v0"):
+            payload = self.sample()
+            if value is None:
+                payload.pop("snapshot_version")
+            else:
+                payload["snapshot_version"] = value
+            with self.subTest(value=value):
+                with self.assertRaisesRegex(ValueError, "snapshot_version"):
+                    audit.build_report(payload)
+
+    def test_input_attestation_is_stable_across_dict_key_order(self):
+        payload = self.sample()
+        reordered = self.reverse_dict_order(payload)
+        self.assertEqual(audit.snapshot_sha256(payload), audit.snapshot_sha256(reordered))
+        self.assertEqual(
+            audit.build_report(payload)["input_attestation"]["sha256"],
+            audit.build_report(reordered)["input_attestation"]["sha256"],
+        )
+
+    def test_context_change_changes_input_attestation(self):
+        payload = self.sample()
+        original = audit.snapshot_sha256(payload)
+
+        changed_territory = self.sample()
+        changed_territory["audit_context"]["territory"] = "US"
+        self.assertNotEqual(original, audit.snapshot_sha256(changed_territory))
+
+        changed_time = self.sample()
+        changed_time["audit_context"]["evaluated_at"] = "2026-09-28T01:00:00Z"
+        self.assertNotEqual(original, audit.snapshot_sha256(changed_time))
 
     def test_state_rights_pairing_fails_closed(self):
         candidate = self.sample()["candidates"][0].copy()

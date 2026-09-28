@@ -8,13 +8,17 @@ It only summarizes evidence already present in the supplied snapshot.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 from collections import Counter, defaultdict
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-AUDIT_VERSION = "p2-artwork-coverage-audit-v2"
+AUDIT_VERSION = "p2-artwork-coverage-audit-v3"
+SNAPSHOT_VERSION = "p2-artwork-coverage-snapshot-v1"
 
 PUBLIC_PAIRINGS = {
     "OPEN_LICENSE_VERIFIED": "OPEN_LICENSE",
@@ -52,6 +56,8 @@ HOSTING_MODES = {
 MEDIA_TYPES = {"movie", "series"}
 PUBLIC_IMAGE_HOSTING_MODES = {"SELF_HOSTED", "PROVIDER_CDN", "EXTERNAL_ALLOWED"}
 IMAGE_ROLES = {"poster", "backdrop"}
+TERRITORY_RE = re.compile(r"^[A-Z]{2}$")
+UTC_RFC3339_RE = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
 
 
 def _nonempty(value: Any) -> str | None:
@@ -67,6 +73,47 @@ def _https_url(value: Any) -> bool:
         return False
     parsed = urlparse(text)
     return parsed.scheme == "https" and bool(parsed.netloc)
+
+
+def canonical_snapshot_bytes(payload: dict[str, Any]) -> bytes:
+    """Return deterministic UTF-8 JSON bytes for audit lineage attestation."""
+    return json.dumps(
+        payload,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+        allow_nan=False,
+    ).encode("utf-8")
+
+
+def snapshot_sha256(payload: dict[str, Any]) -> str:
+    return hashlib.sha256(canonical_snapshot_bytes(payload)).hexdigest()
+
+
+def validate_audit_context(payload: dict[str, Any]) -> dict[str, str]:
+    snapshot_version = _nonempty(payload.get("snapshot_version"))
+    if snapshot_version != SNAPSHOT_VERSION:
+        raise ValueError(
+            f"snapshot_version must be {SNAPSHOT_VERSION!r}, got {snapshot_version!r}"
+        )
+
+    context = payload.get("audit_context")
+    if not isinstance(context, dict):
+        raise ValueError("snapshot requires audit_context object")
+
+    territory = _nonempty(context.get("territory"))
+    if not territory or not TERRITORY_RE.fullmatch(territory):
+        raise ValueError("audit_context.territory must be an uppercase 2-letter code")
+
+    evaluated_at = _nonempty(context.get("evaluated_at"))
+    if not evaluated_at or not UTC_RFC3339_RE.fullmatch(evaluated_at):
+        raise ValueError("audit_context.evaluated_at must be UTC RFC3339 YYYY-MM-DDTHH:MM:SSZ")
+    try:
+        datetime.strptime(evaluated_at, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError as exc:
+        raise ValueError("audit_context.evaluated_at is not a valid UTC timestamp") from exc
+
+    return {"territory": territory, "evaluated_at": evaluated_at}
 
 
 def title_identity(record: dict[str, Any]) -> tuple[str, str, str]:
@@ -189,6 +236,11 @@ def _add_rates(bucket: dict[str, int]) -> dict[str, int | float]:
 
 
 def build_report(payload: dict[str, Any]) -> dict[str, Any]:
+    if not isinstance(payload, dict):
+        raise ValueError("snapshot must be an object")
+    audit_context = validate_audit_context(payload)
+    input_sha256 = snapshot_sha256(payload)
+
     titles = payload.get("titles")
     candidates = payload.get("candidates")
     if not isinstance(titles, list) or not isinstance(candidates, list):
@@ -278,7 +330,13 @@ def build_report(payload: dict[str, Any]) -> dict[str, Any]:
 
     return {
         "audit_version": AUDIT_VERSION,
+        "snapshot_version": SNAPSHOT_VERSION,
         "read_only": True,
+        "audit_context": audit_context,
+        "input_attestation": {
+            "algorithm": "sha256-canonical-json-v1",
+            "sha256": input_sha256,
+        },
         "input": {
             "titles": len(title_records),
             "candidates": candidate_count,
