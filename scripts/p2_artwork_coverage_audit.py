@@ -12,8 +12,9 @@ import json
 from collections import Counter, defaultdict
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
-AUDIT_VERSION = "p2-artwork-coverage-audit-v1"
+AUDIT_VERSION = "p2-artwork-coverage-audit-v2"
 
 PUBLIC_PAIRINGS = {
     "OPEN_LICENSE_VERIFIED": "OPEN_LICENSE",
@@ -23,6 +24,31 @@ PUBLIC_PAIRINGS = {
     "PROMOTIONAL_PERMISSION_VERIFIED": "PROMOTIONAL_PERMISSION",
 }
 
+PUBLICATION_STATES = {
+    "DISCOVERED",
+    "PENDING_REVIEW",
+    *PUBLIC_PAIRINGS.keys(),
+    "REJECTED",
+    "EXPIRED",
+    "TAKEDOWN_PENDING",
+    "TAKEN_DOWN",
+}
+RIGHTS_BASES = {
+    "OPEN_LICENSE",
+    "PUBLIC_DOMAIN",
+    "PROVIDER_CONTRACT",
+    "RIGHTSHOLDER_PERMISSION",
+    "PROMOTIONAL_PERMISSION",
+    "PLATFORM_EMBED_AUTHORIZATION",
+    "NO_RIGHTS_BASIS",
+}
+HOSTING_MODES = {
+    "SELF_HOSTED",
+    "PROVIDER_CDN",
+    "EXTERNAL_ALLOWED",
+    "REFERENCE_ONLY",
+    "EMBED_ONLY",
+}
 MEDIA_TYPES = {"movie", "series"}
 PUBLIC_IMAGE_HOSTING_MODES = {"SELF_HOSTED", "PROVIDER_CDN", "EXTERNAL_ALLOWED"}
 IMAGE_ROLES = {"poster", "backdrop"}
@@ -33,6 +59,14 @@ def _nonempty(value: Any) -> str | None:
         return None
     value = value.strip()
     return value or None
+
+
+def _https_url(value: Any) -> bool:
+    text = _nonempty(value)
+    if not text:
+        return False
+    parsed = urlparse(text)
+    return parsed.scheme == "https" and bool(parsed.netloc)
 
 
 def title_identity(record: dict[str, Any]) -> tuple[str, str, str]:
@@ -46,6 +80,30 @@ def title_identity(record: dict[str, Any]) -> tuple[str, str, str]:
     return media_type, source_table, source_id
 
 
+def validate_candidate_record(record: dict[str, Any]) -> None:
+    source_key = _nonempty(record.get("source_key"))
+    role = _nonempty(record.get("presentation_role"))
+    state = _nonempty(record.get("publication_state"))
+    basis = _nonempty(record.get("rights_basis"))
+    hosting_mode = _nonempty(record.get("hosting_mode"))
+
+    if not source_key:
+        raise ValueError("candidate requires source_key")
+    if role not in IMAGE_ROLES:
+        raise ValueError(f"invalid presentation_role: {role!r}")
+    if state not in PUBLICATION_STATES:
+        raise ValueError(f"invalid publication_state: {state!r}")
+    if basis not in RIGHTS_BASES:
+        raise ValueError(f"invalid rights_basis: {basis!r}")
+    if hosting_mode not in HOSTING_MODES:
+        raise ValueError(f"invalid hosting_mode: {hosting_mode!r}")
+
+    source_asset_id = _nonempty(record.get("source_asset_id"))
+    source_page_url = _nonempty(record.get("source_page_url"))
+    if not source_asset_id and not source_page_url:
+        raise ValueError("candidate requires source_asset_id or source_page_url")
+
+
 def candidate_identity(record: dict[str, Any]) -> tuple[str, ...]:
     source_key = _nonempty(record.get("source_key")) or ""
     source_asset_id = _nonempty(record.get("source_asset_id"))
@@ -57,27 +115,50 @@ def candidate_identity(record: dict[str, Any]) -> tuple[str, ...]:
     return source_key, "url", source_page_url, delivery_url, role
 
 
-def is_publishable_image_candidate(record: dict[str, Any]) -> bool:
+def publishability_failures(record: dict[str, Any]) -> tuple[str, ...]:
+    """Return deterministic audit-only reasons a candidate cannot count as public.
+
+    These checks classify supplied normalized evidence only. They do not approve
+    rights or implement the future production selector.
+    """
     state = _nonempty(record.get("publication_state"))
     basis = _nonempty(record.get("rights_basis"))
     hosting_mode = _nonempty(record.get("hosting_mode"))
     role = _nonempty(record.get("presentation_role"))
+    failures: list[str] = []
 
     if PUBLIC_PAIRINGS.get(state) != basis:
-        return False
+        failures.append("state_rights_pairing")
     if hosting_mode not in PUBLIC_IMAGE_HOSTING_MODES:
-        return False
+        failures.append("hosting_mode")
     if role not in IMAGE_ROLES:
-        return False
+        failures.append("presentation_role")
     if record.get("ambiguous_link") is True:
-        return False
-    if record.get("expired") is True or record.get("takedown") is True:
-        return False
-    if record.get("territory_eligible") is False:
-        return False
-    if record.get("attribution_required") is True and not _nonempty(record.get("attribution_text")):
-        return False
-    return True
+        failures.append("ambiguous_link")
+    if record.get("link_exact") is not True:
+        failures.append("exact_link_unverified")
+    if not _nonempty(record.get("rights_verified_at")):
+        failures.append("rights_verification_missing")
+    if record.get("validity_eligible") is not True or record.get("expired") is True:
+        failures.append("validity_unverified")
+    if record.get("takedown_clear") is not True or record.get("takedown") is True:
+        failures.append("takedown_unverified")
+    if record.get("territory_eligible") is not True:
+        failures.append("territory_unverified")
+    if not _https_url(record.get("delivery_url")):
+        failures.append("delivery_url")
+
+    attribution_required = record.get("attribution_required")
+    if not isinstance(attribution_required, bool):
+        failures.append("attribution_requirement_unknown")
+    elif attribution_required and not _nonempty(record.get("attribution_text")):
+        failures.append("attribution_missing")
+
+    return tuple(failures)
+
+
+def is_publishable_image_candidate(record: dict[str, Any]) -> bool:
+    return not publishability_failures(record)
 
 
 def _coverage_bucket() -> dict[str, int]:
@@ -127,6 +208,7 @@ def build_report(payload: dict[str, Any]) -> dict[str, Any]:
     publishable_source_counts: Counter[str] = Counter()
     rights_counts: Counter[str] = Counter()
     candidate_fingerprints: Counter[tuple[str, ...]] = Counter()
+    rejection_reasons: Counter[str] = Counter()
     attribution_required = 0
     territory_restricted = 0
     ambiguous_links = 0
@@ -139,6 +221,7 @@ def build_report(payload: dict[str, Any]) -> dict[str, Any]:
         key = title_identity(raw)
         if key not in title_records:
             raise ValueError(f"candidate references unknown title identity: {key}")
+        validate_candidate_record(raw)
         candidates_by_title[key].append(raw)
 
         source_key = _nonempty(raw.get("source_key")) or "unknown"
@@ -149,10 +232,12 @@ def build_report(payload: dict[str, Any]) -> dict[str, Any]:
             ambiguous_links += 1
         state = _nonempty(raw.get("publication_state"))
         basis = _nonempty(raw.get("rights_basis"))
-        if state == "REJECTED" or basis in {None, "NO_RIGHTS_BASIS"}:
+        if state == "REJECTED" or basis == "NO_RIGHTS_BASIS":
             rejected_or_no_rights += 1
 
-        if is_publishable_image_candidate(raw):
+        failures = publishability_failures(raw)
+        rejection_reasons.update(failures)
+        if not failures:
             publishable_candidates += 1
             publishable_source_counts[source_key] += 1
             rights_counts[basis or "unknown"] += 1
@@ -217,6 +302,7 @@ def build_report(payload: dict[str, Any]) -> dict[str, Any]:
             "publishable_assets_requiring_attribution": attribution_required,
             "publishable_assets_with_territory_restrictions": territory_restricted,
         },
+        "publishability_rejection_reasons": dict(sorted(rejection_reasons.items())),
         "by_source": {
             source: {
                 "candidates": count,
