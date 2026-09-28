@@ -150,18 +150,52 @@ def guard_state(payload: Any) -> dict[str, Any]:
     if len(rows) > 1:
         raise ValueError("daily quota guard returned more than one row")
     if not rows:
-        return {"state": "available", "row": None}
+        return {"state": "available", "row": None, "violations": []}
+
     row = rows[0]
-    return {
-        "state": "used",
-        "row": {
-            "utc_date": str(row.get("utc_date") or ""),
-            "shard_index": int(row.get("shard_index") if row.get("shard_index") is not None else -1),
-            "projection_sha256": str(row.get("projection_sha256") or ""),
-            "workflow_run_id": str(row.get("workflow_run_id") or ""),
-            "created_at": str(row.get("created_at") or ""),
-        },
+    normalized = {
+        "utc_date": str(row.get("utc_date") or ""),
+        "shard_index": int(row.get("shard_index") if row.get("shard_index") is not None else -1),
+        "projection_sha256": str(row.get("projection_sha256") or ""),
+        "workflow_run_id": str(row.get("workflow_run_id") or ""),
+        "created_at": str(row.get("created_at") or ""),
     }
+    violations: list[str] = []
+    if normalized["projection_sha256"] != EXPECTED_PROJECTION_SHA256:
+        violations.append("projection_sha256")
+    if not normalized["workflow_run_id"]:
+        violations.append("workflow_run_id")
+    if normalized["shard_index"] not in range(0, 8):
+        violations.append("shard_index")
+
+    return {
+        "state": "unsafe" if violations else "used",
+        "row": normalized,
+        "violations": violations,
+    }
+
+
+def is_final_verification_eligible(
+    *,
+    cleanup: str,
+    overall_state: str,
+    counts: dict[str, int],
+    health_violations: dict[str, int],
+    guard: dict[str, Any],
+) -> bool:
+    """Return whether population state is ready to run the final verifier.
+
+    This is intentionally *not* a P1 completion signal. P1 only completes after
+    the separate final exact graph verification and Catalogue Quality S0=0/S1=0
+    evidence succeeds and is preserved by the production workflow/controller.
+    """
+    return (
+        cleanup == "complete"
+        and overall_state == "operations_complete"
+        and not health_violations
+        and guard.get("state") != "unsafe"
+        and all(counts.get(key) == value for key, value in EXPECTED_TARGET.items())
+    )
 
 
 def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
@@ -183,11 +217,25 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
         if key.startswith("orphan_") or key == "invalid_provenance"
         if value != 0
     }
-    if cleanup == "unsafe" or health_violations:
+    if cleanup == "unsafe" or health_violations or guard["state"] == "unsafe":
         overall_state = "unsafe"
 
     next_cost = None if next_operation == "complete" else costs[next_operation]
     completed = [op for op in OPERATION_ORDER if states[op]["state"] == "complete"]
+    final_verification_eligible = is_final_verification_eligible(
+        cleanup=cleanup,
+        overall_state=overall_state,
+        counts=counts,
+        health_violations=health_violations,
+        guard=guard,
+    )
+
+    if overall_state == "unsafe":
+        exit_gate_state = "unsafe"
+    elif final_verification_eligible:
+        exit_gate_state = "ready_for_final_verification"
+    else:
+        exit_gate_state = "population_in_progress"
 
     return {
         "schema_version": "p1-production-status-v1",
@@ -213,12 +261,12 @@ def build_snapshot(args: argparse.Namespace) -> dict[str, Any]:
             for op in OPERATION_ORDER
         },
         "health_violations": health_violations,
-        "p1_exit_ready": (
-            cleanup == "complete"
-            and overall_state == "operations_complete"
-            and not health_violations
-            and all(counts.get(key) == value for key, value in EXPECTED_TARGET.items())
-        ),
+        "exit_gate_state": exit_gate_state,
+        "final_verification_eligible": final_verification_eligible,
+        # Backward-compatible alias. Semantics are pre-final-verification only;
+        # this must never be interpreted as P1 complete.
+        "p1_exit_ready": final_verification_eligible,
+        "p1_exit_ready_semantics": "pre-final-verification-only",
     }
 
 
@@ -228,6 +276,10 @@ def render_markdown(snapshot: dict[str, Any]) -> str:
     if guard["state"] == "used":
         row = guard.get("row") or {}
         guard_text = f"used by `{row.get('workflow_run_id', '')}`"
+    elif guard["state"] == "unsafe":
+        row = guard.get("row") or {}
+        violations = ", ".join(guard.get("violations") or []) or "unknown"
+        guard_text = f"UNSAFE `{row.get('workflow_run_id', '')}` ({violations})"
 
     next_operation = snapshot["next_operation"]
     if next_operation == "complete":
@@ -246,7 +298,9 @@ def render_markdown(snapshot: dict[str, Any]) -> str:
         f"- completed operations: **{snapshot['completed_operation_count']} / {snapshot['total_operation_count']}**",
         f"- next operation: {next_text}",
         f"- current UTC quota day: **{guard_text}**",
-        f"- P1 exit ready: **{'yes' if snapshot['p1_exit_ready'] else 'no'}**",
+        f"- exit gate state: **{snapshot['exit_gate_state']}**",
+        f"- final verification eligible: **{'yes' if snapshot['final_verification_eligible'] else 'no'}**",
+        "- P1 complete: **not determined by this snapshot** — final exact graph verification and Catalogue Quality S0=0/S1=0 evidence must still succeed.",
         "",
         "## Production recommendation graph counts",
         "",
@@ -292,6 +346,8 @@ def main() -> int:
         "completed_operation_count": snapshot["completed_operation_count"],
         "next_operation": snapshot["next_operation"],
         "next_operation_estimated_rows_written": snapshot["next_operation_estimated_rows_written"],
+        "exit_gate_state": snapshot["exit_gate_state"],
+        "final_verification_eligible": snapshot["final_verification_eligible"],
         "p1_exit_ready": snapshot["p1_exit_ready"],
     }, sort_keys=True))
     return 0
