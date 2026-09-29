@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/p1-final-completion-attestation.yml"
+WRITER = ROOT / ".github/workflows/recommendation-metadata-production-write-v3.yml"
 SCRIPT = ROOT / "scripts/build_p1_completion_attestation.py"
 
 PROJECTION_SHA = "f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6"
@@ -14,6 +15,7 @@ ATTESTATION_SHA = "8eb39db7964c03e968b26aeccaa33f4b0f85c422fe4c08471ee7ec95510e2
 class P1CompletionAttestationContractTests(unittest.TestCase):
     def setUp(self):
         self.workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.writer = WRITER.read_text(encoding="utf-8")
         self.script = SCRIPT.read_text(encoding="utf-8")
 
     def test_follows_only_completed_v3_writer_runs(self):
@@ -58,6 +60,29 @@ class P1CompletionAttestationContractTests(unittest.TestCase):
         self.assertIn("if: steps.final_artifact.outputs.is_final == 'true'", self.workflow)
         self.assertIn("p1-final-completion-attestation-${{ env.TRIGGER_RUN_ID }}", self.workflow)
         self.assertIn("retention-days: 90", self.workflow)
+
+    def test_final_writer_artifact_layout_matches_completion_consumer(self):
+        self.assertIn("path: data/generated/v3-production/**", self.writer)
+        for produced in (
+            "data/generated/v3-production/projection/manifest.json",
+            "data/generated/v3-production/final/graph-verification.json",
+            "data/generated/v3-production/integrity.json",
+            "data/generated/v3-production/final/catalogue-quality-v1.json",
+            "data/generated/v3-production/source-movies.json",
+            "data/generated/v3-production/source-catalogue.json",
+            "data/generated/v3-production/source-series.json",
+        ):
+            self.assertIn(produced, self.writer)
+        for consumed in (
+            "data/generated/final-verify-evidence/projection/manifest.json",
+            "data/generated/final-verify-evidence/final/graph-verification.json",
+            "data/generated/final-verify-evidence/integrity.json",
+            "data/generated/final-verify-evidence/final/catalogue-quality-v1.json",
+            "data/generated/final-verify-evidence/source-movies.json",
+            "data/generated/final-verify-evidence/source-catalogue.json",
+            "data/generated/final-verify-evidence/source-series.json",
+        ):
+            self.assertIn(consumed, self.workflow)
 
 
 if __name__ == "__main__":
