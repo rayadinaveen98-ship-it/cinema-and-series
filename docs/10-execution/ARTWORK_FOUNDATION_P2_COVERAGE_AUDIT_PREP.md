@@ -1,7 +1,7 @@
 # Artwork Foundation P2 — Coverage Audit Preparation
 
 **Status:** WORKING — READ-ONLY PREP; DO NOT ACTIVATE P2 PRODUCTION BEFORE P1 EXIT  
-**Date:** 2026-09-28  
+**Date:** 2026-10-01  
 **Parent:** `ARTWORK_FOUNDATION_P2_PREP.md`  
 **Selector/rights contract:** `ARTWORK_FOUNDATION_P2_SCHEMA_SELECTOR_REVIEW.md`
 
@@ -21,6 +21,8 @@ This preparation authorizes **no migration, no D1 write, no artwork ingestion, n
 
 `scripts/p2_artwork_coverage_audit.py`
 
+Current classification contract: `p2-artwork-coverage-audit-v4`.
+
 The utility is deliberately offline. It:
 
 - reads one normalized JSON snapshot;
@@ -33,6 +35,7 @@ The utility is deliberately offline. It:
 - rejects malformed canonical vocabulary rather than silently reclassifying it;
 - requires positive normalized safety evidence before any candidate may count as publication-eligible;
 - binds results to an explicit audit territory and UTC evaluation timestamp;
+- requires rights-verification evidence to be a valid UTC RFC3339 timestamp that exists at or before the declared audit evaluation time;
 - emits a deterministic SHA-256 attestation of the exact normalized input snapshot.
 
 ---
@@ -64,8 +67,9 @@ The audit rejects absent or unknown versions. Future incompatible snapshot shape
 `audit_context` is required because publication eligibility is context-dependent.
 
 - `territory` must be an uppercase two-letter territory code, for example `IN`;
-- `evaluated_at` must be an explicit UTC RFC3339 timestamp in `YYYY-MM-DDTHH:MM:SSZ` form;
+- `evaluated_at` must be an explicit valid UTC RFC3339 timestamp in `YYYY-MM-DDTHH:MM:SSZ` form;
 - normalized `territory_eligible`, `validity_eligible`, and `takedown_clear` facts are interpreted only for this declared context;
+- rights verification dated later than `evaluated_at` did not exist as of the audit context and must not count toward publication-eligible coverage;
 - a different territory or evaluation time is a different audit input and therefore a different attestation.
 
 An audit report without explicit territory/time context is not acceptable evidence for P2 population planning.
@@ -171,16 +175,17 @@ Rules:
 3. `ambiguous_link=true` is measurable evidence but cannot count as publishable coverage;
 4. `link_exact` must be explicitly `true`;
 5. discovery/no-rights records may count as discovered candidates, never as publication-eligible coverage;
-6. `rights_verified_at` must be present;
-7. `validity_eligible`, `takedown_clear`, and `territory_eligible` must each be explicitly `true` for the declared audit context;
-8. `EMBED_ONLY` and `REFERENCE_ONLY` never count as poster/backdrop publication;
-9. publication-eligible image delivery requires a valid HTTPS `delivery_url`;
-10. `attribution_required` must be an explicit boolean; when true, non-empty `attribution_text` is required;
-11. state/rights-basis mismatches fail closed;
-12. `expired=true` or `takedown=true` force non-public classification even when normalized positive flags are also supplied;
-13. audit classification is not a production approval action.
+6. `rights_verified_at` must be present and must be a valid UTC RFC3339 `YYYY-MM-DDTHH:MM:SSZ` timestamp;
+7. `rights_verified_at` must be **less than or equal to** the declared `audit_context.evaluated_at`; future-dated verification evidence fails closed with a distinct rejection reason;
+8. `validity_eligible`, `takedown_clear`, and `territory_eligible` must each be explicitly `true` for the declared audit context;
+9. `EMBED_ONLY` and `REFERENCE_ONLY` never count as poster/backdrop publication;
+10. publication-eligible image delivery requires a valid HTTPS `delivery_url`;
+11. `attribution_required` must be an explicit boolean; when true, non-empty `attribution_text` is required;
+12. state/rights-basis mismatches fail closed;
+13. `expired=true` or `takedown=true` force non-public classification even when normalized positive flags are also supplied;
+14. audit classification is not a production approval action.
 
-Missing territory, validity, takedown, exact-link, rights-verification, delivery, or attribution evaluation must never inflate publication-ready coverage.
+Missing or invalid verification time, future verification time, missing territory/validity/takedown/exact-link evidence, unsafe delivery, or incomplete attribution evaluation must never inflate publication-ready coverage.
 
 ---
 
@@ -233,12 +238,12 @@ The report must preserve at least:
 - publication-eligible candidates by rights basis;
 - publication-eligible candidates by source;
 - assets requiring attribution;
-- assets with explicit territory restrictions;
+- assets with expiry/territory restrictions;
 - rejected/no-rights-basis candidates;
 - ambiguous-link candidates;
 - duplicate candidate occurrences;
 - provider/source concentration;
-- publishability rejection-reason counts such as missing verification, unverified territory, unsafe hosting, invalid delivery URL, or missing attribution.
+- publishability rejection-reason counts such as missing/invalid/future verification time, unverified territory, unsafe hosting, invalid delivery URL, or missing attribution.
 
 Every report must also echo its `snapshot_version`, `audit_context`, and input attestation so coverage numbers cannot be separated from the conditions under which they were evaluated.
 
@@ -277,10 +282,11 @@ Before broad P2 writes:
 3. declare audit territory and evaluation timestamp;
 4. run discovery/rights adapters in non-mutating mode;
 5. normalize evidence into the versioned snapshot contract, including explicit safety-evaluation fields for any candidate proposed as publication-eligible;
-6. run `p2_artwork_coverage_audit.py` and preserve the report plus input SHA-256;
-7. review coverage, ambiguity, rights yield, fallback, rejection reasons and concentration;
-8. sample high-risk source/rights buckets manually where required;
-9. only then design a bounded/resumable P2 population mutation plan.
+6. require rights-verification timestamps to be valid UTC evidence that existed by the audit evaluation time;
+7. run `p2_artwork_coverage_audit.py` and preserve the report plus input SHA-256;
+8. review coverage, ambiguity, rights yield, fallback, rejection reasons and concentration;
+9. sample high-risk source/rights buckets manually where required;
+10. only then design a bounded/resumable P2 population mutation plan.
 
 The audit report is evidence for deciding how to populate P2; it is not itself an ingestion artifact.
 
@@ -296,6 +302,7 @@ This prep is sufficient when:
 - report/input lineage is deterministically attested;
 - malformed candidate vocabulary is rejected;
 - discovered vs publication-eligible coverage are separated;
+- missing, malformed, or future-dated rights-verification evidence fails closed;
 - missing safety facts fail closed rather than being inferred;
 - Movie/Series and language breakdowns are available;
 - ambiguity, no-rights, duplicates, rejection reasons and provider concentration are measurable;
