@@ -95,7 +95,7 @@ class P2ArtworkCoverageAuditTests(unittest.TestCase):
     def test_report_separates_discovery_from_publishable_coverage(self):
         report = audit.build_report(self.sample())
         self.assertTrue(report["read_only"])
-        self.assertEqual(report["audit_version"], "p2-artwork-coverage-audit-v3")
+        self.assertEqual(report["audit_version"], "p2-artwork-coverage-audit-v4")
         self.assertEqual(report["snapshot_version"], audit.SNAPSHOT_VERSION)
         self.assertEqual(
             report["audit_context"],
@@ -193,6 +193,52 @@ class P2ArtworkCoverageAuditTests(unittest.TestCase):
             with self.subTest(field=field):
                 self.assertFalse(audit.is_publishable_image_candidate(candidate))
                 self.assertIn(reason, audit.publishability_failures(candidate))
+
+    def test_rights_verification_timestamp_must_be_valid_utc_rfc3339(self):
+        base = self.sample()["candidates"][0]
+        for value in (
+            "not-a-time",
+            "2026-09-28 00:00:00Z",
+            "2026-09-28T00:00:00+00:00",
+            "2026-02-30T00:00:00Z",
+        ):
+            candidate = base.copy()
+            candidate["rights_verified_at"] = value
+            with self.subTest(value=value):
+                failures = audit.publishability_failures(
+                    candidate, evaluated_at="2026-09-28T00:00:00Z"
+                )
+                self.assertIn("rights_verification_invalid", failures)
+                self.assertFalse(
+                    audit.is_publishable_image_candidate(
+                        candidate, evaluated_at="2026-09-28T00:00:00Z"
+                    )
+                )
+
+    def test_rights_verification_after_audit_evaluation_fails_closed(self):
+        payload = self.sample()
+        payload["candidates"][0]["rights_verified_at"] = "2026-09-28T00:00:01Z"
+        report = audit.build_report(payload)
+
+        self.assertEqual(report["candidates"]["publishable_image_candidates"], 1)
+        self.assertEqual(report["coverage"]["with_publishable_poster"], 0)
+        self.assertEqual(report["coverage"]["fallback_only"], 2)
+        self.assertEqual(
+            report["publishability_rejection_reasons"]["rights_verification_after_evaluation"],
+            1,
+        )
+
+    def test_rights_verification_at_or_before_evaluation_is_eligible(self):
+        base = self.sample()["candidates"][0]
+        for value in ("2026-09-27T23:59:59Z", "2026-09-28T00:00:00Z"):
+            candidate = base.copy()
+            candidate["rights_verified_at"] = value
+            with self.subTest(value=value):
+                self.assertTrue(
+                    audit.is_publishable_image_candidate(
+                        candidate, evaluated_at="2026-09-28T00:00:00Z"
+                    )
+                )
 
     def test_invalid_or_non_https_delivery_url_fails_closed(self):
         base = self.sample()["candidates"][0]
