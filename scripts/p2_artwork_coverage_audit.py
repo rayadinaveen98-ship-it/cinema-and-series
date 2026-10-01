@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
-AUDIT_VERSION = "p2-artwork-coverage-audit-v3"
+AUDIT_VERSION = "p2-artwork-coverage-audit-v4"
 SNAPSHOT_VERSION = "p2-artwork-coverage-snapshot-v1"
 
 PUBLIC_PAIRINGS = {
@@ -75,6 +75,16 @@ def _https_url(value: Any) -> bool:
     return parsed.scheme == "https" and bool(parsed.netloc)
 
 
+def _parse_utc_rfc3339(value: Any) -> datetime | None:
+    text = _nonempty(value)
+    if not text or not UTC_RFC3339_RE.fullmatch(text):
+        return None
+    try:
+        return datetime.strptime(text, "%Y-%m-%dT%H:%M:%SZ")
+    except ValueError:
+        return None
+
+
 def canonical_snapshot_bytes(payload: dict[str, Any]) -> bytes:
     """Return deterministic UTF-8 JSON bytes for audit lineage attestation."""
     return json.dumps(
@@ -106,12 +116,8 @@ def validate_audit_context(payload: dict[str, Any]) -> dict[str, str]:
         raise ValueError("audit_context.territory must be an uppercase 2-letter code")
 
     evaluated_at = _nonempty(context.get("evaluated_at"))
-    if not evaluated_at or not UTC_RFC3339_RE.fullmatch(evaluated_at):
-        raise ValueError("audit_context.evaluated_at must be UTC RFC3339 YYYY-MM-DDTHH:MM:SSZ")
-    try:
-        datetime.strptime(evaluated_at, "%Y-%m-%dT%H:%M:%SZ")
-    except ValueError as exc:
-        raise ValueError("audit_context.evaluated_at is not a valid UTC timestamp") from exc
+    if not evaluated_at or _parse_utc_rfc3339(evaluated_at) is None:
+        raise ValueError("audit_context.evaluated_at must be valid UTC RFC3339 YYYY-MM-DDTHH:MM:SSZ")
 
     return {"territory": territory, "evaluated_at": evaluated_at}
 
@@ -162,7 +168,9 @@ def candidate_identity(record: dict[str, Any]) -> tuple[str, ...]:
     return source_key, "url", source_page_url, delivery_url, role
 
 
-def publishability_failures(record: dict[str, Any]) -> tuple[str, ...]:
+def publishability_failures(
+    record: dict[str, Any], *, evaluated_at: str | None = None
+) -> tuple[str, ...]:
     """Return deterministic audit-only reasons a candidate cannot count as public.
 
     These checks classify supplied normalized evidence only. They do not approve
@@ -184,8 +192,20 @@ def publishability_failures(record: dict[str, Any]) -> tuple[str, ...]:
         failures.append("ambiguous_link")
     if record.get("link_exact") is not True:
         failures.append("exact_link_unverified")
-    if not _nonempty(record.get("rights_verified_at")):
+
+    rights_verified_raw = _nonempty(record.get("rights_verified_at"))
+    rights_verified_at = _parse_utc_rfc3339(rights_verified_raw)
+    if not rights_verified_raw:
         failures.append("rights_verification_missing")
+    elif rights_verified_at is None:
+        failures.append("rights_verification_invalid")
+    elif evaluated_at is not None:
+        evaluation_time = _parse_utc_rfc3339(evaluated_at)
+        if evaluation_time is None:
+            raise ValueError("evaluated_at must be valid UTC RFC3339 before publishability evaluation")
+        if rights_verified_at > evaluation_time:
+            failures.append("rights_verification_after_evaluation")
+
     if record.get("validity_eligible") is not True or record.get("expired") is True:
         failures.append("validity_unverified")
     if record.get("takedown_clear") is not True or record.get("takedown") is True:
@@ -204,8 +224,10 @@ def publishability_failures(record: dict[str, Any]) -> tuple[str, ...]:
     return tuple(failures)
 
 
-def is_publishable_image_candidate(record: dict[str, Any]) -> bool:
-    return not publishability_failures(record)
+def is_publishable_image_candidate(
+    record: dict[str, Any], *, evaluated_at: str | None = None
+) -> bool:
+    return not publishability_failures(record, evaluated_at=evaluated_at)
 
 
 def _coverage_bucket() -> dict[str, int]:
@@ -240,6 +262,7 @@ def build_report(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("snapshot must be an object")
     audit_context = validate_audit_context(payload)
     input_sha256 = snapshot_sha256(payload)
+    evaluated_at = audit_context["evaluated_at"]
 
     titles = payload.get("titles")
     candidates = payload.get("candidates")
@@ -287,7 +310,7 @@ def build_report(payload: dict[str, Any]) -> dict[str, Any]:
         if state == "REJECTED" or basis == "NO_RIGHTS_BASIS":
             rejected_or_no_rights += 1
 
-        failures = publishability_failures(raw)
+        failures = publishability_failures(raw, evaluated_at=evaluated_at)
         rejection_reasons.update(failures)
         if not failures:
             publishable_candidates += 1
@@ -307,7 +330,11 @@ def build_report(payload: dict[str, Any]) -> dict[str, Any]:
         media_type = key[0]
         language = _nonempty(title.get("language")) or "unknown"
         linked = candidates_by_title.get(key, [])
-        publishable = [item for item in linked if is_publishable_image_candidate(item)]
+        publishable = [
+            item
+            for item in linked
+            if is_publishable_image_candidate(item, evaluated_at=evaluated_at)
+        ]
         has_candidate = bool(linked)
         has_poster = any(_nonempty(item.get("presentation_role")) == "poster" for item in publishable)
         has_backdrop = any(_nonempty(item.get("presentation_role")) == "backdrop" for item in publishable)
