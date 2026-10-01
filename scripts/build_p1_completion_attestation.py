@@ -47,6 +47,18 @@ def int_value(value: Any) -> int:
         raise ValueError(f"expected integer-compatible value, got {value!r}") from exc
 
 
+def require_mapping(value: Any, label: str) -> Mapping[str, Any]:
+    if not isinstance(value, Mapping):
+        raise ValueError(f"{label} must be an object")
+    return value
+
+
+def require_keys(value: Mapping[str, Any], keys: tuple[str, ...], label: str) -> None:
+    missing = [key for key in keys if key not in value]
+    if missing:
+        raise ValueError(f"{label} missing required fields: {missing}")
+
+
 def canonical_sha256(payload: Mapping[str, Any]) -> str:
     encoded = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
@@ -87,7 +99,7 @@ def build_completion_attestation(
     if int_value(reviewed_attestation.get("candidate_count")) != expected_candidates:
         raise ValueError("reviewed attestation candidate count mismatch")
 
-    reviewed_totals = reviewed_attestation.get("totals") or {}
+    reviewed_totals = require_mapping(reviewed_attestation.get("totals"), "reviewed attestation totals")
     expected_graph_counts = {
         "candidate_titles": expected_candidates,
         "genres": expected_genres,
@@ -95,18 +107,27 @@ def build_completion_attestation(
         "emitted_genre_relations": expected_genre_relations,
         "emitted_credit_relations": expected_credit_relations,
     }
-    actual_reviewed_counts = {key: int_value(reviewed_totals.get(key)) for key in expected_graph_counts}
+    require_keys(reviewed_totals, tuple(expected_graph_counts), "reviewed attestation totals")
+    actual_reviewed_counts = {key: int_value(reviewed_totals[key]) for key in expected_graph_counts}
     if actual_reviewed_counts != expected_graph_counts:
         raise ValueError(
             f"reviewed attestation graph counts mismatch: expected={expected_graph_counts} actual={actual_reviewed_counts}"
         )
 
+    projection_keys = (
+        "sha256",
+        "candidate_count",
+        "movie_qid_count",
+        "series_qid_count",
+        "cross_type_collision_count",
+    )
+    require_keys(projection_manifest, projection_keys, "production projection manifest")
     projection = {
-        "sha256": str(projection_manifest.get("sha256") or ""),
-        "candidate_count": int_value(projection_manifest.get("candidate_count")),
-        "movie_qid_count": int_value(projection_manifest.get("movie_qid_count")),
-        "series_qid_count": int_value(projection_manifest.get("series_qid_count")),
-        "cross_type_collision_count": int_value(projection_manifest.get("cross_type_collision_count")),
+        "sha256": str(projection_manifest["sha256"] or ""),
+        "candidate_count": int_value(projection_manifest["candidate_count"]),
+        "movie_qid_count": int_value(projection_manifest["movie_qid_count"]),
+        "series_qid_count": int_value(projection_manifest["series_qid_count"]),
+        "cross_type_collision_count": int_value(projection_manifest["cross_type_collision_count"]),
     }
     expected_projection = {
         "sha256": expected_projection_sha256,
@@ -118,24 +139,34 @@ def build_completion_attestation(
     if projection != expected_projection:
         raise ValueError(f"production projection mismatch: expected={expected_projection} actual={projection}")
 
-    if graph_verification.get("state") != "verified":
-        raise ValueError("final graph verification is not verified")
-    if bool(graph_verification.get("production_mutation")):
-        raise ValueError("final graph verification unexpectedly reports production mutation")
-    if graph_verification.get("global_materialization_sha256") != expected_graph_sha256:
-        raise ValueError("final graph verification SHA mismatch")
-    graph_counts = graph_verification.get("counts") or {}
-    actual_graph_counts = {key: int_value(graph_counts.get(key)) for key in expected_graph_counts}
-    if actual_graph_counts != expected_graph_counts:
-        raise ValueError(f"final graph counts mismatch: expected={expected_graph_counts} actual={actual_graph_counts}")
-
     graph_health_keys = (
         "orphan_genre_relations",
         "orphan_credit_relations",
         "invalid_genre_provenance",
         "invalid_credit_provenance",
     )
-    graph_health = {key: int_value(graph_verification.get(key)) for key in graph_health_keys}
+    graph_required_keys = (
+        "state",
+        "production_mutation",
+        "global_materialization_sha256",
+        "counts",
+        *graph_health_keys,
+    )
+    require_keys(graph_verification, graph_required_keys, "final graph verification")
+    if graph_verification["state"] != "verified":
+        raise ValueError("final graph verification is not verified")
+    if graph_verification["production_mutation"] is not False:
+        raise ValueError("final graph verification production_mutation must be explicitly false")
+    if graph_verification["global_materialization_sha256"] != expected_graph_sha256:
+        raise ValueError("final graph verification SHA mismatch")
+
+    graph_counts = require_mapping(graph_verification["counts"], "final graph verification counts")
+    require_keys(graph_counts, tuple(expected_graph_counts), "final graph verification counts")
+    actual_graph_counts = {key: int_value(graph_counts[key]) for key in expected_graph_counts}
+    if actual_graph_counts != expected_graph_counts:
+        raise ValueError(f"final graph counts mismatch: expected={expected_graph_counts} actual={actual_graph_counts}")
+
+    graph_health = {key: int_value(graph_verification[key]) for key in graph_health_keys}
     if any(graph_health.values()):
         raise ValueError(f"final graph verification health is not clean: {graph_health}")
 
@@ -145,12 +176,15 @@ def build_completion_attestation(
         "invalid_genre_provenance",
         "invalid_credit_provenance",
     )
-    integrity_summary = {key: int_value(integrity.get(key)) for key in integrity_keys}
+    require_keys(integrity, integrity_keys, "production recommendation integrity")
+    integrity_summary = {key: int_value(integrity[key]) for key in integrity_keys}
     if any(integrity_summary.values()):
         raise ValueError(f"production recommendation integrity is not clean: {integrity_summary}")
 
-    severity = (catalogue_quality.get("finding_summary") or {}).get("by_severity") or {}
-    quality_summary = {"S0": int_value(severity.get("S0")), "S1": int_value(severity.get("S1"))}
+    finding_summary = require_mapping(catalogue_quality.get("finding_summary"), "Catalogue Quality finding_summary")
+    severity = require_mapping(finding_summary.get("by_severity"), "Catalogue Quality by_severity")
+    require_keys(severity, ("S0", "S1"), "Catalogue Quality by_severity")
+    quality_summary = {"S0": int_value(severity["S0"]), "S1": int_value(severity["S1"])}
     if any(quality_summary.values()):
         raise ValueError(f"Catalogue Quality V1 is not clean: {quality_summary}")
 
