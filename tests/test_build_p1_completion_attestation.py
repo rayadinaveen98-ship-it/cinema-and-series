@@ -102,6 +102,12 @@ class P1CompletionAttestationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "production projection mismatch"):
             self.build(projection_manifest=projection)
 
+    def test_missing_projection_zero_field_fails_closed(self):
+        projection = copy.deepcopy(self.projection)
+        projection.pop("cross_type_collision_count")
+        with self.assertRaisesRegex(ValueError, "production projection manifest missing required fields"):
+            self.build(projection_manifest=projection)
+
     def test_graph_sha_mismatch_fails_closed(self):
         graph = copy.deepcopy(self.graph)
         graph["global_materialization_sha256"] = "bad"
@@ -114,16 +120,50 @@ class P1CompletionAttestationTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "final graph counts mismatch"):
             self.build(graph_verification=graph)
 
+    def test_missing_graph_health_counter_fails_closed(self):
+        graph = copy.deepcopy(self.graph)
+        graph.pop("orphan_credit_relations")
+        with self.assertRaisesRegex(ValueError, "final graph verification missing required fields"):
+            self.build(graph_verification=graph)
+
+    def test_missing_graph_mutation_flag_fails_closed(self):
+        graph = copy.deepcopy(self.graph)
+        graph.pop("production_mutation")
+        with self.assertRaisesRegex(ValueError, "final graph verification missing required fields"):
+            self.build(graph_verification=graph)
+
+    def test_non_false_graph_mutation_flag_fails_closed(self):
+        graph = copy.deepcopy(self.graph)
+        graph["production_mutation"] = 0
+        with self.assertRaisesRegex(ValueError, "production_mutation must be explicitly false"):
+            self.build(graph_verification=graph)
+
     def test_nonzero_integrity_fails_closed(self):
         integrity = copy.deepcopy(self.integrity)
         integrity["orphan_credits"] = 1
         with self.assertRaisesRegex(ValueError, "production recommendation integrity is not clean"):
             self.build(integrity=integrity)
 
+    def test_missing_integrity_counter_fails_closed(self):
+        integrity = copy.deepcopy(self.integrity)
+        integrity.pop("invalid_credit_provenance")
+        with self.assertRaisesRegex(ValueError, "production recommendation integrity missing required fields"):
+            self.build(integrity=integrity)
+
     def test_nonzero_s0_or_s1_fails_closed(self):
         quality = copy.deepcopy(self.quality)
         quality["finding_summary"]["by_severity"]["S1"] = 1
         with self.assertRaisesRegex(ValueError, "Catalogue Quality V1 is not clean"):
+            self.build(catalogue_quality=quality)
+
+    def test_missing_catalogue_quality_summary_fails_closed(self):
+        with self.assertRaisesRegex(ValueError, "Catalogue Quality finding_summary must be an object"):
+            self.build(catalogue_quality={})
+
+    def test_missing_catalogue_quality_severity_fails_closed(self):
+        quality = copy.deepcopy(self.quality)
+        quality["finding_summary"]["by_severity"].pop("S0")
+        with self.assertRaisesRegex(ValueError, "Catalogue Quality by_severity missing required fields"):
             self.build(catalogue_quality=quality)
 
     def test_source_cleanup_drift_fails_closed(self):
