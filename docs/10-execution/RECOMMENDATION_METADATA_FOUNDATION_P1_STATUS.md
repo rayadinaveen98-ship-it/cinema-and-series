@@ -1,7 +1,7 @@
 # Recommendation Metadata Foundation P1 — Execution Status
 
-**Status:** PRODUCTION POPULATION IN PROGRESS — SHARD 7 COMPLETE  
-**Date:** 2026-09-29  
+**Status:** PRODUCTION POPULATION IN PROGRESS — SHARD 11 COMPLETE  
+**Date:** 2026-10-01  
 **Parent roadmap:** `PERSONALIZED_DISCOVERY_ACTIVE_ROADMAP_V1.md`
 
 ## Current authoritative state
@@ -17,19 +17,22 @@ P1 remains active. The corrected V3 production path has now completed:
 - physical shard 5 — **2026-09-26 UTC**
 - physical shard 6 — **2026-09-27 UTC**
 - physical shard 7 — **2026-09-28 UTC**
+- physical shard 9 — **2026-09-29 UTC**
+- physical shard 10 — **2026-09-30 UTC**
+- physical shard 11 — **2026-10-01 UTC**
 
-The next eligible production recommendation operation is **physical shard 9**, reviewed at a conservative **40,831 D1 rows written**.
+The next eligible production recommendation operation is **physical shard 12**, reviewed at a conservative **39,166 D1 rows written**.
 
-Completed recommendation operations: **8 / 15** (`topup`, `1`, `2`, `3`, `4`, `5`, `6`, `7`).  
-Remaining recommendation operations: **7** (`9`, `10`, `11`, `12`, `13`, `14`, `15`).
+Completed recommendation operations: **11 / 15** (`topup`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `9`, `10`, `11`).  
+Remaining recommendation operations: **4** (`12`, `13`, `14`, `15`).
 
-Current production totals after shard 7:
+Current production totals after shard 11:
 
-- recommendation titles: **9,227**
-- genres: **479**
-- people: **25,689**
-- title-genre relationships: **9,183**
-- title-credit relationships: **40,248**
+- recommendation titles: **12,276**
+- genres: **540**
+- people: **31,147**
+- title-genre relationships: **12,207**
+- title-credit relationships: **52,507**
 
 Current integrity/provenance counters:
 
@@ -38,7 +41,9 @@ Current integrity/provenance counters:
 - invalid genre provenance: **0**
 - invalid credit provenance: **0**
 
-The shard-7 writer re-captured the corrected live projection at exactly **16,380 = 6,562 Movie + 9,818 Series**, with the locked projection SHA unchanged, and finished with exact operation state `complete`. P1 is **not complete**; final verification remains ineligible until all remaining production operations complete.
+The shard-11 writer re-captured the corrected live projection at exactly **16,380 = 6,562 Movie + 9,818 Series**, with the locked projection SHA unchanged, and finished with exact operation state `complete`. P1 is **not complete**; final verification remains ineligible until shards 12–15 complete.
+
+The **2026-10-01 UTC** mutation slot is already consumed by shard 11. Do not manually dispatch shard 12 on that same UTC date. The permanent controller owns the next mutation on the next fresh, unreserved UTC day.
 
 ## Corrected frozen projection
 
@@ -172,10 +177,10 @@ Locked operation order:
 | physical 5 | 46,591 | **COMPLETE 2026-09-26** |
 | physical 6 | 39,371 | **COMPLETE 2026-09-27** |
 | physical 7 | 41,117 | **COMPLETE 2026-09-28** |
-| physical 9 | 40,831 | **NEXT** |
-| physical 10 | 36,946 | pending |
-| physical 11 | 40,223 | pending |
-| physical 12 | 39,166 | pending |
+| physical 9 | 40,831 | **COMPLETE 2026-09-29** |
+| physical 10 | 36,946 | **COMPLETE 2026-09-30** |
+| physical 11 | 40,223 | **COMPLETE 2026-10-01** |
+| physical 12 | 39,166 | **NEXT** |
 | physical 13 | 47,836 | pending |
 | physical 14 | 41,466 | pending |
 | physical 15 | 42,118 | pending |
@@ -194,6 +199,9 @@ Largest reviewed operation is **49,159 rows**, below the P1 conservative **80,00
 | 2026-09-26 | 5 | `36219922803` / `36219922803:5` | `36219954490` | 46,591 | **42,223** | 1,060 / 1,085 / 5,037 | 7,148 / 427 / 21,776 / 7,035 / 31,837 |
 | 2026-09-27 | 6 | `36297206014` / `36297206014:6` | `36297241170` | 39,371 | **35,501** | 1,034 / 1,029 / 4,125 | 8,182 / 452 / 23,728 / 8,064 / 35,962 |
 | 2026-09-28 | 7 | `36382476536` / `36382476536:7` | `36382531719` | 41,117 | **36,875** | 1,045 / 1,119 / 4,286 | 9,227 / 479 / 25,689 / 9,183 / 40,248 |
+| 2026-09-29 | 9 | `36528199977` / `36528199977:9` | `36528269733` | 40,831 | **36,389** | 981 / 1,009 / 4,314 | 10,208 / 500 / 27,603 / 10,192 / 44,562 |
+| 2026-09-30 | 10 | `36674647947` / `36674647947:10` | `36674715781` | 36,946 | **33,074** | 991 / 962 / 3,778 | 11,199 / 525 / 29,388 / 11,154 / 48,340 |
+| 2026-10-01 | 11 | `36823178729` / `36823178729:11` | `36823254704` | 40,223 | **35,727** | 1,077 / 1,053 / 4,167 | 12,276 / 540 / 31,147 / 12,207 / 52,507 |
 
 Every completed writer above ended with exact operation state `complete` and zero orphan/provenance violations.
 
@@ -203,6 +211,9 @@ Every completed writer above ended with exact operation state `complete` and zer
 - shard 5 executable SHA-256: **`0b72bdc6c5bd4c45464c1df4850187fa203b274f5063ea555e76ab4eaf79379d`**
 - shard 6 executable SHA-256: **`650962f1330f73839cdac79e0e7316d468d58d7e679b890c3368f9a4f449c3c0`**
 - shard 7 executable SHA-256: **`faa5e20950c3c5e74959e93c1fb53d3ff962d3c9fae0a173bfa40a066d590a8d`**
+- shard 9 executable SHA-256: **`8484dcd0a32752ada05df5ceb64c9212872da2913977c5f081d3fe25dec3512a`**
+- shard 10 executable SHA-256: **`39661b7d1319bbfd5e8131303b8f5bae3ce8fe136f99a83dc9bc7cc2172d6840`**
+- shard 11 executable SHA-256: **`a3775ac4ca0a3283044f9a8216589a5b0dd436f9e98aeb3d9f903eba87599a3d`**
 
 Recent writer artifacts:
 
@@ -210,27 +221,55 @@ Recent writer artifacts:
 - shard 5 artifact ID **`10898702252`**, ZIP SHA-256 **`197aec78e8b5c3bf8a16c1716aa978a115f18359117db4118eeff25b5db39c0e`**
 - shard 6 artifact ID **`10924621403`**, ZIP SHA-256 **`2f86451c30dc90a2cc61f0af11034251b3c915a46ceb2b7e88faa1d1345b1a2a`**
 - shard 7 artifact ID **`10952912804`**, ZIP SHA-256 **`e4ac6ca849692361a3445ce5335410e26383a0f279aa1e339678c52b94e6b338`**
+- shard 9 artifact ID **`11015557260`**, ZIP SHA-256 **`683e0098de18b52572dda5b6e7cd1e5a8312d4ca3126671934bbd03edd96ac79`**
+- shard 10 artifact ID **`11079148837`**, ZIP SHA-256 **`8a93664107215f04d1ac27db5aa5c53955e1b9db7e847c5f0b7c92f79fa8a06a`**
+- shard 11 artifact ID **`11143299196`**, ZIP SHA-256 **`7482abd57a4e29971946ba7a297ec5c34d2a02d6047dfcc292438d95a9a0a32f`**
 
-### 2026-09-28 shard-7 production evidence
+### 2026-10-01 shard-11 production evidence
 
-Controller run **`36382476536`** reserved the UTC mutation day for operation `7`, and writer run **`36382531719`** verified:
+Controller run **`36823178729`** reserved the UTC mutation day for operation `11`, and writer run **`36823254704`** verified:
 
-- quota-guard owner: **`36382476536:7`**
+- quota-guard owner: **`36823178729:11`**
+- guard date: **2026-10-01 UTC**
+- guard shard index: **3**
 - live projection: **16,380 = 6,562 Movie + 9,818 Series**
 - projection SHA-256: **`f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6`**
-- reviewed estimated rows: **41,117**
-- actual D1 rows written: **36,875**
-- pre-state: **0 / 0 / 0** title / title-genre / title-credit rows
-- exact completed slice: **1,045 / 1,119 / 4,286**
-- post totals: **9,227 / 479 / 25,689 / 9,183 / 40,248**
+- reviewed estimated rows: **40,223**
+- actual D1 rows written: **35,727**
+- exact completed slice: **1,077 / 1,053 / 4,167**
+- post totals: **12,276 / 540 / 31,147 / 12,207 / 52,507**
 - orphan title-genre relationships: **0**
 - orphan title-credit relationships: **0**
 - invalid genre provenance: **0**
 - invalid credit provenance: **0**
-- artifact ID: **`10952912804`**
-- artifact ZIP SHA-256: **`e4ac6ca849692361a3445ce5335410e26383a0f279aa1e339678c52b94e6b338`**
+- artifact ID: **`11143299196`**
+- artifact ZIP SHA-256: **`7482abd57a4e29971946ba7a297ec5c34d2a02d6047dfcc292438d95a9a0a32f`**
 
-### 2026-09-27 independent read-only snapshot
+### 2026-09-30 shard-10 production evidence
+
+Controller run **`36674647947`** reserved the UTC mutation day for operation `10`, and writer run **`36674715781`** verified:
+
+- quota-guard owner: **`36674647947:10`**
+- reviewed estimated rows: **36,946**
+- actual D1 rows written: **33,074**
+- exact completed slice: **991 / 962 / 3,778**
+- post totals: **11,199 / 525 / 29,388 / 11,154 / 48,340**
+- integrity/provenance violations: **0**
+- artifact ID: **`11079148837`**
+
+### 2026-09-29 shard-9 production evidence
+
+Controller run **`36528199977`** reserved the UTC mutation day for operation `9`, and writer run **`36528269733`** verified:
+
+- quota-guard owner: **`36528199977:9`**
+- reviewed estimated rows: **40,831**
+- actual D1 rows written: **36,389**
+- exact completed slice: **981 / 1,009 / 4,314**
+- post totals: **10,208 / 500 / 27,603 / 10,192 / 44,562**
+- integrity/provenance violations: **0**
+- artifact ID: **`11015557260`**
+
+### Historical read-only snapshot evidence
 
 Workflow run **`36300254259`** independently confirmed the state immediately before shard 7:
 
@@ -238,12 +277,7 @@ Workflow run **`36300254259`** independently confirmed the state immediately bef
 - completed prefix: `topup,1,2,3,4,5,6`
 - completed operations: **7 / 15**
 - shard 7: **not_started**
-- shard 7 current slice: **0 titles / 0 title-genres / 0 title-credits**
 - shard 7 expected slice: **1,045 titles / 1,119 title-genres / 4,286 title-credits**
-- next operation: **7**
-- next reviewed estimate: **41,117 rows**
-- current UTC guard: **`36297206014:6`**
-- production totals: **8,182 / 452 / 23,728 / 8,064 / 35,962**
 - health violations: **0**
 - P1 exit-ready: **false**
 - snapshot artifact ID: **`10925114272`**
@@ -283,24 +317,30 @@ The controller schedule may be delayed by GitHub. Safety depends on the UTC guar
 13. physical shard 5 ✅
 14. physical shard 6 ✅
 15. physical shard 7 ✅
-16. physical shards **9–15** ⏳ — **7 operations remain**
-17. final exact production graph verification ⏳
-18. Catalogue Quality V1 **S0 = 0 / S1 = 0** ⏳
-19. final production evidence + mark P1 COMPLETE ⏳
+16. physical shard 9 ✅
+17. physical shard 10 ✅
+18. physical shard 11 ✅
+19. physical shards **12–15** ⏳ — **4 operations remain**
+20. final exact production graph verification ⏳
+21. Catalogue Quality V1 **S0 = 0 / S1 = 0** ⏳
+22. deterministic P1 completion attestation + final production evidence ⏳
+23. mark P1 COMPLETE / retire P1 controller ⏳
 
 ## Next operation
 
 On the next fresh, unreserved UTC quota day, the controller must observe:
 
-- `topup`, `1`, `2`, `3`, `4`, `5`, `6`, `7` = complete
-- physical shard `9` = `not_started`
+- `topup`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `9`, `10`, `11` = complete
+- physical shard `12` = `not_started`
 
-It should then reserve that UTC day for **physical shard 9**, reviewed at **40,831 D1 rows written**.
+It should then reserve that UTC day for **physical shard 12**, reviewed at **39,166 D1 rows written**.
 
-Do not reset, delete, or reuse historical quota-guard rows, and do not bypass the permanent controller if GitHub's scheduled execution is delayed.
+The 2026-10-01 UTC guard is already owned by **`36823178729:11`**. Do not reset, delete, reuse, or bypass that reservation. Do not bypass the permanent controller if GitHub's scheduled execution is delayed.
+
+After shards 12, 13, 14, and 15 are complete, the controller is expected to dispatch the read-only final V3 verification path. P1 still does not exit on counts alone: exact graph SHA, integrity/provenance, reviewed cleanup state, and Catalogue Quality S0/S1 must all pass.
 
 ## P1 exit rule
 
 P1 exits only after the full corrected 16,380-title reviewed recommendation metadata foundation is present in production, the normalized production graph exactly matches V3 graph SHA `9a931b9a7ef081dd8579f67218de14d086515f4cc4bfa20cacb3edb2b8379b78`, referential/provenance checks pass, reviewed source cleanup remains exact, and post-write Catalogue Quality is **S0 = 0 / S1 = 0**.
 
-P2 production implementation does not begin from a partial P1 materialization.
+The deterministic P1 completion attestation may be emitted only after those final verification gates pass. P2 production implementation does not begin from a partial P1 materialization.
