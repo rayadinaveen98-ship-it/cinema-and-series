@@ -2,7 +2,7 @@
 
 **Status:** PREPARED / USE ONLY AFTER ALL V3 PRODUCTION OPERATIONS COMPLETE  
 **Prepared:** 2026-09-22  
-**Checkpoint updated:** 2026-09-27  
+**Checkpoint updated:** 2026-10-02  
 **Active phase:** P1 — Recommendation Metadata Foundation  
 **Authoritative status:** `docs/10-execution/RECOMMENDATION_METADATA_FOUNDATION_P1_STATUS.md`
 
@@ -56,12 +56,12 @@ Counts alone are insufficient. Final production must reproduce the exact reviewe
 | 4 | 39,785 | **complete 2026-09-25** |
 | 5 | 46,591 | **complete 2026-09-26** |
 | 6 | 39,371 | **complete 2026-09-27** |
-| 7 | 41,117 | **next** |
-| 9 | 40,831 | pending |
-| 10 | 36,946 | pending |
-| 11 | 40,223 | pending |
-| 12 | 39,166 | pending |
-| 13 | 47,836 | pending |
+| 7 | 41,117 | **complete 2026-09-28** |
+| 9 | 40,831 | **complete 2026-09-29** |
+| 10 | 36,946 | **complete 2026-09-30** |
+| 11 | 40,223 | **complete 2026-10-01** |
+| 12 | 39,166 | **complete 2026-10-02** |
+| 13 | 47,836 | **next** |
 | 14 | 41,466 | pending |
 | 15 | 42,118 | pending |
 
@@ -97,7 +97,7 @@ Any `partial`, `overfilled`, unknown guard ownership, wrong executable fingerpri
 - artifact ID: **`10598937124`**
 - artifact ZIP SHA-256: **`152dda1963c2f2967b9a904ccc5e497aa4cacefa830deba1b6643bc7d1cb65d6`**
 
-### Recommendation production operations — 2026-09-21 through 2026-09-27
+### Recommendation production operations — 2026-09-21 through 2026-10-02
 
 | UTC date | Operation | Guard | Writer | Reviewed | Actual rows | Post-state |
 |---|---|---|---|---:|---:|---|
@@ -108,6 +108,11 @@ Any `partial`, `overfilled`, unknown guard ownership, wrong executable fingerpri
 | 2026-09-25 | 4 | `36097101466:4` | `36097154585` | 39,785 | **36,529** | complete |
 | 2026-09-26 | 5 | `36219922803:5` | `36219954490` | 46,591 | **42,223** | complete |
 | 2026-09-27 | 6 | `36297206014:6` | `36297241170` | 39,371 | **35,501** | complete |
+| 2026-09-28 | 7 | `36382476536:7` | `36382531719` | 41,117 | **36,875** | complete |
+| 2026-09-29 | 9 | `36528199977:9` | `36528269733` | 40,831 | **36,389** | complete |
+| 2026-09-30 | 10 | `36674647947:10` | `36674715781` | 36,946 | **33,074** | complete |
+| 2026-10-01 | 11 | `36823178729:11` | `36823254704` | 40,223 | **35,727** | complete |
+| 2026-10-02 | 12 | `36970827906:12` | `36970900789` | 39,166 | **34,650** | complete |
 
 Exact operation slices:
 
@@ -118,18 +123,60 @@ Exact operation slices:
 - shard 4: **1,003 / 975 / 4,202**
 - shard 5: **1,060 / 1,085 / 5,037**
 - shard 6: **1,034 / 1,029 / 4,125**
+- shard 7: **1,045 / 1,119 / 4,286**
+- shard 9: **981 / 1,009 / 4,314**
+- shard 10: **991 / 962 / 3,778**
+- shard 11: **1,077 / 1,053 / 4,167**
+- shard 12: **1,006 / 1,042 / 4,091**
 
 Recent immutable executable SHA-256 values:
 
-- shard 4: **`41596755c34154128f3a147817e54e6d6e1fba2df3a6eb1e80edbe003c67467e`**
-- shard 5: **`0b72bdc6c5bd4c45464c1df4850187fa203b274f5063ea555e76ab4eaf79379d`**
-- shard 6: **`650962f1330f73839cdac79e0e7316d468d58d7e679b890c3368f9a4f449c3c0`**
+- shard 7: **`faa5e20950c3c5e74959e93c1fb53d3ff962d3c9fae0a173bfa40a066d590a8d`**
+- shard 9: **`8484dcd0a32752ada05df5ceb64c9212872da2913977c5f081d3fe25dec3512a`**
+- shard 10: **`39661b7d1319bbfd5e8131303b8f5bae3ce8fe136f99a83dc9bc7cc2172d6840`**
+- shard 11: **`a3775ac4ca0a3283044f9a8216589a5b0dd436f9e98aeb3d9f903eba87599a3d`**
+- shard 12: **`bc21bdcf6f9b37b5010996c9025763b02251fff8fff551b022f4acff645eaf21`**
 
 Recent writer artifacts:
 
-- shard 4: ID **`10848045964`**, ZIP SHA-256 **`bc90af78c7f20deeae698c7b534ce1f83f1e27d8740e5939d1299e7a1fb78344`**
-- shard 5: ID **`10898702252`**, ZIP SHA-256 **`197aec78e8b5c3bf8a16c1716aa978a115f18359117db4118eeff25b5db39c0e`**
-- shard 6: ID **`10924621403`**, ZIP SHA-256 **`2f86451c30dc90a2cc61f0af11034251b3c915a46ceb2b7e88faa1d1345b1a2a`**
+- shard 7: ID **`10952912804`**, ZIP SHA-256 **`e4ac6ca849692361a3445ce5335410e26383a0f279aa1e339678c52b94e6b338`**
+- shard 9: ID **`11015557260`**, ZIP SHA-256 **`683e0098de18b52572dda5b6e7cd1e5a8312d4ca3126671934bbd03edd96ac79`**
+- shard 10: ID **`11079148837`**, ZIP SHA-256 **`8a93664107215f04d1ac27db5aa5c53955e1b9db7e847c5f0b7c92f79fa8a06a`**
+- shard 11: ID **`11143299196`**, ZIP SHA-256 **`7482abd57a4e29971946ba7a297ec5c34d2a02d6047dfcc292438d95a9a0a32f`**
+- shard 12: ID **`11211481816`**, ZIP SHA-256 **`13416d3f6427336c9efd03140153f0c79357867964fb3778545b7e77b6159e4f`**
+
+Production totals after shard 12:
+
+- recommendation titles: **13,282**
+- genres: **559**
+- people: **32,783**
+- title-genres: **13,249**
+- title-credits: **56,598**
+
+Post-write integrity/provenance counters remain **0 / 0 / 0 / 0**.
+
+### 2026-10-02 independent read-only snapshot
+
+Run **`36975901071`** independently confirmed:
+
+- source cleanup = complete
+- completed prefix = `topup,1,2,3,4,5,6,7,9,10,11,12`
+- completed operations = **12 / 15**
+- overall operation state = `in_progress`
+- exit-gate state = `population_in_progress`
+- shard 13 = **not_started**
+- shard 13 current = **0 titles / 0 title-genres / 0 title-credits**
+- shard 13 expected = **1,082 / 1,136 / 5,149**
+- next operation = `13`
+- next reviewed estimate = **47,836**
+- production totals = **13,282 / 559 / 32,783 / 13,249 / 56,598**
+- health violations = **0**
+- final verification eligible = **false**
+- P1 exit-ready = **false**
+- snapshot artifact ID = **`11213453414`**
+- snapshot artifact ZIP SHA-256 = **`e2aad904f61e3642b5e71774cf589da01827a368fd82a339a493357137e3d22b`**
+
+---
 
 Production totals after shard 6:
 
@@ -174,7 +221,7 @@ Required final operation states:
 - no partial state
 - no overfilled state
 
-**Current:** **7 / 15**, so this gate remains **OPEN**.
+**Current:** **12 / 15**, so this gate remains **OPEN**.
 
 ---
 
@@ -191,7 +238,7 @@ Final verification must prove:
 7. no full-shard 0 or 8 V3 operation exists
 8. no unrecognized operation token exists
 
-Current completed prefix includes preserved guards through **`36297206014:6`**.
+Current completed prefix includes preserved guards through **`36970827906:12`**; no historical guard has been reset, deleted, or reused.
 
 ---
 
@@ -204,7 +251,7 @@ Required final source state:
 - live recommendation projection exactly **16,380 / 6,562 / 9,818**
 - cross-type collisions = **0**
 
-This state has remained exact through shard 6 but must be reverified at final exit.
+This state has remained exact through shard 12 but must be reverified at final exit.
 
 ---
 
@@ -231,7 +278,7 @@ Required final counters:
 - orphan `title_genres` = **0**
 - orphan `title_credits` = **0**
 
-Current checkpoint is clean, but final verification is still required.
+The current shard-12 checkpoint is clean, but final verification is still required.
 
 ---
 
@@ -343,15 +390,15 @@ Before a later phase adds a migration:
 
 ---
 
-## Next-operation rehearsal — physical shard 7
+## Next-operation rehearsal — physical shard 13
 
-The 2026-09-27 status probe establishes the exact next slice:
+The 2026-10-02 status probe establishes the exact next slice:
 
-- recommendation titles: **1,045**
-- title-genres: **1,119**
-- title-credits: **4,286**
+- recommendation titles: **1,082**
+- title-genres: **1,136**
+- title-credits: **5,149**
 - current state: **not_started**
-- reviewed estimate: **41,117 rows**
+- reviewed estimate: **47,836 rows**
 
 This evidence cannot authorize a same-day write. The live controller/writer gates remain mandatory on the next fresh UTC day.
 
@@ -449,20 +496,20 @@ Until then, wording remains **PRODUCTION POPULATION IN PROGRESS**.
 
 ## Current checkpoint
 
-As of **2026-09-27 UTC**:
+As of **2026-10-02 UTC**:
 
 - source cleanup ✅
 - topup ✅
-- physical shards 1–6 ✅
-- physical shard 7 is next
-- completed recommendation operations: **7 / 15**
-- remaining recommendation operations: **8**
-- next reviewed write estimate: **41,117 rows**
-- production totals: **8,182 titles / 452 genres / 23,728 people / 8,064 title-genres / 35,962 title-credits**
+- physical shards 1–7, 9–12 ✅
+- physical shard 13 is next
+- completed recommendation operations: **12 / 15**
+- remaining recommendation operations: **3**
+- next reviewed write estimate: **47,836 rows**
+- production totals: **13,282 titles / 559 genres / 32,783 people / 13,249 title-genres / 56,598 title-credits**
 - current integrity/provenance counters: **0 / 0 / 0 / 0**
-- Sep27 guard: **`36297206014:6`**
-- snapshot run: **`36300254259`**
-- snapshot artifact ID: **`10925114272`**
+- Oct 2 guard: **`36970827906:12`**
+- snapshot run: **`36975901071`**
+- snapshot artifact ID: **`11213453414`**
 - P1 exit-ready: **false**
 
-The Sep27 UTC mutation slot is consumed by shard 6. Do not execute shard 7 until a fresh UTC quota day.
+The Oct 2 UTC mutation slot is consumed by shard 12. Do not execute shard 13 until the next fresh, unreserved UTC quota day.
