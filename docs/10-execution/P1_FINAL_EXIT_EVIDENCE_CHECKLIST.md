@@ -221,7 +221,7 @@ Required final operation states:
 - no partial state
 - no overfilled state
 
-**Current:** **12 / 15**, so this gate remains **OPEN**.
+**Current:** **15 / 15**, so this gate is **PASSED**.
 
 ---
 
@@ -238,7 +238,7 @@ Final verification must prove:
 7. no full-shard 0 or 8 V3 operation exists
 8. no unrecognized operation token exists
 
-Current completed prefix includes preserved guards through **`36970827906:12`**; no historical guard has been reset, deleted, or reused.
+Current completed prefix is the full locked sequence through **`37269736740:15`**; no historical guard has been reset, deleted, or reused.
 
 ---
 
@@ -251,7 +251,7 @@ Required final source state:
 - live recommendation projection exactly **16,380 / 6,562 / 9,818**
 - cross-type collisions = **0**
 
-This state has remained exact through shard 12 but must be reverified at final exit.
+This state was rechecked by the Oct 5 production snapshot and must be reverified by the final exact graph verification.
 
 ---
 
@@ -278,7 +278,7 @@ Required final counters:
 - orphan `title_genres` = **0**
 - orphan `title_credits` = **0**
 
-The current shard-12 checkpoint is clean, but final verification is still required.
+The final population checkpoint is clean, but the exact graph verifier and final quality gates are still required.
 
 ---
 
@@ -490,26 +490,20 @@ The completion update must state, at minimum:
 - P1 controller safely retired
 - post-P1 mutation/migration handoff recorded
 
-Until then, wording remains **PRODUCTION POPULATION IN PROGRESS**.
+Until th## Current checkpoint
 
----
-
-## Current checkpoint
-
-As of **2026-10-02 UTC**:
+As of **2026-10-05 UTC**:
 
 - source cleanup ✅
-- topup ✅
-- physical shards 1–7, 9–12 ✅
-- physical shard 13 is next
-- completed recommendation operations: **12 / 15**
-- remaining recommendation operations: **3**
-- next reviewed write estimate: **47,836 rows**
-- production totals: **13,282 titles / 559 genres / 32,783 people / 13,249 title-genres / 56,598 title-credits**
+- topup + physical shards 1–7, 9–15 ✅
+- completed recommendation operations: **15 / 15**
+- remaining recommendation operations: **0**
+- production totals: **16,380 titles / 612 genres / 37,964 people / 16,489 title-genres / 70,551 title-credits**
 - current integrity/provenance counters: **0 / 0 / 0 / 0**
-- Oct 2 guard: **`36970827906:12`**
-- snapshot run: **`36975901071`**
-- snapshot artifact ID: **`11213453414`**
-- P1 exit-ready: **false**
+- final verification eligibility: **true**
+- exit gate state: `ready_for_final_verification`
+- snapshot run: **`37274482671`**
+- snapshot artifact ID: **`11328983356`**
+- P1 is **not yet declared COMPLETE** because final exact graph verification, S0/S1, deterministic attestation, final artifact, and controller retirement remain.
 
-The Oct 2 UTC mutation slot is consumed by shard 12. Do not execute shard 13 until the next fresh, unreserved UTC quota day.
+The production population is complete. Do not perform another recommendation mutation.
