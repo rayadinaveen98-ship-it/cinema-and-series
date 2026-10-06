@@ -1,49 +1,33 @@
 # Recommendation Metadata Foundation P1 — Execution Status
 
-**Status:** PRODUCTION POPULATION IN PROGRESS — SHARD 11 COMPLETE  
-**Date:** 2026-10-01  
+**Status:** FINAL VERIFICATION PASSED — CONTROLLER RETIREMENT PENDING  
+**Date:** 2026-10-06  
 **Parent roadmap:** `PERSONALIZED_DISCOVERY_ACTIVE_ROADMAP_V1.md`
 
 ## Current authoritative state
 
-P1 remains active. The corrected V3 production path has now completed:
+P1 remains active, but the full corrected production population is now complete and the final read-only verification has passed.
 
-- reviewed source cleanup — **2026-09-20 UTC**
-- `topup` — **2026-09-21 UTC**
-- physical shard 1 — **2026-09-22 UTC**
-- physical shard 2 — **2026-09-23 UTC**
-- physical shard 3 — **2026-09-24 UTC**
-- physical shard 4 — **2026-09-25 UTC**
-- physical shard 5 — **2026-09-26 UTC**
-- physical shard 6 — **2026-09-27 UTC**
-- physical shard 7 — **2026-09-28 UTC**
-- physical shard 9 — **2026-09-29 UTC**
-- physical shard 10 — **2026-09-30 UTC**
-- physical shard 11 — **2026-10-01 UTC**
+- source cleanup — **2026-09-20 UTC**
+- topup — **2026-09-21 UTC**
+- physical shards 1–7, 9–15 — **2026-09-22 through 2026-10-05 UTC**
+- completed recommendation operations: **15 / 15**
+- remaining recommendation operations: **0**
+- production totals: **16,380 titles / 612 genres / 37,964 people / 16,489 title-genres / 70,551 title-credits**
+- current integrity/provenance counters: **0 / 0 / 0 / 0**
+- exact corrected projection: **16,380 = 6,562 Movie + 9,818 Series**
+- projection SHA-256: **f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6**
+- normalized production graph SHA-256: **9a931b9a7ef081dd8579f67218de14d086515f4cc4bfa20cacb3edb2b8379b78**
+- final verification run: **37424321924**
+- final verification mode: **verify_final / final**
+- final verification artifact: **recommendation-metadata-production-write-v3-verify_final-final**
+- final verification artifact ID: **11394510831**
+- final verification artifact digest: **sha256:2300a514b88829d99f8334af213472457ee930a425946ac052c7e9ab5081374f**
+- Catalogue Quality V1: **S0 = 0 / S1 = 0**
+- final graph verification: **passed with production_mutation=false**
+- controller retirement: **pending**
 
-The next eligible production recommendation operation is **physical shard 12**, reviewed at a conservative **39,166 D1 rows written**.
-
-Completed recommendation operations: **11 / 15** (`topup`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `9`, `10`, `11`).  
-Remaining recommendation operations: **4** (`12`, `13`, `14`, `15`).
-
-Current production totals after shard 11:
-
-- recommendation titles: **12,276**
-- genres: **540**
-- people: **31,147**
-- title-genre relationships: **12,207**
-- title-credit relationships: **52,507**
-
-Current integrity/provenance counters:
-
-- orphan title-genre relationships: **0**
-- orphan title-credit relationships: **0**
-- invalid genre provenance: **0**
-- invalid credit provenance: **0**
-
-The shard-11 writer re-captured the corrected live projection at exactly **16,380 = 6,562 Movie + 9,818 Series**, with the locked projection SHA unchanged, and finished with exact operation state `complete`. P1 is **not complete**; final verification remains ineligible until shards 12–15 complete.
-
-The **2026-10-01 UTC** mutation slot is already consumed by shard 11. Do not manually dispatch shard 12 on that same UTC date. The permanent controller owns the next mutation on the next fresh, unreserved UTC day.
+No further recommendation metadata mutation is authorized. P1 is **not yet declared COMPLETE** because the permanent controller must still observe the successful final-verification artifact and retire the daily resume workflow, after which the post-P1 handoff can be recorded.
 
 ## Corrected frozen projection
 
@@ -324,9 +308,9 @@ The controller schedule may be delayed by GitHub. Safety depends on the UTC guar
 20. physical shard 13 ✅
 21. physical shard 14 ✅
 22. physical shard 15 ✅
-23. final exact production graph verification ⏳
-24. Catalogue Quality V1 **S0 = 0 / S1 = 0** ⏳
-25. deterministic P1 completion attestation + final production evidence ⏳
+23. final exact production graph verification ✅ — run **37424321924**
+24. Catalogue Quality V1 **S0 = 0 / S1 = 0** ✅ — run **37424321924**
+25. final production verification artifact/evidence preserved ✅ — artifact **11394510831**
 26. mark P1 COMPLETE / retire P1 controller ⏳
 
 ## Final population checkpoint — 2026-10-05 UTC
@@ -353,6 +337,26 @@ The 2026-10-05 read-only snapshot `37274482671` independently reports:
 - exact projection SHA: `f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6`
 
 The population is complete, but this checkpoint does **not** declare P1 complete. The exact production graph verifier, Catalogue Quality V1 S0/S1 gate, deterministic completion attestation, final verification artifact, and controller retirement remain mandatory.
+
+## Final verification checkpoint — 2026-10-06 UTC
+
+The permanent P1 controller run **37424224029** detected next_operation=complete and dispatched the final read-only verifier as **run 37424321924** with mode=verify_final and operation=final. No recommendation write was performed by this verification run.
+
+Verified evidence:
+
+- immutable V3 artifact attestation SHA-256: **8eb39db7964c03e968b26aeccaa33f4b0f85c422fe4c08471ee7ec95510e2986**
+- corrected projection SHA-256: **f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6**
+- production graph SHA-256: **9a931b9a7ef081dd8579f67218de14d086515f4cc4bfa20cacb3edb2b8379b78**
+- production counts: **16,380 / 612 / 37,964 / 16,489 / 70,551**
+- orphan title-genres: **0**
+- orphan title-credits: **0**
+- invalid genre provenance: **0**
+- invalid credit provenance: **0**
+- Catalogue Quality V1: **S0 = 0 / S1 = 0**
+- final evidence artifact ID: **11394510831**
+- final evidence artifact digest: **sha256:2300a514b88829d99f8334af213472457ee930a425946ac052c7e9ab5081374f**
+
+The verifier explicitly reports production_mutation=false. The daily controller remains intentionally unretired until it observes this artifact on a controller run and disables itself. Do not perform any further P1 recommendation mutation.
 
 ## P1 exit rule
 
