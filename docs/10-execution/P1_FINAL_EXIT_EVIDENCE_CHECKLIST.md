@@ -257,15 +257,14 @@ This state was rechecked by the Oct 5 production snapshot and must be reverified
 
 ## Gate D — exact production graph verification
 
-Run `scripts/verify_p1_v3_production.py` only after all write operations complete.
-
-Required:
+**PASSED — final verifier run 37424321924.**
 
 - production normalized graph reconstructs successfully
-- graph SHA exactly equals **`9a931b9a7ef081dd8579f67218de14d086515f4cc4bfa20cacb3edb2b8379b78`**
-- projection SHA remains **`f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6`**
-- verifier emits `P1_V3_PRODUCTION_GRAPH_VERIFIED`
-- final verification workflow concludes success
+- graph SHA exactly equals **9a931b9a7ef081dd8579f67218de14d086515f4cc4bfa20cacb3edb2b8379b78**
+- projection SHA exactly equals **f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6**
+- verifier emitted `P1_V3_PRODUCTION_GRAPH_VERIFIED`
+- final verification workflow concluded success
+- production mutation: **false**
 
 Matching counts without matching graph SHA does not satisfy this gate.
 
