@@ -317,11 +317,65 @@ jobs:
         if: steps.daily_guard.outputs.blocked != 'true' && steps.cleanup_state.outputs.state == 'complete' && steps.operation_plan.outputs.next_operation == 'complete' && steps.final_verify_state.outputs.verified != 'true' && env.APPLY_PRODUCTION_WRITE != 'true'
         run: echo "All V3 operations are complete; dry run would dispatch final graph verification."
 
-      - name: Retire V3 daily resume after successful final verification
+      - name: Ensure final P1 completion attestation
         if: steps.daily_guard.outputs.blocked != 'true' && steps.cleanup_state.outputs.state == 'complete' && steps.operation_plan.outputs.next_operation == 'complete' && steps.final_verify_state.outputs.verified == 'true'
+        id: final_attestation_state
+        shell: bash
+        env:
+          TRIGGER_RUN_ID: ${{ steps.final_verify_state.outputs.successful_run_id }}
+        run: |
+          set -euo pipefail
+          TARGET="p1-final-completion-attestation-${TRIGGER_RUN_ID}"
+          verify_artifact() {
+            gh api -H "Accept: application/vnd.github+json"               "repos/${GITHUB_REPOSITORY}/actions/artifacts?name=${TARGET}&per_page=100"               > data/generated/quota-plan-v3/final-attestation-artifacts.json
+            python - <<'PY'
+          import json, os, subprocess
+          from pathlib import Path
+          payload=json.loads(Path('data/generated/quota-plan-v3/final-attestation-artifacts.json').read_text(encoding='utf-8'))
+          target=os.environ['TARGET']
+          matches=[a for a in payload.get('artifacts') or [] if a.get('name')==target and not a.get('expired')]
+          if len(matches)>1:
+              raise SystemExit(f'multiple non-expired P1 completion attestation artifacts found: {len(matches)}')
+          if not matches:
+              raise SystemExit('P1 completion attestation artifact not found')
+          artifact=matches[0]
+          run_id=str((artifact.get('workflow_run') or {}).get('id') or '')
+          if not run_id:
+              raise SystemExit('P1 completion attestation artifact has no workflow run')
+          run=json.loads(subprocess.check_output(['gh','api',f"repos/{os.environ['GITHUB_REPOSITORY']}/actions/runs/{run_id}"],text=True))
+          if run.get('name')!='P1 Final Completion Attestation' or run.get('conclusion')!='success' or run.get('head_branch')!='main':
+              raise SystemExit(f'P1 completion attestation workflow is not successful on main: {run}')
+          print(f'P1_FINAL_ATTESTATION_WORKFLOW_RUN={run_id}')
+          print(f'P1_FINAL_ATTESTATION_ARTIFACT_ID={artifact.get("id")}')
+          PY
+          }
+          export TARGET
+          if ! verify_artifact 2>/tmp/p1-attestation-missing.txt; then
+            if [[ "${APPLY_PRODUCTION_WRITE}" != "true" ]]; then
+              echo "P1 completion attestation is pending; dry-run will not dispatch it."
+              echo "verified=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "Dispatching P1 final completion attestation for V3 verification run ${TRIGGER_RUN_ID}."
+            gh workflow run p1-final-completion-attestation.yml               --repo "$GITHUB_REPOSITORY" --ref main               -f trigger_run_id="$TRIGGER_RUN_ID"
+            for attempt in $(seq 1 30); do
+              if verify_artifact 2>/dev/null; then
+                echo "verified=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              sleep 10
+            done
+            echo "P1 final completion attestation did not become available within the controller wait window." >&2
+            exit 1
+          fi
+          echo "P1 final completion attestation already verified."
+          echo "verified=true" >> "$GITHUB_OUTPUT"
+
+      - name: Retire V3 daily resume after successful final verification
+        if: steps.daily_guard.outputs.blocked != 'true' && steps.cleanup_state.outputs.state == 'complete' && steps.operation_plan.outputs.next_operation == 'complete' && steps.final_verify_state.outputs.verified == 'true' && steps.final_attestation_state.outputs.verified == 'true' && env.APPLY_PRODUCTION_WRITE == 'true'
         shell: bash
         run: |
-          echo "Final P1 V3 verification succeeded in run ${{ steps.final_verify_state.outputs.successful_run_id }}."
+          echo "Final P1 V3 verification and completion attestation succeeded for run ${{ steps.final_verify_state.outputs.successful_run_id }}."
           gh api --method PUT -H "Accept: application/vnd.github+json" \
             "repos/${GITHUB_REPOSITORY}/actions/workflows/p1-quota-safe-daily-resume.yml/disable"
           echo "P1 V3 daily resume retired after verified completion."

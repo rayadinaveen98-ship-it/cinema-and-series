@@ -1,16 +1,19 @@
 name: P1 Final Completion Attestation
 
 on:
-  workflow_run:
-    workflows: ["Recommendation Metadata Production Write V3"]
-    types: [completed]
+  workflow_dispatch:
+    inputs:
+      trigger_run_id:
+        description: "Successful main Recommendation Metadata Production Write V3 run to attest"
+        required: true
+        type: string
 
 permissions:
   actions: read
   contents: read
 
 concurrency:
-  group: p1-final-completion-attestation-${{ github.event.workflow_run.id }}
+  group: p1-final-completion-attestation-${{ inputs.trigger_run_id }}
   cancel-in-progress: false
 
 env:
@@ -30,18 +33,37 @@ env:
 
 jobs:
   attest-final:
-    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      TRIGGER_RUN_ID: ${{ github.event.workflow_run.id }}
+      TRIGGER_RUN_ID: ${{ inputs.trigger_run_id }}
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
+
+      - name: Validate successful main V3 triggering run
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api -H "Accept: application/vnd.github+json"             "repos/${GITHUB_REPOSITORY}/actions/runs/${TRIGGER_RUN_ID}"             > /tmp/p1-trigger-run.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          run=json.loads(Path('/tmp/p1-trigger-run.json').read_text(encoding='utf-8'))
+          if run.get('name') != 'Recommendation Metadata Production Write V3':
+              raise SystemExit(f"unexpected triggering workflow: {run.get('name')}")
+          if run.get('path') != '.github/workflows/recommendation-metadata-production-write-v3.yml':
+              raise SystemExit(f"unexpected triggering workflow path: {run.get('path')}")
+          if run.get('head_branch') != 'main':
+              raise SystemExit(f"triggering workflow is not on main: {run.get('head_branch')}")
+          if run.get('conclusion') != 'success':
+              raise SystemExit(f"triggering workflow is not successful: {run.get('conclusion')}")
+          print(f"P1_FINAL_ATTESTATION_TRIGGER_RUN_VERIFIED={os.environ['TRIGGER_RUN_ID']}")
+          PY
 
       - name: Require exact final-verification artifact on triggering run
         id: final_artifact

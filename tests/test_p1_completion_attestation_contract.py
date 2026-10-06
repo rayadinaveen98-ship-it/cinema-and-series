@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/p1-final-completion-attestation.yml"
 WRITER = ROOT / ".github/workflows/recommendation-metadata-production-write-v3.yml"
+CONTROLLER = ROOT / ".github/workflows/p1-quota-safe-daily-resume.yml"
 SCRIPT = ROOT / "scripts/build_p1_completion_attestation.py"
 
 PROJECTION_SHA = "f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6"
@@ -16,19 +17,30 @@ class P1CompletionAttestationContractTests(unittest.TestCase):
     def setUp(self):
         self.workflow = WORKFLOW.read_text(encoding="utf-8")
         self.writer = WRITER.read_text(encoding="utf-8")
+        self.controller = CONTROLLER.read_text(encoding="utf-8")
         self.script = SCRIPT.read_text(encoding="utf-8")
 
-    def test_follows_only_completed_v3_writer_runs(self):
-        self.assertIn('workflows: ["Recommendation Metadata Production Write V3"]', self.workflow)
-        self.assertIn("types: [completed]", self.workflow)
-        self.assertIn("github.event.workflow_run.conclusion == 'success'", self.workflow)
-        self.assertIn("github.event.workflow_run.head_branch == 'main'", self.workflow)
+    def test_requires_explicit_successful_main_v3_trigger_run(self):
+        self.assertIn("workflow_dispatch:", self.workflow)
+        self.assertIn("trigger_run_id:", self.workflow)
+        self.assertIn("Validate successful main V3 triggering run", self.workflow)
+        self.assertIn("Recommendation Metadata Production Write V3", self.workflow)
+        self.assertIn("run.get('conclusion')", self.workflow)
+        self.assertIn("run.get('head_branch')", self.workflow)
+        self.assertIn("run.get('path')", self.workflow)
 
     def test_non_final_writer_runs_are_noop(self):
         self.assertIn("Require exact final-verification artifact on triggering run", self.workflow)
         self.assertIn("recommendation-metadata-production-write-v3-verify_final-final", self.workflow)
         self.assertIn("is_final", self.workflow)
         self.assertIn("non_final_writer", self.workflow)
+
+    def test_controller_dispatches_attestation_before_retirement(self):
+        self.assertIn("p1-final-completion-attestation.yml", self.controller)
+        self.assertIn("trigger_run_id", self.controller)
+        self.assertIn("P1 completion attestation is pending", self.controller)
+        self.assertIn("final_attestation_state.outputs.verified == 'true'", self.controller)
+        self.assertIn("actions: write", self.controller)
 
     def test_completion_attestation_reuses_all_locked_p1_fingerprints(self):
         for value in (PROJECTION_SHA, GRAPH_SHA, ATTESTATION_SHA):
