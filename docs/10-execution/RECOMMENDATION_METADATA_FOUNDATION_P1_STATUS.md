@@ -336,7 +336,7 @@ The 2026-10-05 read-only snapshot `37274482671` independently reports:
 - orphan/provenance violations: **0 / 0 / 0 / 0**
 - exact projection SHA: `f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6`
 
-The population is complete, but this checkpoint does **not** declare P1 complete. The exact production graph verifier, Catalogue Quality V1 S0/S1 gate, deterministic completion attestation, final verification artifact, and controller retirement remain mandatory.
+The population is complete, but this historical checkpoint did **not** declare P1 complete. The final graph verification, Catalogue Quality V1 S0/S1 gate, and final verification artifact have since passed on 2026-10-06 UTC; controller retirement and post-P1 handoff remain pending.
 
 ## Final verification checkpoint — 2026-10-06 UTC
 
