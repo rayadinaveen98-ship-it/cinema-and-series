@@ -320,24 +320,39 @@ The controller schedule may be delayed by GitHub. Safety depends on the UTC guar
 16. physical shard 9 ✅
 17. physical shard 10 ✅
 18. physical shard 11 ✅
-19. physical shards **12–15** ⏳ — **4 operations remain**
-20. final exact production graph verification ⏳
-21. Catalogue Quality V1 **S0 = 0 / S1 = 0** ⏳
-22. deterministic P1 completion attestation + final production evidence ⏳
-23. mark P1 COMPLETE / retire P1 controller ⏳
+19. physical shard 12 ✅
+20. physical shard 13 ✅
+21. physical shard 14 ✅
+22. physical shard 15 ✅
+23. final exact production graph verification ⏳
+24. Catalogue Quality V1 **S0 = 0 / S1 = 0** ⏳
+25. deterministic P1 completion attestation + final production evidence ⏳
+26. mark P1 COMPLETE / retire P1 controller ⏳
 
-## Next operation
+## Final population checkpoint — 2026-10-05 UTC
 
-On the next fresh, unreserved UTC quota day, the controller must observe:
+The scheduled V3 writers completed the final three physical operations without bypassing the daily guard:
 
-- `topup`, `1`, `2`, `3`, `4`, `5`, `6`, `7`, `9`, `10`, `11` = complete
-- physical shard `12` = `not_started`
+| Operation | Controller / guard | Writer | Reviewed | Actual D1 rows | Artifact |
+|---|---|---|---:|---:|---|
+| 13 | `37099854552:13` | `37099902617` | 47,836 | **41,768** | `11266145036` / `865a0ff699937c11b92e3000d1154d039b2d506aa73b5d4fd1a96cd764b8b29b` |
+| 14 | `37181634385:14` | `37181690483` | 41,466 | **36,370** | `11294419178` / `c89d640c8e89a2aeaa5f56ab320ccd39eae7c612a2a22a6547bd9081ba6edcfc` |
+| 15 | `37269736740:15` | `37269800819` | 42,118 | **37,002** | `11327634324` / `151e045055cb63cbaf048e8ec39f3e8a83c7bc3e4a48ef94e44c91e7dbbc088f` |
 
-It should then reserve that UTC day for **physical shard 12**, reviewed at **39,166 D1 rows written**.
+The 2026-10-05 read-only snapshot `37274482671` independently reports:
 
-The 2026-10-01 UTC guard is already owned by **`36823178729:11`**. Do not reset, delete, reuse, or bypass that reservation. Do not bypass the permanent controller if GitHub's scheduled execution is delayed.
+- completed operations: **15 / 15**
+- overall operation state: `operations_complete`
+- exit gate: `ready_for_final_verification`
+- final verification eligible: **true**
+- next operation: `complete`
+- P1 exit-ready: **true**
+- source cleanup: complete
+- production counts: **16,380 / 612 / 37,964 / 16,489 / 70,551**
+- orphan/provenance violations: **0 / 0 / 0 / 0**
+- exact projection SHA: `f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6`
 
-After shards 12, 13, 14, and 15 are complete, the controller is expected to dispatch the read-only final V3 verification path. P1 still does not exit on counts alone: exact graph SHA, integrity/provenance, reviewed cleanup state, and Catalogue Quality S0/S1 must all pass.
+The population is complete, but this checkpoint does **not** declare P1 complete. The exact production graph verifier, Catalogue Quality V1 S0/S1 gate, deterministic completion attestation, final verification artifact, and controller retirement remain mandatory.
 
 ## P1 exit rule
 
