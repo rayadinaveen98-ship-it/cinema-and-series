@@ -26,6 +26,7 @@ P1 remains active, but the full corrected production population is now complete 
 - Catalogue Quality V1: **S0 = 0 / S1 = 0**
 - final graph verification: **passed with production_mutation=false**
 - controller retirement: **pending**
+- post-merge main CI: **run 37483607918 — success**
 
 No further recommendation metadata mutation is authorized. P1 is **not yet declared COMPLETE** because the permanent controller must still observe the successful final-verification artifact and retire the daily resume workflow, after which the post-P1 handoff can be recorded.
 
