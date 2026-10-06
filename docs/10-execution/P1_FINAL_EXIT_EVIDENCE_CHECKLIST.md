@@ -2,7 +2,7 @@
 
 **Status:** PREPARED / USE ONLY AFTER ALL V3 PRODUCTION OPERATIONS COMPLETE  
 **Prepared:** 2026-09-22  
-**Checkpoint updated:** 2026-10-02  
+**Checkpoint updated:** 2026-10-06  
 **Active phase:** P1 — Recommendation Metadata Foundation  
 **Authoritative status:** `docs/10-execution/RECOMMENDATION_METADATA_FOUNDATION_P1_STATUS.md`
 
@@ -61,9 +61,9 @@ Counts alone are insufficient. Final production must reproduce the exact reviewe
 | 10 | 36,946 | **complete 2026-09-30** |
 | 11 | 40,223 | **complete 2026-10-01** |
 | 12 | 39,166 | **complete 2026-10-02** |
-| 13 | 47,836 | **next** |
-| 14 | 41,466 | pending |
-| 15 | 42,118 | pending |
+| 13 | 47,836 | **complete 2026-10-03** |
+| 14 | 41,466 | **complete 2026-10-04** |
+| 15 | 42,118 | **complete 2026-10-05** |
 
 Physical partitions 0 and 8 are inherited from reviewed parent shard 0 and must not be rewritten as full V3 operations.
 
@@ -278,7 +278,7 @@ Required final counters:
 - orphan `title_genres` = **0**
 - orphan `title_credits` = **0**
 
-The final population checkpoint is clean, but the exact graph verifier and final quality gates are still required.
+The final verifier recorded orphan title_genres = **0** and orphan title_credits = **0**.
 
 ---
 
@@ -296,6 +296,8 @@ Locked canonical relationships remain:
 - Series creator — `P170`
 - cast — `P161`
 
+The final verifier recorded invalid genre provenance = **0** and invalid credit provenance = **0**.
+
 ---
 
 ## Gate G — exact final counts
@@ -308,7 +310,7 @@ Required final production counts:
 - title-genres = **16,489**
 - title-credits = **70,551**
 
-Counts and exact graph SHA must both match.
+Counts and exact graph SHA both match in final verifier run **37424321924**.
 
 ---
 
@@ -319,7 +321,7 @@ Required final result:
 - **S0 = 0**
 - **S1 = 0**
 
-Preserve workflow/run ID, head SHA, artifact identity/digest, and observations.
+**PASSED** in final verifier run **37424321924**: S0 = **0**, S1 = **0**. Evidence is preserved in the final verification artifact.
 
 ---
 
@@ -335,30 +337,40 @@ Required after all writes and final graph/quality checks:
 - Catalogue Quality clean
 - P1 exit-ready = true
 
-Snapshot is corroboration, not a replacement for the exact graph verifier.
+Snapshot remains corroboration, not a replacement for the exact graph verifier. The exact graph verifier has now passed.
 
 ---
 
 ## Gate J — final verification artifact
 
+**PASSED — final verifier run 37424321924.**
+
 Expected artifact:
 
-`recommendation-metadata-production-write-v3-verify_final-final`
+recommendation-metadata-production-write-v3-verify_final-final
 
-Record final verifier run ID, artifact ID, ZIP SHA-256, verified graph SHA, and projection SHA.
+Recorded evidence:
+
+- final verifier run ID: **37424321924**
+- artifact ID: **11394510831**
+- GitHub artifact digest: **sha256:2300a514b88829d99f8334af213472457ee930a425946ac052c7e9ab5081374f**
+- verified graph SHA: **9a931b9a7ef081dd8579f67218de14d086515f4cc4bfa20cacb3edb2b8379b78**
+- projection SHA: **f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6**
+- immutable artifact-attestation SHA: **8eb39db7964c03e968b26aeccaa33f4b0f85c422fe4c08471ee7ec95510e2986**
+- verifier result: **success / read-only**
 
 ---
 
 ## Gate K — controller retirement
 
-The daily P1 controller retires only after successful final verification evidence exists.
+**PENDING.** The successful final-verification artifact now exists, but the permanent controller has not yet executed its retirement step.
 
-Verify:
+The daily P1 controller is designed to retire only after it observes the successful final-verification artifact.
 
-- it did not retire after the last write alone
-- final verification was read-only
-- final verification artifact was observed
-- no future scheduled recommendation mutation can continue accidentally
+- final verification was read-only ✅
+- final verification artifact was produced and preserved ✅
+- controller retirement step: **pending**
+- no further P1 recommendation mutation is authorized while retirement is pending
 
 ---
 
@@ -470,6 +482,29 @@ Fill only when closure is genuinely ready.
 - approved workflows resumed:
 - workflows intentionally kept disabled:
 - post-P1 migration ownership confirmed:
+
+---
+
+## 2026-10-06 final verification checkpoint
+
+The permanent controller run **37424224029** detected all 15 production operations complete and dispatched the final read-only verification run **37424321924**.
+
+Final verifier evidence:
+
+- mode: **verify_final**
+- operation: **final**
+- production mutation: **false**
+- projection: **16,380 / 6,562 / 9,818**
+- production graph: **16,380 / 612 / 37,964 / 16,489 / 70,551**
+- graph SHA: **9a931b9a7ef081dd8579f67218de14d086515f4cc4bfa20cacb3edb2b8379b78**
+- projection SHA: **f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6**
+- orphan/provenance violations: **0 / 0 / 0 / 0**
+- Catalogue Quality V1: **S0 = 0 / S1 = 0**
+- artifact: **recommendation-metadata-production-write-v3-verify_final-final**
+- artifact ID: **11394510831**
+- artifact digest: **sha256:2300a514b88829d99f8334af213472457ee930a425946ac052c7e9ab5081374f**
+
+P1 remains **ACTIVE / NOT COMPLETE** solely because controller retirement and the post-P1 operational handoff are still pending.
 
 ---
 
