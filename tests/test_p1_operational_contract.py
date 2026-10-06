@@ -43,8 +43,11 @@ class P1OperationalContractTests(unittest.TestCase):
         self.youtube_monitor = read(YOUTUBE_MONITOR)
         self.website_monitor = read(WEBSITE_MONITOR)
 
-    def test_p1_population_is_explicitly_in_progress(self):
-        self.assertIn("PRODUCTION POPULATION IN PROGRESS", self.status)
+    def test_p1_remains_active_until_controller_retirement(self):
+        self.assertTrue(
+            "FINAL VERIFICATION PASSED — CONTROLLER RETIREMENT PENDING" in self.status
+            or "**Status:** P1 COMPLETE" in self.status
+        )
         self.assertIn("P1 exits only after", self.status)
 
     def test_migration_numbering_is_frozen_through_0022_while_p1_is_active(self):
