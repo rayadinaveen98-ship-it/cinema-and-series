@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: p1-final-completion-attestation-${{ github.event.workflow_run.id }}
+  group: p1-final-completion-attestation-${{ inputs.trigger_run_id }}
   cancel-in-progress: false
 
 env:
