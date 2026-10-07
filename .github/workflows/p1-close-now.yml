@@ -1,0 +1,139 @@
+name: P1 Close Now
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  actions: write
+  contents: read
+
+env:
+  FINAL_VERIFY_RUN_ID: "37424321924"
+  FINAL_VERIFY_ARTIFACT: "recommendation-metadata-production-write-v3-verify_final-final"
+  REVIEWED_ANALYSIS_RUN_ID: "35428784454"
+  REVIEWED_ARTIFACT: "recommendation-metadata-materialization-v3-repartitioned"
+  EXPECTED_FINAL_VERIFY_DIGEST: "sha256:2300a514b88829d99f8334af213472457ee930a425946ac052c7e9ab5081374f"
+  EXPECTED_ARTIFACT_ATTESTATION_SHA256: "8eb39db7964c03e968b26aeccaa33f4b0f85c422fe4c08471ee7ec95510e2986"
+  EXPECTED_PROJECTION_SHA256: "f26f6218a43c843dd12bbe14e461d9b8264dc26ab06244957bcd5d5042512ff6"
+  EXPECTED_GRAPH_SHA256: "9a931b9a7ef081dd8579f67218de14d086515f4cc4bfa20cacb3edb2b8379b78"
+  EXPECTED_CANDIDATES: "16380"
+  EXPECTED_MOVIES: "6562"
+  EXPECTED_SERIES: "9818"
+  EXPECTED_GENRES: "612"
+  EXPECTED_PEOPLE: "37964"
+  EXPECTED_GENRE_RELATIONS: "16489"
+  EXPECTED_CREDIT_RELATIONS: "70551"
+
+jobs:
+  close-p1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Verify final verification artifact
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/actions/runs/${FINAL_VERIFY_RUN_ID}/artifacts?per_page=100" > /tmp/final-artifacts.json
+          python - <<'PY'
+          import json, os
+          payload=json.load(open('/tmp/final-artifacts.json', encoding='utf-8'))
+          target=os.environ['FINAL_VERIFY_ARTIFACT']
+          matches=[a for a in payload.get('artifacts') or []
+                   if a.get('name')==target and not a.get('expired')
+                   and a.get('digest')==os.environ['EXPECTED_FINAL_VERIFY_DIGEST']]
+          if len(matches)!=1:
+              raise SystemExit(f'expected exactly one matching final verification artifact, found {len(matches)}')
+          print(f"verified final artifact id={matches[0]['id']} digest={matches[0]['digest']}")
+          PY
+
+      - name: Restore final verification evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.FINAL_VERIFY_ARTIFACT }}
+          path: data/generated/final-verify-evidence
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.FINAL_VERIFY_RUN_ID }}
+
+      - name: Restore immutable reviewed V3 attestation
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.REVIEWED_ARTIFACT }}
+          path: data/generated/reviewed-v3
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          run-id: ${{ env.REVIEWED_ANALYSIS_RUN_ID }}
+
+      - name: Verify immutable V3 attestation digest
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import hashlib, os
+          from pathlib import Path
+          p=Path('data/generated/reviewed-v3/artifact-attestation-v3.json')
+          digest=hashlib.sha256(p.read_bytes()).hexdigest()
+          if digest != os.environ['EXPECTED_ARTIFACT_ATTESTATION_SHA256']:
+              raise SystemExit(f'V3 attestation digest mismatch: {digest}')
+          print(f'verified V3 attestation digest={digest}')
+          PY
+
+      - name: Build fail-closed P1 completion attestation
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/p1-completion
+          python scripts/build_p1_completion_attestation.py \
+            --attestation data/generated/reviewed-v3/artifact-attestation-v3.json \
+            --projection-manifest data/generated/final-verify-evidence/projection/manifest.json \
+            --graph-verification data/generated/final-verify-evidence/final/graph-verification.json \
+            --integrity-json data/generated/final-verify-evidence/integrity.json \
+            --catalogue-quality data/generated/final-verify-evidence/final/catalogue-quality-v1.json \
+            --source-movies data/generated/final-verify-evidence/source-movies.json \
+            --source-catalogue data/generated/final-verify-evidence/source-catalogue.json \
+            --source-series data/generated/final-verify-evidence/source-series.json \
+            --expected-attestation-sha256 "$EXPECTED_ARTIFACT_ATTESTATION_SHA256" \
+            --expected-projection-sha256 "$EXPECTED_PROJECTION_SHA256" \
+            --expected-graph-sha256 "$EXPECTED_GRAPH_SHA256" \
+            --expected-candidates "$EXPECTED_CANDIDATES" \
+            --expected-movies "$EXPECTED_MOVIES" \
+            --expected-series "$EXPECTED_SERIES" \
+            --expected-genres "$EXPECTED_GENRES" \
+            --expected-people "$EXPECTED_PEOPLE" \
+            --expected-genre-relations "$EXPECTED_GENRE_RELATIONS" \
+            --expected-credit-relations "$EXPECTED_CREDIT_RELATIONS" \
+            --out data/generated/p1-completion/p1-completion-attestation.json
+
+      - name: Publish P1 completion attestation
+        uses: actions/upload-artifact@v4
+        with:
+          name: p1-final-completion-attestation-${{ env.FINAL_VERIFY_RUN_ID }}
+          path: data/generated/p1-completion/p1-completion-attestation.json
+          retention-days: 90
+          if-no-files-found: error
+
+      - name: Retire P1 daily resume controller
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh api --method PUT -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/p1-quota-safe-daily-resume.yml/disable"
+
+      - name: Retire this one-shot closure workflow
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if [[ "${{ job.status }}" == "success" ]]; then
+            gh api --method PUT -H "Accept: application/vnd.github+json" \
+              "repos/${GITHUB_REPOSITORY}/actions/workflows/p1-close-now.yml/disable"
+          fi
