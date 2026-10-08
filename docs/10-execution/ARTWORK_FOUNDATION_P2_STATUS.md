@@ -60,3 +60,8 @@ P2.3 is the bounded source-adapter and rights-qualified population design:
 8. then migrate Movie + Series consumers to the shared artwork projection.
 
 No production artwork population is authorized by this audit alone.
+
+
+## P2.3 adapter-contract checkpoint — 2026-10-08
+
+Implemented versioned read-only source adapter contracts for `wikimedia_commons_v1` and `internet_archive_v1`. Candidate normalization is deterministic and requires HTTPS source allowlisting, asset-level license identification, and rights-evidence URL. Publication remains fail-closed until source review is `APPROVED` and publication enablement is explicitly true. No discovery run or artwork publication has been executed.
