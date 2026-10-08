@@ -1,4 +1,4 @@
-name: Android APK
+name: Android APK — Phase 2 Final
 
 on:
   push:
@@ -57,9 +57,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="p1-apk-${{ github.run_number }}"
+          TAG="p2-final-apk-${{ github.run_number }}"
           gh release create "$TAG" "Cinema-and-Series-v1.0.0.apk" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Cinema & Series P1 APK $TAG" \
-            --notes "Debug APK built from commit $GITHUB_SHA for P1 validation."
+            --title "Cinema & Series Phase 2 Final APK $TAG" \
+            --notes "Phase 2 final APK built from commit $GITHUB_SHA. Artwork remains fail-closed where rights-qualified production assets are unavailable."
