@@ -29,10 +29,15 @@ class P2ArtworkSelectorContractTests(unittest.TestCase):
 
     def test_context_and_delivery_checks_fail_closed(self):
         self.assertIn("if (candidate.validFrom && after(candidate.validFrom, nowIso)) return false;", self.selector)
+        self.assertIn("if (candidate.validFrom && !Number.isFinite(Date.parse(candidate.validFrom))) return false;", self.selector)
+        self.assertIn("if (candidate.validUntil && !Number.isFinite(Date.parse(candidate.validUntil))) return false;", self.selector)
         self.assertIn("if (candidate.validUntil && !after(candidate.validUntil, nowIso)) return false;", self.selector)
         self.assertIn("if (candidate.territoryCode && candidate.territoryCode !== territory) return false;", self.selector)
         self.assertIn("if (!httpsUrl(candidate.deliveryUrl)) return false;", self.selector)
         self.assertIn("if (candidate.attributionRequired && !candidate.attributionText?.trim()) return false;", self.selector)
+
+    def test_locale_fallback_is_closed_by_default(self):
+        self.assertIn(".filter((c) => localeRank(c, language, territory) < 4)", self.selector)
 
     def test_rights_first_deterministic_order(self):
         self.assertIn("localeRank(a, language, territory), rightsRank(a)", self.selector)
