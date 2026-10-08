@@ -57,10 +57,11 @@ class P1OperationalContractTests(unittest.TestCase):
                 numbered.append((int(match.group(1)), path.name))
         self.assertTrue(numbered, "no numbered migrations found")
         highest = max(numbered)
-        self.assertEqual(highest[0], 23, f"expected P2.1 migration 0023, found {highest[1]}")
+        self.assertEqual(highest[0], 24, f"expected latest P2 migration 0024, found {highest[1]}")
         self.assertTrue((MIGRATIONS / "0021_recommendation_metadata_foundation.sql").exists())
         self.assertTrue((MIGRATIONS / "0022_recommendation_materialization_daily_guard.sql").exists())
         self.assertTrue((MIGRATIONS / "0023_artwork_foundation_v2.sql").exists())
+        self.assertTrue((MIGRATIONS / "0024_artwork_sources_and_rights_evidence.sql").exists())
 
     def test_daily_controller_writer_and_cleanup_share_v3_projection_lock(self):
         for workflow in (self.daily, self.writer, self.cleanup):
