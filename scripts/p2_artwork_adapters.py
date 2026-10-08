@@ -64,6 +64,18 @@ def validate_candidate(candidate: ArtworkCandidate) -> None:
         raise ValueError("rights evidence URL must use HTTPS")
 
 
+
+def can_publish_candidate(
+    candidate: ArtworkCandidate,
+    *,
+    source_review_status: str,
+    source_enabled_for_publication: bool,
+) -> bool:
+    """Return True only when source policy and asset rights are both approved."""
+    validate_candidate(candidate)
+    return source_review_status == "APPROVED" and source_enabled_for_publication
+
+
 def normalize_candidate(raw: dict, *, source_key: SourceKey) -> ArtworkCandidate:
     """Normalize adapter output deterministically; does not fetch or publish."""
     candidate = ArtworkCandidate(
