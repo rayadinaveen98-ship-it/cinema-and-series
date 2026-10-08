@@ -1,0 +1,66 @@
+name: P2 Artwork Review
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_key:
+        description: "Reviewed source adapter to exercise against checked-in review fixtures"
+        required: true
+        type: choice
+        options:
+          - wikimedia_commons
+          - internet_archive
+      max_candidates:
+        description: "Maximum candidates per title (hard ceiling: 100)"
+        required: true
+        default: "25"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  review-only:
+    name: Bounded review-only discovery
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate hard ceiling
+        env:
+          MAX_CANDIDATES: ${{ inputs.max_candidates }}
+        run: |
+          python - <<'PY'
+          import os
+          value = int(os.environ["MAX_CANDIDATES"])
+          if not 1 <= value <= 100:
+              raise SystemExit("max_candidates must be between 1 and 100")
+          PY
+
+      - name: Run P2 artwork tests
+        run: python -m unittest discover -s tests -p 'test_p2_artwork*.py' -v
+
+      - name: Generate review artifact
+        env:
+          SOURCE_KEY: ${{ inputs.source_key }}
+          MAX_CANDIDATES: ${{ inputs.max_candidates }}
+        run: |
+          python scripts/p2_artwork_discovery_review.py             --identities tests/fixtures/p2_artwork_review_identities.json             --records tests/fixtures/p2_artwork_review_records.json             --source-key "$SOURCE_KEY"             --max-candidates "$MAX_CANDIDATES"             --output p2-artwork-review.json
+
+      - name: Assert no production publication
+        run: |
+          python - <<'PY'
+          import json
+          payload = json.load(open("p2-artwork-review.json", encoding="utf-8"))
+          assert payload["read_only"] is True
+          assert payload["publication_performed"] is False
+          assert payload["production_writes_performed"] is False
+          PY
+
+      - name: Upload review artifact
+        uses: actions/upload-artifact@v5
+        with:
+          name: p2-artwork-review
+          path: p2-artwork-review.json
+          if-no-files-found: error
