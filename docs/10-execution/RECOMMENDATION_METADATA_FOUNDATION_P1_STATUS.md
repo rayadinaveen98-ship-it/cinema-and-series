@@ -1,12 +1,12 @@
 # Recommendation Metadata Foundation P1 — Execution Status
 
-**Status:** FINAL VERIFICATION PASSED — CONTROLLER RETIREMENT PENDING  
+**Status:** COMPLETE — FINAL VERIFICATION + CLOSURE ATTESTATION PASSED  
 **Date:** 2026-10-06  
 **Parent roadmap:** `PERSONALIZED_DISCOVERY_ACTIVE_ROADMAP_V1.md`
 
 ## Current authoritative state
 
-P1 remains active, but the full corrected production population is now complete and the final read-only verification has passed.
+P1 is formally complete. The full corrected production population is complete, final read-only verification passed, and the one-shot closure attestation retired the daily resume controller.
 
 - source cleanup — **2026-09-20 UTC**
 - topup — **2026-09-21 UTC**
@@ -25,7 +25,7 @@ P1 remains active, but the full corrected production population is now complete 
 - final verification artifact digest: **sha256:2300a514b88829d99f8334af213472457ee930a425946ac052c7e9ab5081374f**
 - Catalogue Quality V1: **S0 = 0 / S1 = 0**
 - final graph verification: **passed with production_mutation=false**
-- controller retirement: **pending**
+- controller retirement: **COMPLETE**
 - post-merge main CI: **run 37483607918 — success**
 
 No further recommendation metadata mutation is authorized. P1 is **not yet declared COMPLETE** because the permanent controller must still observe the successful final-verification artifact and retire the daily resume workflow, after which the post-P1 handoff can be recorded.
@@ -312,7 +312,7 @@ The controller schedule may be delayed by GitHub. Safety depends on the UTC guar
 23. final exact production graph verification ✅ — run **37424321924**
 24. Catalogue Quality V1 **S0 = 0 / S1 = 0** ✅ — run **37424321924**
 25. final production verification artifact/evidence preserved ✅ — artifact **11394510831**
-26. mark P1 COMPLETE / retire P1 controller ⏳
+26. mark P1 COMPLETE / retire P1 controller ✅ — closure run **37599383269**
 
 ## Final population checkpoint — 2026-10-05 UTC
 
@@ -357,10 +357,28 @@ Verified evidence:
 - final evidence artifact ID: **11394510831**
 - final evidence artifact digest: **sha256:2300a514b88829d99f8334af213472457ee930a425946ac052c7e9ab5081374f**
 
-The verifier explicitly reports production_mutation=false. The daily controller remains intentionally unretired until it observes this artifact on a controller run and disables itself. Do not perform any further P1 recommendation mutation.
+The verifier explicitly reports production_mutation=false. The closure run **37599383269** observed the final verification evidence, published the P1 completion attestation, and retired the daily resume controller. No further P1 recommendation mutation is authorized.
 
 ## P1 exit rule
 
 P1 exits only after the full corrected 16,380-title reviewed recommendation metadata foundation is present in production, the normalized production graph exactly matches V3 graph SHA `9a931b9a7ef081dd8579f67218de14d086515f4cc4bfa20cacb3edb2b8379b78`, referential/provenance checks pass, reviewed source cleanup remains exact, and post-write Catalogue Quality is **S0 = 0 / S1 = 0**.
 
 The deterministic P1 completion attestation may be emitted only after those final verification gates pass. P2 production implementation does not begin from a partial P1 materialization.
+
+
+## Formal P1 closure — 2026-10-08 UTC
+
+The final P1 handoff is closed.
+
+- closure commit: `6c9f1c83557e67fd3012bad6dccf2138cde176aa`
+- closure workflow: `p1-close-now.yml`
+- closure run: `37599383269`
+- closure job: `close-p1`
+- result: **success**
+- final verification artifact was revalidated;
+- immutable reviewed V3 attestation was restored and its digest verified;
+- P1 completion attestation was published;
+- the permanent P1 daily resume controller was retired;
+- the one-shot closure workflow was retired.
+
+This completion state authorizes the P2 production implementation gates defined in the locked Artwork Foundation P2 contract.
