@@ -1,0 +1,18 @@
+[
+  {
+    "source_title":"RRR",
+    "source_year":2022,
+    "source_asset_id":"rrr-fixture",
+    "source_page_url":"https://archive.org/details/rrr-fixture",
+    "delivery_url":"https://archive.org/download/rrr-fixture/poster.jpg",
+    "role":"POSTER",
+    "attribution":"Fixture Record",
+    "license_identifier":"Public Domain",
+    "rights_evidence_url":"https://archive.org/about/terms.php",
+    "language":"te",
+    "territory":"IN",
+    "width":1000,
+    "height":1500,
+    "discovered_at":"2026-10-08T00:00:00Z"
+  }
+]
