@@ -49,3 +49,5 @@ jobs:
           name: Cinema-and-Series-v1.0.0
           path: Cinema-and-Series-v1.0.0.apk
           retention-days: 30
+
+      # P1 closure APK build trigger.
