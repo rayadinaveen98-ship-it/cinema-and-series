@@ -23,6 +23,9 @@ type SeriesTitle = {
   wikidataQid?: string;
   title: string;
   nativeTitle?: string;
+  posterUrl?: string;
+  backdropUrl?: string;
+  artworkSource?: string;
   seriesKind: SeriesKind;
   language: string;
   countryCode?: string;
@@ -96,7 +99,7 @@ function useMovies(query: Record<string, string>, limit = 60) {
   const queryKey = JSON.stringify(query);
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({ limit: String(limit), offset: "0", ...query });
+    const params = new URLSearchParams({ limit: String(limit), offset: "0", artwork: "1", ...query });
     setLoading(true);
     fetch(`/api/movies?${params}`, { signal: controller.signal })
       .then((response) => { if (!response.ok) throw new Error("movies unavailable"); return response.json() as Promise<MovieResponse>; })
@@ -112,7 +115,7 @@ function useSeries(query: Record<string, string>, limit = 60) {
   const queryKey = JSON.stringify(query);
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({ limit: String(limit), offset: "0", ...query });
+    const params = new URLSearchParams({ limit: String(limit), offset: "0", artwork: "1", ...query });
     setLoading(true);
     fetch(`/api/series?${params}`, { signal: controller.signal })
       .then((response) => { if (!response.ok) throw new Error("series unavailable"); return response.json() as Promise<SeriesResponse>; })
@@ -176,7 +179,11 @@ function MovieCard({ movie, onOpen }: { movie: Movie; onOpen: (movie: Movie) => 
 function SeriesCard({ item, onOpen }: { item: SeriesTitle; onOpen: (item: SeriesTitle) => void }) {
   return (
     <button className={`media-card series-poster tone-${toneIndex(item.title)}`} onClick={() => onOpen(item)}>
-      <div className="media-art series-fallback"><span className="fallback-letter">{firstLetter(item.title)}</span><em className="kind-pill">{kindLabel(item.seriesKind)}</em></div>
+      <div className="media-art series-fallback">
+        {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
+        {!item.posterUrl ? <span className="fallback-letter">{firstLetter(item.title)}</span> : null}
+        <em className="kind-pill">{kindLabel(item.seriesKind)}</em>
+      </div>
       <div className="media-copy"><strong>{item.title}</strong><span>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"}</span></div>
     </button>
   );
@@ -211,7 +218,10 @@ function SeriesDetail({ item, onClose }: { item: SeriesTitle; onClose: () => voi
     <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
       <article className={`detail-sheet tone-${toneIndex(item.title)}`} role="dialog" aria-modal="true">
         <button className="modal-close" onClick={onClose}>×</button>
-        <div className="detail-hero"><span>{firstLetter(item.title)}</span><div><p>{kindLabel(item.seriesKind).toUpperCase()}</p><h2>{item.title}</h2><small>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"} · {countryLabel(item.countryCode)}</small></div></div>
+        <div className="detail-hero">
+          {item.backdropUrl || item.posterUrl ? <img src={item.backdropUrl || item.posterUrl} alt="" referrerPolicy="no-referrer" /> : <span>{firstLetter(item.title)}</span>}
+          <div><p>{kindLabel(item.seriesKind).toUpperCase()}</p><h2>{item.title}</h2><small>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"} · {countryLabel(item.countryCode)}</small></div>
+        </div>
         <div className="detail-content">
           <p>Series information stays inside Cinema & Series. External references are sources, not the browsing experience.</p>
           <div className="detail-facts"><span><b>Format</b>{kindLabel(item.seriesKind)}</span><span><b>Status</b>{item.lifecycleStatus === "unknown" ? "Not classified" : item.lifecycleStatus}</span><span><b>Seasons</b>{item.seasonCount ?? "—"}</span><span><b>Episodes</b>{item.episodeCount ?? "—"}</span></div>
