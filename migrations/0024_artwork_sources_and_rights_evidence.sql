@@ -42,8 +42,7 @@ INSERT OR IGNORE INTO artwork_sources
 (source_key, display_name, source_kind, canonical_base_url, adapter_key, rights_policy_url, enabled_for_discovery, enabled_for_publication)
 VALUES
 ('wikimedia_commons', 'Wikimedia Commons', 'OPEN_LICENSE_REPOSITORY', 'https://commons.wikimedia.org/', 'wikimedia_commons_v1', 'https://commons.wikimedia.org/wiki/Commons:Licensing', 0, 0),
-('internet_archive', 'Internet Archive', 'PUBLIC_DOMAIN_REPOSITORY', 'https://archive.org/', 'internet_archive_v1', 'https://archive.org/about/terms.php', 0, 0),
-('rightsholder_direct', 'Rightsholder Direct', 'RIGHTSHOLDER_DIRECT', 'https://example.invalid/', 'rightsholder_direct_v1', NULL, 0, 0);
+('internet_archive', 'Internet Archive', 'PUBLIC_DOMAIN_REPOSITORY', 'https://archive.org/', 'internet_archive_v1', 'https://archive.org/about/terms.php', 0, 0);
 
 CREATE TABLE IF NOT EXISTS artwork_source_review (
   source_key TEXT PRIMARY KEY REFERENCES artwork_sources(source_key),
