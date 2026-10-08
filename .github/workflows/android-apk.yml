@@ -8,6 +8,9 @@ on:
       - ".github/workflows/android-apk.yml"
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build-apk:
     runs-on: ubuntu-latest
@@ -43,11 +46,20 @@ jobs:
       - name: Prepare named APK
         run: cp android-app/app/build/outputs/apk/debug/app-debug.apk Cinema-and-Series-v1.0.0.apk
 
-      - name: Upload APK
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
           name: Cinema-and-Series-v1.0.0
           path: Cinema-and-Series-v1.0.0.apk
           retention-days: 30
 
-      # P1 closure APK build trigger.
+      - name: Publish APK release asset
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="p1-apk-${{ github.run_number }}"
+          gh release create "$TAG" "Cinema-and-Series-v1.0.0.apk" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Cinema & Series P1 APK $TAG" \
+            --notes "Debug APK built from commit $GITHUB_SHA for P1 validation."
