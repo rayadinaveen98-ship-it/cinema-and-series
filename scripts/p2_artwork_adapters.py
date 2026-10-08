@@ -11,6 +11,9 @@ from typing import Literal
 from urllib.parse import urlparse
 
 
+ADAPTER_VERSIONS = {"wikimedia_commons": "wikimedia_commons_v1", "internet_archive": "internet_archive_v1"}
+
+
 SourceKey = Literal["wikimedia_commons", "internet_archive"]
 ArtworkRole = Literal["POSTER", "BACKDROP", "LOGO", "THUMBNAIL"]
 
@@ -48,7 +51,7 @@ def validate_candidate(candidate: ArtworkCandidate) -> None:
     """Fail closed on source identity, URLs, and missing rights evidence."""
     if not candidate.source_asset_id.strip():
         raise ValueError("source_asset_id is required")
-    if candidate.source_key not in ALLOWED_HOSTS:
+    if candidate.source_key not in ALLOWED_HOSTS or ADAPTER_VERSIONS.get(candidate.source_key) is None:
         raise ValueError("unsupported source")
     for field_name, url in (
         ("source_page_url", candidate.source_page_url),
