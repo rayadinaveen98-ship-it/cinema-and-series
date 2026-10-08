@@ -18,7 +18,7 @@ class TitleIdentity:
     title_id: str
     title: str
     year: int | None
-    language: str | None
+    language: str | None = None
     territory: str = "IN"
 
 
