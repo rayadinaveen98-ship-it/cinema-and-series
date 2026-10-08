@@ -43,14 +43,13 @@ class P1OperationalContractTests(unittest.TestCase):
         self.youtube_monitor = read(YOUTUBE_MONITOR)
         self.website_monitor = read(WEBSITE_MONITOR)
 
-    def test_p1_remains_active_until_controller_retirement(self):
+    def test_p1_is_complete_after_controller_retirement(self):
         self.assertTrue(
-            "FINAL VERIFICATION PASSED — CONTROLLER RETIREMENT PENDING" in self.status
-            or "**Status:** P1 COMPLETE" in self.status
+            "**Status:** COMPLETE — FINAL VERIFICATION + CLOSURE ATTESTATION PASSED" in self.status
         )
         self.assertIn("P1 exits only after", self.status)
 
-    def test_migration_numbering_is_frozen_through_0022_while_p1_is_active(self):
+    def test_p2_migration_numbering_starts_after_p1_close(self):
         numbered = []
         for path in MIGRATIONS.glob("[0-9][0-9][0-9][0-9]_*.sql"):
             match = re.match(r"^(\d{4})_", path.name)
@@ -58,13 +57,10 @@ class P1OperationalContractTests(unittest.TestCase):
                 numbered.append((int(match.group(1)), path.name))
         self.assertTrue(numbered, "no numbered migrations found")
         highest = max(numbered)
-        self.assertEqual(
-            highest[0],
-            22,
-            f"P1 migration freeze violated by {highest[1]}; do not add 0023+ on main until P1 closes",
-        )
+        self.assertEqual(highest[0], 23, f"expected P2.1 migration 0023, found {highest[1]}")
         self.assertTrue((MIGRATIONS / "0021_recommendation_metadata_foundation.sql").exists())
         self.assertTrue((MIGRATIONS / "0022_recommendation_materialization_daily_guard.sql").exists())
+        self.assertTrue((MIGRATIONS / "0023_artwork_foundation_v2.sql").exists())
 
     def test_daily_controller_writer_and_cleanup_share_v3_projection_lock(self):
         for workflow in (self.daily, self.writer, self.cleanup):
