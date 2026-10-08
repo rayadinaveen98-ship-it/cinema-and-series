@@ -45,6 +45,7 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--movies", required=True, type=Path)
     parser.add_argument("--series", required=True, type=Path)
+    parser.add_argument("--catalogue-titles", required=True, type=Path)
     parser.add_argument("--territory", required=True)
     parser.add_argument("--evaluated-at", required=True)
     parser.add_argument("--output-dir", required=True, type=Path)
@@ -52,6 +53,7 @@ def main() -> int:
 
     movies = rows_from_wrangle_payload(args.movies)
     series = rows_from_wrangle_payload(args.series)
+    catalogue_titles = rows_from_wrangle_payload(args.catalogue_titles)
 
     titles: list[dict[str, Any]] = [
         {
@@ -70,6 +72,15 @@ def main() -> int:
             "language": row.get("language_name") or "unknown",
         }
         for row in series
+    )
+    titles.extend(
+        {
+            "media_type": "movie",
+            "source_table": "catalogue_titles",
+            "source_id": str(row["id"]),
+            "language": row.get("language_name") or "unknown",
+        }
+        for row in catalogue_titles
     )
 
     candidates: list[dict[str, Any]] = []
@@ -136,6 +147,7 @@ def main() -> int:
                 "titles": len(titles),
                 "movies": len(movies),
                 "series": len(series),
+                "catalogue_titles": len(catalogue_titles),
                 "candidates": len(candidates),
                 "territory": args.territory,
                 "evaluated_at": args.evaluated_at,
