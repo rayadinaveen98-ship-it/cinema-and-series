@@ -1,3 +1,4 @@
+import { resolveVisualArtwork } from "./visual-artwork";
 interface Env {
   DB?: D1Database;
 }
@@ -38,6 +39,8 @@ type SeriesRow = {
   episode_count: number | null;
   source_category: string;
   source_url: string;
+  poster_url: string | null;
+  backdrop_url: string | null;
   verification_status: "verified" | "supported" | "unconfirmed";
   updated_at: string | null;
 };
@@ -304,6 +307,10 @@ export default {
         env.DB.prepare("SELECT series_kind AS value, COUNT(*) AS count FROM series_titles GROUP BY series_kind ORDER BY count DESC, value ASC").all<FacetRow>(),
       ]);
 
+      const visualArtwork = url.searchParams.get("artwork") === "1"
+        ? await resolveVisualArtwork(rows.results.map((item) => item.wikidata_qid).filter((qid): qid is string => Boolean(qid)))
+        : new Map();
+
       const series = rows.results.map((item) => ({
         id: item.id,
         wikidataQid: item.wikidata_qid ?? undefined,
@@ -319,6 +326,9 @@ export default {
         seasonCount: item.season_count ?? undefined,
         episodeCount: item.episode_count ?? undefined,
         verificationStatus: item.verification_status,
+        posterUrl: item.poster_url ?? visualArtwork.get(item.wikidata_qid ?? "")?.posterUrl ?? undefined,
+        backdropUrl: item.backdrop_url ?? undefined,
+        artworkSource: item.poster_url ? "legacy" : visualArtwork.get(item.wikidata_qid ?? "")?.sourceName,
         sourceCategory: item.source_category,
         sourceUrl: item.source_url,
       }));
@@ -431,6 +441,10 @@ export default {
         ).bind(today, next7, next30).first<PeriodCountsRow>(),
       ]);
 
+      const visualArtwork = url.searchParams.get("artwork") === "1"
+        ? await resolveVisualArtwork(result.results.map((movie) => movie.wikidata_qid).filter((qid): qid is string => Boolean(qid)))
+        : new Map();
+
       const movies = result.results.map((movie) => ({
         id: movie.id,
         wikidataQid: movie.wikidata_qid ?? undefined,
@@ -444,10 +458,10 @@ export default {
         verificationStatus: movie.verification_status,
         releaseSource: movie.release_date_source,
         releaseSourceName: movie.release_source_name ?? undefined,
-        posterUrl: movie.poster_url ?? undefined,
+        posterUrl: movie.poster_url ?? visualArtwork.get(movie.wikidata_qid ?? "")?.posterUrl ?? undefined,
         backdropUrl: movie.backdrop_url ?? undefined,
-        artworkSource: movie.artwork_source ?? undefined,
-        artworkSourceUrl: movie.artwork_source_url ?? undefined,
+        artworkSource: movie.artwork_source ?? visualArtwork.get(movie.wikidata_qid ?? "")?.sourceName,
+        artworkSourceUrl: movie.artwork_source_url ?? visualArtwork.get(movie.wikidata_qid ?? "")?.sourceUrl ?? undefined,
       }));
       const latestUpdate = [statsResult?.latest_updated_at, sourcesResult?.latest_updated_at].filter((value): value is string => Boolean(value)).sort().at(-1);
       const filteredTotal = Number(filteredCount?.count ?? movies.length);
