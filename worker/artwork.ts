@@ -72,6 +72,8 @@ export function isArtworkEligible(candidate: ArtworkCandidate, nowIso: string, t
   if (!PUBLIC_HOSTING.has(candidate.hostingMode)) return false;
   if (candidate.takedownStatus !== "clear") return false;
   if (!candidate.rightsVerifiedAt || !atOrBefore(candidate.rightsVerifiedAt, nowIso)) return false;
+  if (candidate.validFrom && !Number.isFinite(Date.parse(candidate.validFrom))) return false;
+  if (candidate.validUntil && !Number.isFinite(Date.parse(candidate.validUntil))) return false;
   if (candidate.validFrom && after(candidate.validFrom, nowIso)) return false;
   if (candidate.validUntil && !after(candidate.validUntil, nowIso)) return false;
   if (candidate.territoryCode && candidate.territoryCode !== territory) return false;
@@ -113,7 +115,9 @@ function compareCandidates(a: ArtworkCandidate, b: ArtworkCandidate, language: s
   return 0;
 }
 export function selectArtwork(candidates: ArtworkCandidate[], role: ArtworkPresentationRole, language: string, territory: string, nowIso: string, requestedAspectRatio?: number): ArtworkSelection {
-  const eligible = candidates.filter((c) => c.role === role).filter((c) => isArtworkEligible(c, nowIso, territory))
+  const eligible = candidates.filter((c) => c.role === role)
+    .filter((c) => isArtworkEligible(c, nowIso, territory))
+    .filter((c) => localeRank(c, language, territory) < 4)
     .sort((a, b) => compareCandidates(a, b, language, territory, requestedAspectRatio));
   const winner = eligible[0];
   if (!winner) return { url: null, assetId: null, attribution: null, isFallback: true };
