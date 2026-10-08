@@ -26,11 +26,13 @@ class P2ArtworkAdapterTests(unittest.TestCase):
 
     def test_missing_rights_evidence_fails_closed(self):
         c = self.base()
-        validate_candidate(c.__class__(**{**c.__dict__, "rights_evidence_url": None}))
+        with self.assertRaises(ValueError):
+            validate_candidate(c.__class__(**{**c.__dict__, "rights_evidence_url": None}))
 
     def test_wrong_host_fails_closed(self):
         c = self.base()
-        validate_candidate(c.__class__(**{**c.__dict__, "delivery_url": "https://example.com/a.jpg"}))
+        with self.assertRaises(ValueError):
+            validate_candidate(c.__class__(**{**c.__dict__, "delivery_url": "https://example.com/a.jpg"}))
 
 
     def test_publication_requires_approved_source_and_enablement(self):
