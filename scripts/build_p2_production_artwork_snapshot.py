@@ -8,8 +8,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from scripts.build_p2_artwork_audit_snapshot import build_snapshot, render_snapshot
-from scripts import p2_artwork_coverage_audit as audit
+try:
+    from scripts.build_p2_artwork_audit_snapshot import build_snapshot, render_snapshot
+    from scripts import p2_artwork_coverage_audit as audit
+except ModuleNotFoundError:
+    from build_p2_artwork_audit_snapshot import build_snapshot, render_snapshot
+    import p2_artwork_coverage_audit as audit
 
 
 def rows_from_wrangle_payload(path: Path) -> list[dict[str, Any]]:
