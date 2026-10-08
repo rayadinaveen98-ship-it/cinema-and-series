@@ -46,7 +46,17 @@ jobs:
           SOURCE_KEY: ${{ inputs.source_key }}
           MAX_CANDIDATES: ${{ inputs.max_candidates }}
         run: |
-          python scripts/p2_artwork_discovery_review.py             --identities tests/fixtures/p2_artwork_review_identities.json             --records tests/fixtures/p2_artwork_review_records.json             --source-key "$SOURCE_KEY"             --max-candidates "$MAX_CANDIDATES"             --output p2-artwork-review.json
+          case "$SOURCE_KEY" in
+            wikimedia_commons) RECORDS_FILE="tests/fixtures/p2_artwork_review_records.json" ;;
+            internet_archive) RECORDS_FILE="tests/fixtures/p2_artwork_review_records_internet_archive.json" ;;
+            *) echo "Unsupported source"; exit 1 ;;
+          esac
+          python scripts/p2_artwork_discovery_review.py \
+            --identities tests/fixtures/p2_artwork_review_identities.json \
+            --records "$RECORDS_FILE" \
+            --source-key "$SOURCE_KEY" \
+            --max-candidates "$MAX_CANDIDATES" \
+            --output p2-artwork-review.json
 
       - name: Assert no production publication
         run: |
