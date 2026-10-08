@@ -1,6 +1,6 @@
 import unittest
 
-from scripts.p2_artwork_adapters import ArtworkCandidate, normalize_candidate, validate_candidate
+from scripts.p2_artwork_adapters import ArtworkCandidate, can_publish_candidate, normalize_candidate, validate_candidate
 
 
 class P2ArtworkAdapterTests(unittest.TestCase):
@@ -31,6 +31,13 @@ class P2ArtworkAdapterTests(unittest.TestCase):
     def test_wrong_host_fails_closed(self):
         c = self.base()
         validate_candidate(c.__class__(**{**c.__dict__, "delivery_url": "https://example.com/a.jpg"}))
+
+
+    def test_publication_requires_approved_source_and_enablement(self):
+        c = self.base()
+        self.assertFalse(can_publish_candidate(c, source_review_status="UNREVIEWED", source_enabled_for_publication=True))
+        self.assertFalse(can_publish_candidate(c, source_review_status="APPROVED", source_enabled_for_publication=False))
+        self.assertTrue(can_publish_candidate(c, source_review_status="APPROVED", source_enabled_for_publication=True))
 
     def test_normalization_is_deterministic(self):
         raw = {
