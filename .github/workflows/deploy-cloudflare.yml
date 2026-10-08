@@ -56,9 +56,30 @@ jobs:
         if: steps.cloudflare.outputs.ready == 'true'
         run: python scripts/cloudflare_bootstrap.py
 
-      - name: Apply D1 migrations
+      - name: Apply D1 migrations when schema changed
         if: steps.cloudflare.outputs.ready == 'true'
-        run: npx wrangler d1 migrations apply cinema-and-series --remote
+        env:
+          EVENT_BEFORE: ${{ github.event.before }}
+        shell: bash
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            npx wrangler d1 migrations apply cinema-and-series --remote
+            exit 0
+          fi
+
+          if [[ -z "$EVENT_BEFORE" || "$EVENT_BEFORE" =~ ^0+$ ]]; then
+            echo "No reliable push base SHA; applying D1 migrations."
+            npx wrangler d1 migrations apply cinema-and-series --remote
+            exit 0
+          fi
+
+          git fetch --no-tags --depth=1 origin "$EVENT_BEFORE"
+          if git diff --name-only "$EVENT_BEFORE" "$GITHUB_SHA" -- migrations/ | grep -q .; then
+            echo "Migration files changed; applying D1 migrations."
+            npx wrangler d1 migrations apply cinema-and-series --remote
+          else
+            echo "No migration files changed; skipping D1 migration read check."
+          fi
 
       - name: Production build
         if: steps.cloudflare.outputs.ready == 'true'
