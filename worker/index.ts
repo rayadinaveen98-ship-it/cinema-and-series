@@ -20,6 +20,7 @@ type CatalogueRow = {
   backdrop_url: string | null;
   artwork_source: string | null;
   artwork_source_url: string | null;
+  official_observation_url: string | null;
   updated_at: string | null;
 };
 
@@ -108,6 +109,14 @@ const combinedCatalogueCte = `WITH combined_catalogue AS (
     m.backdrop_url,
     m.artwork_source,
     m.artwork_source_url,
+    (
+      SELECT o.external_url
+      FROM source_observations o
+      WHERE o.title = m.title
+        AND o.review_status = 'accepted'
+      ORDER BY o.observed_at DESC
+      LIMIT 1
+    ) AS official_observation_url,
     m.updated_at
   FROM movies m
   LEFT JOIN source_channels s ON s.source_key = m.release_date_source
@@ -132,6 +141,7 @@ const combinedCatalogueCte = `WITH combined_catalogue AS (
     NULL AS backdrop_url,
     NULL AS artwork_source,
     NULL AS artwork_source_url,
+    NULL AS official_observation_url,
     ct.updated_at
   FROM catalogue_titles ct
   WHERE ct.wikidata_qid IS NULL
@@ -185,6 +195,27 @@ function addDays(value: string, days: number) {
 
 function facet(rows: FacetRow[]) {
   return rows.map((row) => ({ value: row.value, count: Number(row.count ?? 0) }));
+}
+
+function youtubeVideoId(value: string | null | undefined) {
+  if (!value) return null;
+  try {
+    const parsed = new URL(value);
+    const host = parsed.hostname.toLowerCase().replace(/^www\\./, "");
+    const candidate = host === "youtu.be"
+      ? parsed.pathname.split("/").filter(Boolean)[0]
+      : host === "youtube.com" || host === "m.youtube.com"
+        ? parsed.searchParams.get("v")
+        : null;
+    return candidate && /^[A-Za-z0-9_-]{6,20}$/.test(candidate) ? candidate : null;
+  } catch {
+    return null;
+  }
+}
+
+function officialYoutubeArtwork(value: string | null | undefined) {
+  const id = youtubeVideoId(value);
+  return id ? `https://i.ytimg.com/vi/${id}/maxresdefault.jpg` : null;
 }
 
 export default {
@@ -445,24 +476,30 @@ export default {
         ? await resolveVisualArtwork(result.results.map((movie) => movie.wikidata_qid).filter((qid): qid is string => Boolean(qid)))
         : new Map();
 
-      const movies = result.results.map((movie) => ({
-        id: movie.id,
-        wikidataQid: movie.wikidata_qid ?? undefined,
-        title: movie.title,
-        nativeTitle: movie.native_title ?? undefined,
-        language: movie.language_name,
-        countryCode: movie.country_code,
-        releaseDate: movie.release_date ?? undefined,
-        releaseYear: Number(movie.release_year),
-        datePrecision: movie.date_precision,
-        verificationStatus: movie.verification_status,
-        releaseSource: movie.release_date_source,
-        releaseSourceName: movie.release_source_name ?? undefined,
-        posterUrl: movie.poster_url ?? visualArtwork.get(movie.wikidata_qid ?? "")?.posterUrl ?? undefined,
-        backdropUrl: movie.backdrop_url ?? undefined,
-        artworkSource: movie.artwork_source ?? visualArtwork.get(movie.wikidata_qid ?? "")?.sourceName,
-        artworkSourceUrl: movie.artwork_source_url ?? visualArtwork.get(movie.wikidata_qid ?? "")?.sourceUrl ?? undefined,
-      }));
+      const movies = result.results.map((movie) => {
+        const officialPoster = officialYoutubeArtwork(movie.official_observation_url);
+        const wikimediaPoster = visualArtwork.get(movie.wikidata_qid ?? "");
+        return {
+          id: movie.id,
+          wikidataQid: movie.wikidata_qid ?? undefined,
+          title: movie.title,
+          nativeTitle: movie.native_title ?? undefined,
+          language: movie.language_name,
+          countryCode: movie.country_code,
+          releaseDate: movie.release_date ?? undefined,
+          releaseYear: Number(movie.release_year),
+          datePrecision: movie.date_precision,
+          verificationStatus: movie.verification_status,
+          releaseSource: movie.release_date_source,
+          releaseSourceName: movie.release_source_name ?? undefined,
+          posterUrl: movie.poster_url ?? officialPoster ?? wikimediaPoster?.posterUrl ?? undefined,
+          backdropUrl: movie.backdrop_url ?? undefined,
+          artworkSource: movie.artwork_source
+            ?? (officialPoster ? "official_youtube_thumbnail" : wikimediaPoster?.sourceName),
+          artworkSourceUrl: movie.artwork_source_url
+            ?? (officialPoster ? movie.official_observation_url ?? undefined : wikimediaPoster?.sourceUrl ?? undefined),
+        };
+      });
       const latestUpdate = [statsResult?.latest_updated_at, sourcesResult?.latest_updated_at].filter((value): value is string => Boolean(value)).sort().at(-1);
       const filteredTotal = Number(filteredCount?.count ?? movies.length);
 
