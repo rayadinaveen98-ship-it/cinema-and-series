@@ -61,7 +61,7 @@ def validate(item: dict, entity: dict | None) -> str:
     if INDIA_QID not in ids_for_claim(entity, "P495"):
         return "not_confirmed_indian_origin"
     if item["year"] not in years_for_release(entity):
-        return "release_year_not_corroborrated"
+        return "release_year_not_corroborated"
     return "eligible"
 
 
@@ -179,9 +179,7 @@ def main():
         p.error("--max-checks must be 1..300")
     report = json.loads(args.audit_json.read_text(encoding="utf-8"))
     candidates = find_candidates(report, args.max_checks)
-    if not candidates:
-        raise SystemExit("No new QID-bearing candidates to verify; no SQL generated")
-    results = verify(candidates)
+    results = verify(candidates) if candidates else {"accepted": [], "rejected": [], "checked": 0, "rate_limited": False}
     outcomes = Counter(row["reason"] for row in results["rejected"])
     summary = {
         "examined_qid_candidates": results["checked"],
