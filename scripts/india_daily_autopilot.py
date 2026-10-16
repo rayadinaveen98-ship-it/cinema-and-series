@@ -26,6 +26,7 @@ from audit_indian_movie_growth import audit, discover
 from prepare_india_category_import import select_batch
 from production_catalogue_quality import load_d1_rows
 from verify_indian_movie_candidates import sql_for_movie, QID
+from india_bulk_target import growth_progress
 
 # Prioritize high-quality year-level Indian-film categories (one seed/year).
 # Existing broader language-category audits remain available for backfill.
@@ -257,19 +258,17 @@ def safe_queue_selection(state: dict, exact: list[dict], year: list[dict],
 def process_d1(state: dict, output_dir: Path, max_daily: int, max_reads: int) -> dict:
     exact = query_rows("SELECT id,wikidata_qid,title,release_date FROM movies;")
     year = query_rows(
-        "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year FROM catalogue_titles;"
+        "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year,source_category FROM catalogue_titles;"
     )
     series = query_rows("SELECT wikidata_qid FROM series_titles WHERE wikidata_qid IS NOT NULL;")
     year_qids = {str(row.get("wikidata_qid") or "").upper() for row in year}
-    # Explicitly verify the 689-title 2000s import from the prior incomplete run.
-    year_2000 = set(state.get("2000s_seed_qids") or [])
-    state["2000s_import_present"] = len(year_2000 & year_qids)
-    # Crash recovery: submitted rows not verified in a previous run count only
-    # when the database actually contains their QIDs.
-    attempted = set(state["attempted_by_autopilot"])
-    state["autopilot_added_confirmed"] = len(attempted & year_qids)
-    confirmed = (state["previously_confirmed"] + state["2000s_import_present"]
-                 + state["autopilot_added_confirmed"])
+    # Source-specific, QID-backed progress avoids counting the same row twice
+    # when the rapid Wikidata bulk importer and daily source importer overlap.
+    shared = growth_progress(year, state)
+    state["2000s_import_present"] = shared["confirmed_2000s_cohort"]
+    state["autopilot_added_confirmed"] = shared["confirmed_daily_autopilot"]
+    state["wikidata_bulk_import_present"] = shared["confirmed_wikidata_bulk_imports"]
+    confirmed = shared["confirmed_total"]
     if confirmed >= state["goal_additional_indian_films"]:
         return {"status": "goal_reached", "goal": state["goal_additional_indian_films"],
                 "confirmed_count": confirmed, "added_today": 0}
@@ -303,12 +302,14 @@ def process_d1(state: dict, output_dir: Path, max_daily: int, max_reads: int) ->
         "known_exact_movies": len(exact),
         "known_year_movies": len(year),
         "2000s_import_present": state["2000s_import_present"],
+        "wikidata_bulk_import_present": state.get("wikidata_bulk_import_present", 0),
         "new_movies_added_today": added,
         "rows_submitted_today": attempted_today,
         "db_rows_read_reported_by_import": read_usage,
         "target": state["goal_additional_indian_films"],
         "confirmed_target_progress": state["previously_confirmed"]
-            + state["2000s_import_present"] + state["autopilot_added_confirmed"],
+            + state["2000s_import_present"] + state["autopilot_added_confirmed"]
+            + state.get("wikidata_bulk_import_present", 0),
     }
 
 
