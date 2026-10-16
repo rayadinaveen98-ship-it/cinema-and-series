@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import urllib.error
 import sys
 import time
 from collections import Counter, defaultdict
@@ -36,7 +37,7 @@ LANGUAGE_CATEGORIES = {
 }
 PAGE_CAP = 500
 PAGEPROPS_BATCH = 50
-REQUEST_PAUSE = 0.24
+REQUEST_PAUSE = 1.35  # Courtesy throttle; stop rather than hammer a 429 response.
 QID_PATTERN = re.compile(r"^Q[1-9][0-9]*$")
 
 
@@ -46,6 +47,10 @@ def category_seeds(start_year: int, end_year: int):
         yield (f"Category:{year} Indian films", year, None, "india_category")
         for language, suffix in LANGUAGE_CATEGORIES.items():
             yield (f"Category:{year} {suffix}", year, language, "language_category")
+
+
+def rate_limited(exc: BaseException) -> bool:
+    return isinstance(exc, urllib.error.HTTPError) and exc.code == 429
 
 
 def category_pages(category: str, cap: int = PAGE_CAP) -> list[dict]:
@@ -74,9 +79,10 @@ def category_pages(category: str, cap: int = PAGE_CAP) -> list[dict]:
     return collected
 
 
-def resolve_page_qids(page_ids: list[int]) -> tuple[dict[int, str], int]:
+def resolve_page_qids(page_ids: list[int]) -> tuple[dict[int, str], int, bool]:
     mapping: dict[int, str] = {}
     failed_batches = 0
+    stopped_for_rate_limit = False
     for index in range(0, len(page_ids), PAGEPROPS_BATCH):
         batch = page_ids[index:index + PAGEPROPS_BATCH]
         try:
@@ -94,30 +100,47 @@ def resolve_page_qids(page_ids: list[int]) -> tuple[dict[int, str], int]:
         except Exception as exc:
             failed_batches += 1
             print(f"Pageprops batch {index // PAGEPROPS_BATCH} deferred: {str(exc)[:150]}")
+            if rate_limited(exc):
+                stopped_for_rate_limit = True
+                print("Wikipedia rate limit detected; stopping pageprops requests without further retries.")
+                break
         time.sleep(REQUEST_PAUSE)
-    return mapping, failed_batches
+    return mapping, failed_batches, stopped_for_rate_limit
 
 
-def discover(start_year: int, end_year: int, max_candidates: int, max_categories: int = 0) -> tuple[list[dict], dict]:
+def discover(start_year: int, end_year: int, max_candidates: int, max_categories: int = 20, category_offset: int = 0) -> tuple[list[dict], dict]:
     by_page: dict[int, dict] = {}
     reports = []
     seeds = category_seeds(start_year, end_year)
     incomplete = False
+    halt_reason = None
+    next_category_offset = category_offset
     for index, (category, year, language, evidence) in enumerate(seeds):
-        if max_categories and index >= max_categories:
+        if index < category_offset:
+            continue
+        if max_categories and index >= category_offset + max_categories:
             incomplete = True
+            halt_reason = "category_batch_complete"
             break
         if len(by_page) >= max_candidates:
             incomplete = True
+            halt_reason = "candidate_cap"
             break
         try:
             pages = category_pages(category)
             status = "ok"
         except Exception as exc:
             pages = []
-            status = "error"
+            status = "rate_limited" if rate_limited(exc) else "error"
             print(f"Category deferred {category}: {str(exc)[:150]}")
         reports.append({"category": category, "status": status, "articles": len(pages)})
+        next_category_offset = index + 1
+        if status == "rate_limited":
+            incomplete = True
+            halt_reason = "wikipedia_rate_limit"
+            print(f"Stopping the crawl at category offset {index}; retry this category in a later run.")
+            next_category_offset = index
+            break
         if status != "ok":
             incomplete = True
         for page in pages:
@@ -137,7 +160,7 @@ def discover(start_year: int, end_year: int, max_candidates: int, max_categories
             if evidence == "india_category":
                 item["india_category"] = True
         time.sleep(REQUEST_PAUSE)
-    qids, failed_qid_batches = resolve_page_qids(sorted(by_page))
+    qids, failed_qid_batches, pageprops_rate_limited = resolve_page_qids(sorted(by_page))
     if failed_qid_batches:
         incomplete = True
     records = []
@@ -161,7 +184,11 @@ def discover(start_year: int, end_year: int, max_candidates: int, max_categories
         "categories_attempted": len(reports),
         "categories_failed": sum(p["status"] != "ok" for p in reports),
         "qid_resolution_failed_batches": failed_qid_batches,
+        "pageprops_rate_limited": pageprops_rate_limited,
         "source_incomplete": incomplete,
+        "halt_reason": halt_reason,
+        "category_offset": category_offset,
+        "next_category_offset": next_category_offset,
         "category_report": reports,
     }
     return records, meta
@@ -258,6 +285,8 @@ def markdown_report(report: dict) -> str:
         f"Source audit incomplete: **{source.get('source_incomplete', 'unknown')}**; "
         f"failed categories: **{source.get('categories_failed', 0)}**; "
         f"failed pageprops batches: **{source.get('qid_resolution_failed_batches', 0)}**.",
+        f"Crawl stopped at: **{source.get('halt_reason') or 'end of selected range'}**. "
+        f"Next category offset: **{source.get('next_category_offset', 'unknown')}**.",
         "",
         "| Metric | Count |", "| --- | ---: |",
     ]
@@ -288,7 +317,10 @@ def main() -> int:
     parser.add_argument("--start-year", type=int, default=2015)
     parser.add_argument("--end-year", type=int, default=2026)
     parser.add_argument("--max-candidates", type=int, default=8000)
-    parser.add_argument("--max-categories", type=int, default=0)
+    parser.add_argument("--max-categories", type=int, default=20,
+                        help="Bound each run to a few categories; use category-offset to resume")
+    parser.add_argument("--category-offset", type=int, default=0,
+                        help="Skip this many category seeds before beginning the current scan")
     parser.add_argument("--exact-movies", type=Path, required=True)
     parser.add_argument("--year-movies", type=Path, required=True)
     parser.add_argument("--candidates-file", type=Path, help="Optional offline discovery fixture")
@@ -299,12 +331,15 @@ def main() -> int:
         parser.error("year bounds must be between 1913 and 2026")
     if not (1 <= args.max_candidates <= 15000):
         parser.error("--max-candidates must be 1..15000")
+    if args.category_offset < 0 or args.max_categories < 1:
+        parser.error("--category-offset must be >=0 and --max-categories must be >=1")
 
     if args.candidates_file:
         candidates = json.loads(args.candidates_file.read_text(encoding="utf-8"))
         meta = {"source_incomplete": False, "mode": "offline"}
     else:
-        candidates, meta = discover(args.start_year, args.end_year, args.max_candidates, args.max_categories)
+        candidates, meta = discover(args.start_year, args.end_year, args.max_candidates,
+                                    args.max_categories, args.category_offset)
     if not candidates:
         raise SystemExit("No discovery candidates obtained; refusing a misleading zero-yield audit")
 
