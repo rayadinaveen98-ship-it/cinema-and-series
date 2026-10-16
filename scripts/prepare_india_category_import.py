@@ -42,9 +42,9 @@ def eligible(item: dict) -> str:
     return "eligible"
 
 
-def select_batch(report: dict, maximum: int) -> tuple[list[dict], dict]:
-    if not 1 <= maximum <= 250:
-        raise ValueError("pilot batch cap must be between 1 and 250")
+def select_batch(report: dict, maximum: int, offset: int = 0) -> tuple[list[dict], dict]:
+    if not 1 <= maximum <= 250 or offset < 0:
+        raise ValueError("batch cap must be 1..250 and offset must be nonnegative")
     seen_qids = set()
     chosen = []
     reasons = Counter()
@@ -66,10 +66,12 @@ def select_batch(report: dict, maximum: int) -> tuple[list[dict], dict]:
             *[category for category in item["source_categories"] if category != source_category],
         ]})
     total_qualified = len(chosen)
-    return chosen[:maximum], {
+    batch = chosen[offset:offset + maximum]
+    return batch, {
         "discovered_pages": len(rows),
         "eligible_source_category_records": total_qualified,
-        "proposed_batch_count": min(total_qualified, maximum),
+        "proposed_batch_count": len(batch),
+        "batch_offset": offset,
         "excluded_reasons": dict(reasons),
         "source_incomplete": bool(report.get("source", {}).get("source_incomplete")),
         "status": "Wikipedia category-based, unconfirmed movie records; NOT Wikidata-claim corroborated",
@@ -80,11 +82,13 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--audit-json", type=Path, required=True)
     parser.add_argument("--max-import", type=int, default=100)
+    parser.add_argument("--offset", type=int, default=0,
+                        help="Skip this many qualified candidates from the stable sorted discovery set")
     parser.add_argument("--out-json", type=Path, required=True)
     parser.add_argument("--out-sql", type=Path, required=True)
     args = parser.parse_args()
     report = json.loads(args.audit_json.read_text(encoding="utf-8"))
-    selected, summary = select_batch(report, args.max_import)
+    selected, summary = select_batch(report, args.max_import, args.offset)
     args.out_json.parent.mkdir(parents=True, exist_ok=True)
     args.out_json.write_text(json.dumps({"summary": summary, "selected": selected},
                                          indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
