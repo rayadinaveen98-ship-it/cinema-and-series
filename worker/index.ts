@@ -495,7 +495,9 @@ export default {
         : new Map();
 
       const movies = result.results.map((movie) => {
-        const officialUrl = officialUrls.get(movie.title) ?? movie.official_observation_url;
+        const officialUrl = movie.date_precision === "day"
+          ? officialUrls.get(movie.title) ?? movie.official_observation_url
+          : undefined;
         const officialPoster = officialYoutubeArtwork(officialUrl);
         const wikimediaPoster = visualArtwork.get(movie.wikidata_qid ?? "");
         return {
