@@ -6,7 +6,7 @@ from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from audit_indian_movie_growth import audit, category_seeds, markdown_report, discover, rate_limited, resolve_page_qids
+from audit_indian_movie_growth import audit, category_seeds, markdown_report, discover, rate_limited, resolve_page_qids, category_pages
 
 
 def candidate(page, qid, title, year, language, india=False, years=None):
@@ -61,6 +61,34 @@ class IndiaMovieAuditTests(unittest.TestCase):
         ], [], existing)
         self.assertEqual(report["summary"]["already_in_production"], 2)
         self.assertEqual(report["summary"]["possible_existing_title_year_match"], 1)
+
+    def test_category_generator_resolves_qid_without_second_api_call(self):
+        payload = {
+            "query": {"pages": [
+                {"pageid": 42, "title": "Test Film",
+                 "pageprops": {"wikibase_item": "Q12345"}},
+                {"pageid": 43, "title": "Another Film"},
+            ]}
+        }
+        with patch("audit_indian_movie_growth.wiki.request_json", return_value=payload) as req:
+            pages = category_pages("Category:2026 Indian films")
+        self.assertEqual(pages[0]["wikidata_qid"], "Q12345")
+        self.assertIsNone(pages[1]["wikidata_qid"])
+        kwargs = req.call_args.args[1]
+        self.assertEqual(kwargs["generator"], "categorymembers")
+        self.assertEqual(kwargs["prop"], "pageprops")
+        self.assertEqual(kwargs["ppprop"], "wikibase_item")
+
+    def test_discover_uses_generator_qids_without_extra_pageprops_calls(self):
+        def pages(category):
+            return [{"page_id": 11, "title": "Film", "wikidata_qid": "Q11"}]
+        with patch("audit_indian_movie_growth.category_pages", side_effect=pages), \
+             patch("audit_indian_movie_growth.resolve_page_qids") as extra, \
+             patch("audit_indian_movie_growth.time.sleep"):
+            movies, meta = discover(2026, 2026, 100, max_categories=1)
+        self.assertEqual(movies[0]["wikidata_qid"], "Q11")
+        self.assertEqual(meta["qid_resolution_failed_batches"], 0)
+        extra.assert_not_called()
 
     def test_crawl_stops_at_first_rate_limit(self):
         errors = []
