@@ -93,6 +93,16 @@ function useCounts() {
   return counts;
 }
 
+// Avoid a new expensive D1 catalogue query for every keystroke in search.
+function useDebouncedValue(value: string, delayMs = 400) {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    const timer = window.setTimeout(() => setSettled(value), delayMs);
+    return () => window.clearTimeout(timer);
+  }, [value, delayMs]);
+  return settled;
+}
+
 function useMovies(query: Record<string, string>, limit = 60) {
   const [payload, setPayload] = useState<MovieResponse>({ movies: [] });
   const [loading, setLoading] = useState(true);
@@ -269,7 +279,8 @@ function MoviesPage() {
   const [filters, setFilters] = useState<MovieFilters>({ q: "", year: "all", language: "all", country: "all" });
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState<Movie | null>(null);
-  const query = useMemo(() => ({ scope: "all", ...(filters.q ? { q: filters.q } : {}), ...(filters.year !== "all" ? { year: filters.year } : {}), ...(filters.language !== "all" ? { language: filters.language } : {}), ...(filters.country !== "all" ? { country: filters.country } : {}) }), [filters]);
+  const settledSearch = useDebouncedValue(filters.q.trim());
+  const query = useMemo(() => ({ scope: "all", ...(settledSearch ? { q: settledSearch } : {}), ...(filters.year !== "all" ? { year: filters.year } : {}), ...(filters.language !== "all" ? { language: filters.language } : {}), ...(filters.country !== "all" ? { country: filters.country } : {}) }), [filters.year, filters.language, filters.country, settledSearch]);
   const all = useMovies(query, 60);
   const coming = useMovies({ scope: "upcoming" }, 14);
   const facets = all.payload.facets;
@@ -292,7 +303,8 @@ function SeriesPage() {
   const [filters, setFilters] = useState<SeriesFilters>({ q: "", year: "all", language: "all", country: "all", kind: "all" });
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState<SeriesTitle | null>(null);
-  const query = useMemo(() => ({ ...(filters.q ? { q: filters.q } : {}), ...(filters.year !== "all" ? { year: filters.year } : {}), ...(filters.language !== "all" ? { language: filters.language } : {}), ...(filters.country !== "all" ? { country: filters.country } : {}), ...(filters.kind !== "all" ? { kind: filters.kind } : {}) }), [filters]);
+  const settledSearch = useDebouncedValue(filters.q.trim());
+  const query = useMemo(() => ({ ...(settledSearch ? { q: settledSearch } : {}), ...(filters.year !== "all" ? { year: filters.year } : {}), ...(filters.language !== "all" ? { language: filters.language } : {}), ...(filters.country !== "all" ? { country: filters.country } : {}), ...(filters.kind !== "all" ? { kind: filters.kind } : {}) }), [filters.year, filters.language, filters.country, filters.kind, settledSearch]);
   const all = useSeries(query, 60);
   const facets = all.payload.facets;
   return (
