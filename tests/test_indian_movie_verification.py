@@ -43,7 +43,7 @@ class VerifiedMovieTests(unittest.TestCase):
         self.assertEqual(validate(candidate(), entity(kind="Q5398426")), "not_confirmed_film")
         self.assertEqual(validate(candidate(), entity(country="Q30")), "not_confirmed_indian_origin")
         self.assertEqual(validate(candidate(), entity(date="+2023-01-01T00:00:00Z")),
-                         "release_year_not_corroborrated")
+                         "release_year_not_corroborated")
         self.assertEqual(validate(candidate(), None), "entity_unavailable")
 
     def test_selects_only_net_new_candidates_with_qid(self):
@@ -74,7 +74,7 @@ class VerifiedMovieTests(unittest.TestCase):
         self.assertEqual(result["checked"], 0)
         self.assertEqual(len(result["rejected"]), 15)
 
-    def test_verify_accepts_corroborrated_film(self):
+    def test_verify_accepts_corroborated_film(self):
         candidates = [candidate()]
         with patch("verify_indian_movie_candidates.time.sleep"):
             out = verify(candidates, request_fn=lambda *_: {"entities": {"Q123": entity()}})
