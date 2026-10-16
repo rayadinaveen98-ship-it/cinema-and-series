@@ -1,0 +1,128 @@
+name: India 2000s — Verify Imported 689 Titles
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-2000s-post-import-verification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  read-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Configure existing remote D1 connection
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Retrieve actual proposed 2000s import identities
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-2000s-verify/source
+          gh run download 38854529976 --repo "$GITHUB_REPOSITORY" \
+            --name india-2000s-689-production-import \
+            --dir data/generated/india-2000s-verify/source
+          test -s data/generated/india-2000s-verify/source/batch-0.json
+          test -s data/generated/india-2000s-verify/source/batch-250.json
+          test -s data/generated/india-2000s-verify/source/batch-500.json
+
+      - name: Read-only identity, baseline and collision verification with bounded retries
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          import time
+          from pathlib import Path
+          root = Path("data/generated/india-2000s-verify")
+          source = root / "source"
+          proposed = []
+          for offset in (0, 250, 500):
+              batch = json.loads((source / f"batch-{offset}.json").read_text(encoding="utf-8"))
+              proposed.extend(batch["selected"])
+          qids = [str(item["wikidata_qid"]).upper() for item in proposed]
+          if len(qids) != 689 or len(set(qids)) != 689:
+              raise SystemExit("Archived import evidence is incomplete or duplicate")
+          baseline = json.loads((source / "before.json").read_text(encoding="utf-8"))
+          baseline_total = int(baseline[0]["results"][0]["count"])
+
+          def query(statement):
+              last = ""
+              for attempt in range(1, 5):
+                  proc = subprocess.run(
+                      ["npx", "wrangler", "d1", "execute", "cinema-and-series",
+                       "--remote", "--json", "--command", statement],
+                      capture_output=True, text=True, timeout=70,
+                  )
+                  if proc.returncode == 0:
+                      try:
+                          payload = json.loads(proc.stdout)
+                          return int(payload[0]["results"][0]["count"])
+                      except (ValueError, KeyError, IndexError, TypeError):
+                          last = f"Malformed D1 response: {proc.stdout[:300]}"
+                  else:
+                      last = (proc.stderr + proc.stdout)[-650:]
+                  print(f"D1 read failed (attempt {attempt}/4): {last[:300]}", flush=True)
+                  time.sleep(attempt * 4)
+              raise RuntimeError(f"Remote database read unavailable: {last}")
+
+          total = query("SELECT COUNT(*) AS count FROM catalogue_titles;")
+          collisions = query(
+              "SELECT COUNT(*) AS count FROM catalogue_titles c "
+              "JOIN series_titles s ON c.wikidata_qid=s.wikidata_qid;"
+          )
+          checked = 0
+          for start in range(0, len(qids), 75):
+              group = qids[start:start+75]
+              quoted = ",".join("'" + qid + "'" for qid in group)
+              checked += query(
+                  "SELECT COUNT(*) AS count FROM catalogue_titles WHERE "
+                  f"wikidata_qid IN ({quoted}) AND release_year BETWEEN 2000 AND 2009;"
+              )
+          result = {
+              "baseline_before_2000s_import": baseline_total,
+              "year_precision_movies_now": total,
+              "database_growth_since_baseline": total - baseline_total,
+              "2000s_batch_distinct_qids_submitted": len(qids),
+              "2000s_batch_qids_present_now": checked,
+              "cross_type_collisions": collisions,
+          }
+          print("INDIA_2000S_POST_IMPORT_VERIFIED=" + json.dumps(result, sort_keys=True))
+          (root/"result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as stream:
+              stream.write("## 2000s Indian movie post-import verification\n\n")
+              for name, val in result.items():
+                  stream.write(f"- {name.replace('_', ' ')}: **{val:,}**\n")
+          if collisions:
+              raise SystemExit(f"Unexpected movie/series identity collision: {collisions}")
+          if checked != len(qids):
+              raise SystemExit(f"Only {checked}/{len(qids)} expected QIDs exist after import")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-2000s-post-import-verified-counts
+          path: data/generated/india-2000s-verify/result.json
+          if-no-files-found: warn
+          retention-days: 30
