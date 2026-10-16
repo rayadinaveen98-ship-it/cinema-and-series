@@ -21,6 +21,14 @@ on:
         description: "Read-only discovered article cap (up to 15000)"
         required: true
         default: "8000"
+      category_offset:
+        description: "Category offset to resume; 0 starts at the newest year"
+        required: true
+        default: "0"
+      max_categories:
+        description: "Maximum category seeds to scan this run (suggested 10–20)"
+        required: true
+        default: "20"
 
 concurrency:
   group: india-movie-read-only-audit-${{ github.ref }}
@@ -52,6 +60,8 @@ jobs:
       START_YEAR: ${{ inputs.start_year || '2015' }}
       END_YEAR: ${{ inputs.end_year || '2026' }}
       MAX_CANDIDATES: ${{ inputs.max_candidates || '8000' }}
+      CATEGORY_OFFSET: ${{ inputs.category_offset || '0' }}
+      MAX_CATEGORIES: ${{ inputs.max_categories || '20' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -80,13 +90,15 @@ jobs:
             --command "SELECT id, wikidata_qid, wikipedia_page_id, title, release_year FROM catalogue_titles;" \
             > data/generated/india-audit/year-movies.json
 
-      - name: Run bounded 2015–2026 discovery and dedup audit
+      - name: Run paced, resumable Indian-film discovery and dedup audit
         shell: bash
         run: |
           python scripts/audit_indian_movie_growth.py \
             --start-year "$START_YEAR" \
             --end-year "$END_YEAR" \
             --max-candidates "$MAX_CANDIDATES" \
+            --category-offset "$CATEGORY_OFFSET" \
+            --max-categories "$MAX_CATEGORIES" \
             --exact-movies data/generated/india-audit/exact-movies.json \
             --year-movies data/generated/india-audit/year-movies.json \
             --out-json data/generated/india-audit/india-movie-report.json \
