@@ -79,6 +79,19 @@ jobs:
             --command "SELECT wikidata_qid,title,first_air_year FROM series_titles;" \
             > data/generated/wikidata-import/series.json
 
+      - name: Reconcile the shared 10K growth limit with the daily importer
+        shell: bash
+        run: |
+          git fetch --no-tags origin refs/heads/automation/india-growth-state
+          git show FETCH_HEAD:.automation/india-growth-state.json \
+            > data/generated/wikidata-import/daily-state.json
+          python scripts/india_bulk_target.py \
+            --year-movies data/generated/wikidata-import/year.json \
+            --autopilot-state data/generated/wikidata-import/daily-state.json \
+            --max-requested "$MAX_TITLES" \
+            --out-env "$GITHUB_ENV" \
+            --out-json data/generated/wikidata-import/goal-progress.json
+
       - name: Reconcile staged CC0 Wikidata claims, create safe SQL preview
         shell: bash
         run: |
@@ -87,7 +100,7 @@ jobs:
             --exact-movies data/generated/wikidata-import/exact.json \
             --year-movies data/generated/wikidata-import/year.json \
             --series data/generated/wikidata-import/series.json \
-            --max-preview "$MAX_TITLES" \
+            --max-preview "$BULK_ALLOWED_NOW" \
             --out-dir data/generated/wikidata-import/prepared
 
       - name: Preview by default; automatically apply only on scheduled import windows
@@ -133,6 +146,7 @@ jobs:
         with:
           name: india-wikidata-bulk-reconciliation-and-import-result
           path: |
+            data/generated/wikidata-import/goal-progress.json
             data/generated/wikidata-import/prepared/reconciliation.json
             data/generated/wikidata-import/prepared/selected.json
             data/generated/wikidata-import/import-result.json
