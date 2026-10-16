@@ -1,7 +1,7 @@
 {
   "schema_version": "media-identity-corrections-v1",
-  "reviewed_at": "2026-09-19",
-  "canonical_policy": "Explicit Wikidata P31 evidence only. Non-audiovisual entities are excluded. When an entity is explicitly both a miniseries and a television-film form, Series is the canonical product identity because the miniseries classification is episodic and the Series catalogue is the more specific projection.",
+  "reviewed_at": "2026-10-16",
+  "canonical_policy": "Reviewed media identity corrections require durable cited source evidence. Prefer explicit Wikidata P31 when accessible; where Wikidata type evidence is unavailable, an unambiguous episodic TV identity established by multiple independent title-specific sources and an existing canonical Series record may be canonicalized to Series. Never infer media type from title words or country alone.",
   "corrections": {
     "Q3049630": {
       "disposition": "exclude",
@@ -37,6 +37,21 @@
           }
         ],
         "verified_run_id": "35420861375"
+      }
+    },
+    "Q1475491": {
+      "disposition": "canonicalize",
+      "canonical_media_type": "series",
+      "reason": "Production integrity diagnosis found this 1985 four-episode East German miniseries incorrectly duplicated in the year-precision Movies catalogue. English Wikipedia and IMDb independently identify an episodic miniseries; the existing Series projection already contains this Wikidata identity.",
+      "evidence": {
+        "source": "English Wikipedia and IMDb; production cross-type identity audit",
+        "entity_url": "https://www.wikidata.org/wiki/Q1475491",
+        "related_sources": [
+          "https://en.wikipedia.org/wiki/Johann_Sebastian_Bach_(TV_series)",
+          "https://www.imdb.com/title/tt0089379/"
+        ],
+        "p31_evidence": "not independently retrieved; no P31 claim asserted",
+        "verified_run_id": "38851453997"
       }
     }
   }

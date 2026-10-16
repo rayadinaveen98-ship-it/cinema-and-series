@@ -20,6 +20,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import fetch_mediawiki_backfill as base
+import media_identity_corrections as identity
 
 OUT = Path("data/generated/wikipedia-year-catalogue.json")
 MAX_TITLES_PER_RUN = 4000
@@ -276,7 +277,8 @@ def main() -> int:
         print("No Wikipedia catalogue pages discovered.")
         return 1
     qids, qid_reports = resolve_qids(list(by_page))
-    movies = merge_discoveries(by_page, qids)[:maximum]
+    movies = [row for row in merge_discoveries(by_page, qids)
+              if identity.is_media_type_allowed(row.get('wikidata_qid'), 'movie')][:maximum]
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
