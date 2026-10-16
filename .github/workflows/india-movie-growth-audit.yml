@@ -5,7 +5,9 @@ on:
     branches: [main, "feature/india-*"]
     paths:
       - "scripts/audit_indian_movie_growth.py"
+      - "scripts/verify_indian_movie_candidates.py"
       - "tests/test_indian_movie_growth_audit.py"
+      - "tests/test_indian_movie_verification.py"
       - ".github/workflows/india-movie-growth-audit.yml"
   workflow_dispatch:
     inputs:
@@ -47,7 +49,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Check audit logic without network access
-        run: python -m unittest tests.test_indian_movie_growth_audit -v
+        run: python -m unittest tests.test_indian_movie_growth_audit tests.test_indian_movie_verification -v
 
   read-only-discovery:
     needs: unit-tests
@@ -104,6 +106,15 @@ jobs:
             --out-json data/generated/india-audit/india-movie-report.json \
             --out-md data/generated/india-audit/india-movie-report.md
 
+      - name: Corroborate Indian film identities and prepare import preview only
+        shell: bash
+        run: |
+          python scripts/verify_indian_movie_candidates.py \
+            --audit-json data/generated/india-audit/india-movie-report.json \
+            --max-checks 60 \
+            --out-json data/generated/india-audit/verified-film-preview.json \
+            --out-sql data/generated/india-audit/verified-film-upserts-preview.sql
+
       - name: Publish clearly labeled results
         if: always()
         shell: bash
@@ -120,5 +131,7 @@ jobs:
           path: |
             data/generated/india-audit/india-movie-report.json
             data/generated/india-audit/india-movie-report.md
+            data/generated/india-audit/verified-film-preview.json
+            data/generated/india-audit/verified-film-upserts-preview.sql
           retention-days: 30
           if-no-files-found: warn
