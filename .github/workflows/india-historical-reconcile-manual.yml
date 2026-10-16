@@ -1,0 +1,84 @@
+name: India Historical — Reconcile Against Live D1 (Manual Only)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  read-only-reconciliation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 24
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Verify deterministic production reconciliation logic
+        run: |
+          python -m unittest tests.test_reconcile_india_historical_manifest \
+            tests.test_india_category_import -v
+
+      - name: Retrieve source-only historical manifest (no Wikipedia calls)
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-historical-reconcile/source
+          gh run download 38856796933 --repo "$GITHUB_REPOSITORY" \
+            --name india-1970s-1990s-deduplicated-source-manifest \
+            --dir data/generated/india-historical-reconcile/source
+          test -s data/generated/india-historical-reconcile/source/merged-candidates.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify D1 free tier quota is available and fetch a FRESH snapshot
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,release_date FROM movies;" \
+            > data/generated/india-historical-reconcile/exact.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year FROM catalogue_titles;" \
+            > data/generated/india-historical-reconcile/year.json
+
+      - name: Reconcile 1970s–1990s unique leads and PREVIEW 100 import statements only
+        shell: bash
+        run: |
+          python scripts/reconcile_india_historical_manifest.py \
+            --manifest-json data/generated/india-historical-reconcile/source/merged-candidates.json \
+            --exact-movies data/generated/india-historical-reconcile/exact.json \
+            --year-movies data/generated/india-historical-reconcile/year.json \
+            --max-preview 100 \
+            --out-json data/generated/india-historical-reconcile/reconciled.json \
+            --out-md data/generated/india-historical-reconcile/reconciled.md \
+            --out-plan data/generated/india-historical-reconcile/import-preview.json \
+            --out-sql data/generated/india-historical-reconcile/import-preview.sql
+
+      - name: Report production-safe, read-only result
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f data/generated/india-historical-reconcile/reconciled.md ]]; then
+            cat data/generated/india-historical-reconcile/reconciled.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-historical-d1-reconciled-preview
+          path: |
+            data/generated/india-historical-reconcile/reconciled.json
+            data/generated/india-historical-reconcile/reconciled.md
+            data/generated/india-historical-reconcile/import-preview.json
+            data/generated/india-historical-reconcile/import-preview.sql
+          if-no-files-found: warn
+          retention-days: 30
