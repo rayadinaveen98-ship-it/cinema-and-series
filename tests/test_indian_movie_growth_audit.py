@@ -32,10 +32,10 @@ class IndiaMovieAuditTests(unittest.TestCase):
             ("Category:2009 Indian films", 2009, None, "india_category"),
             ("Category:2008 Indian films", 2008, None, "india_category"),
         ])
-        with patch("audit_indian_movie_growth.category_pages",
-                   return_value=[{"page_id": 222, "title": "New Film",
-                                  "wikidata_qid": "Q222"}]) as pages, \\
-             patch("audit_indian_movie_growth.time.sleep"):
+        with (patch("audit_indian_movie_growth.category_pages",
+                    return_value=[{"page_id": 222, "title": "New Film",
+                                   "wikidata_qid": "Q222"}]) as pages,
+              patch("audit_indian_movie_growth.time.sleep")):
             records, meta = discover(2008, 2009, 8000, max_categories=16,
                                      india_only=True)
         self.assertEqual(pages.call_count, 2)
