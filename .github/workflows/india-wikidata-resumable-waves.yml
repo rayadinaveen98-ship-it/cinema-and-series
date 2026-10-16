@@ -21,7 +21,7 @@ on:
       max_quarters:
         description: "New quarter-shards for this wave (max 100)"
         required: true
-        default: "28"
+        default: "40"
 
 concurrency:
   group: india-wikidata-bulk-stage
@@ -39,7 +39,7 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       FIRST_YEAR: ${{ inputs.start_year || '1990' }}
       LAST_YEAR: ${{ inputs.end_year || '2025' }}
-      MAX_QUARTERS: ${{ inputs.max_quarters || '28' }}
+      MAX_QUARTERS: ${{ inputs.max_quarters || '40' }}
     steps:
       - uses: actions/checkout@v4
         with:
