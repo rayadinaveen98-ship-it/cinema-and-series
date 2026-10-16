@@ -2,7 +2,7 @@ name: India Movie Growth — Read-Only Discovery Audit
 
 on:
   push:
-    branches: [main, "feature/india-movie-growth-audit-20261016"]
+    branches: [main, "feature/india-*"]
     paths:
       - "scripts/audit_indian_movie_growth.py"
       - "tests/test_indian_movie_growth_audit.py"
