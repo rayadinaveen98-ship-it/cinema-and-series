@@ -1,0 +1,135 @@
+name: Indian Films — Resumable Wikidata Bulk Waves (Source Only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-wikidata-resumable-waves.yml"
+  schedule:
+    # 4 source-only waves per day; distinct from D1 autopilot.
+    - cron: "10 3,9,15,21 * * *"
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: "Earliest release year in supported stage range"
+        required: true
+        default: "1990"
+      end_year:
+        description: "Latest release year in supported stage range"
+        required: true
+        default: "2025"
+      max_quarters:
+        description: "New quarter-shards for this wave (max 100)"
+        required: true
+        default: "28"
+
+concurrency:
+  group: india-wikidata-bulk-stage
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  bulk-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GH_TOKEN: ${{ github.token }}
+      FIRST_YEAR: ${{ inputs.start_year || '1990' }}
+      LAST_YEAR: ${{ inputs.end_year || '2025' }}
+      MAX_QUARTERS: ${{ inputs.max_quarters || '28' }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Verify source stage resume/deduplication tests
+        shell: bash
+        run: python -m unittest tests.test_wikidata_bulk_stage -v
+
+      - name: Restore previous SQLite source checkpoint or completed pilot
+        shell: bash
+        run: |
+          mkdir -p data/generated/wikidata-bulk
+          if git ls-remote --exit-code --heads origin automation/wikidata-bulk-stage >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/automation/wikidata-bulk-stage
+            git show FETCH_HEAD:.automation/wikidata-bulk-stage.sqlite \
+              > data/generated/wikidata-bulk/stage.sqlite
+            echo "Restored Wikidata SQL staging checkpoint"
+          else
+            gh run download 38863993169 --repo "$GITHUB_REPOSITORY" \
+              --name indian-films-wikidata-cc0-sqlite-stage \
+              --dir data/generated/wikidata-bulk
+            test -s data/generated/wikidata-bulk/stage.sqlite
+            echo "Seeded bulk SQLite from completed 2018 Wikidata pilot"
+          fi
+
+      - name: Add source shards without contacting Cloudflare production
+        shell: bash
+        run: |
+          python scripts/wikidata_bulk_stage.py \
+            --start-year "$FIRST_YEAR" \
+            --end-year "$LAST_YEAR" \
+            --max-quarters "$MAX_QUARTERS" \
+            --db data/generated/wikidata-bulk/stage.sqlite \
+            --out-json data/generated/wikidata-bulk/source-report.json
+
+      - name: Persist source checkpoint on an isolated Git branch
+        if: always()
+        shell: bash
+        run: |
+          test -s data/generated/wikidata-bulk/stage.sqlite
+          if git ls-remote --exit-code --heads origin automation/wikidata-bulk-stage >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/automation/wikidata-bulk-stage
+            git worktree add --detach "$RUNNER_TEMP/wikidata-state-worktree" FETCH_HEAD
+          else
+            git worktree add -b automation/wikidata-bulk-stage \
+              "$RUNNER_TEMP/wikidata-state-worktree" HEAD
+          fi
+          mkdir -p "$RUNNER_TEMP/wikidata-state-worktree/.automation"
+          cp data/generated/wikidata-bulk/stage.sqlite \
+            "$RUNNER_TEMP/wikidata-state-worktree/.automation/wikidata-bulk-stage.sqlite"
+          cd "$RUNNER_TEMP/wikidata-state-worktree"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .automation/wikidata-bulk-stage.sqlite
+          if git diff --cached --quiet; then
+            echo "Bulk source stage unchanged"
+          else
+            git commit -m "chore(wikidata): checkpoint staged Indian-film identities"
+            git push origin HEAD:refs/heads/automation/wikidata-bulk-stage
+          fi
+
+      - name: Summarize source-only candidate yield
+        if: always()
+        shell: bash
+        run: |
+          if [[ -s data/generated/wikidata-bulk/source-report.json ]]; then
+            python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          report=json.loads(Path("data/generated/wikidata-bulk/source-report.json").read_text())
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as fh:
+              fh.write("## Indian movie source-only bulk staging\n\n")
+              fh.write("No D1 reads or writes. All records require production reconciliation.\n\n")
+              for key in ("distinct_source_qids","source_qualified_unconflicted",
+                          "completed_shards","intended_shards","stopped_reason"):
+                  fh.write(f"- {key.replace('_',' ')}: **{report[key]}**\n")
+          PY
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: indian-films-wikidata-resumable-stage
+          path: |
+            data/generated/wikidata-bulk/stage.sqlite
+            data/generated/wikidata-bulk/source-report.json
+          if-no-files-found: warn
+          retention-days: 30

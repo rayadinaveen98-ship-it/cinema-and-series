@@ -163,7 +163,8 @@ def report_for(db: sqlite3.Connection, start_year: int, end_year: int,
         return int(db.execute(sql).fetchone()[0])
     shards_total = 4 * (end_year - start_year + 1)
     incomplete = db.execute(
-        "SELECT year,quarter FROM shards WHERE outcome!='complete' ORDER BY year,quarter"
+        "SELECT year,quarter FROM shards WHERE year BETWEEN ? AND ? AND outcome!='complete' "
+        "ORDER BY year,quarter", (start_year, end_year),
     ).fetchall()
     sampled = db.execute(
         "SELECT qid,title,year FROM films WHERE year_conflict=0 AND title_conflict=0 ORDER BY year DESC,title LIMIT 12"
@@ -175,7 +176,10 @@ def report_for(db: sqlite3.Connection, start_year: int, end_year: int,
         "evidence": ["P31=Q11424", "P495=Q668", "P577 release year"],
         "years": [start_year, end_year],
         "intended_shards": shards_total,
-        "completed_shards": count("SELECT COUNT(*) FROM shards WHERE outcome='complete'"),
+        "completed_shards": int(db.execute(
+            "SELECT COUNT(*) FROM shards WHERE outcome='complete' AND year BETWEEN ? AND ?",
+            (start_year, end_year),
+        ).fetchone()[0]),
         "incomplete_shards": [list(x) for x in incomplete],
         "new_shard_results": new_shards,
         "distinct_source_qids": count("SELECT COUNT(*) FROM films"),
@@ -184,7 +188,10 @@ def report_for(db: sqlite3.Connection, start_year: int, end_year: int,
         "conflicting_source_ids": count(
             "SELECT COUNT(*) FROM films WHERE year_conflict=1 OR title_conflict=1"),
         "stopped_reason": stopped_reason,
-        "all_shards_completed": count("SELECT COUNT(*) FROM shards WHERE outcome='complete'") == shards_total,
+        "all_shards_completed": int(db.execute(
+            "SELECT COUNT(*) FROM shards WHERE outcome='complete' AND year BETWEEN ? AND ?",
+            (start_year, end_year),
+        ).fetchone()[0]) == shards_total,
         "production_snapshot_checked": False,
         "net_new_against_production": None,
         "production_rows_imported": 0,
