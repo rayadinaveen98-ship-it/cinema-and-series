@@ -115,7 +115,7 @@ async function onThisDay(request: Request, env: Env) {
 }
 
 export default {
-  async fetch(request: Request, env: Env, _ctx: ExecutionContext) {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     const url = new URL(request.url);
     if (url.pathname === "/api/on-this-day") {
       if (request.method !== "GET") {
@@ -124,6 +124,6 @@ export default {
       return onThisDay(request, env);
     }
 
-    return baseWorker.fetch(request as Parameters<typeof baseWorker.fetch>[0], env);
+    return baseWorker.fetch(request as Parameters<typeof baseWorker.fetch>[0], env, ctx);
   },
 } satisfies ExportedHandler<Env>;

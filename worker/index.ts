@@ -211,8 +211,22 @@ function officialYoutubeArtwork(value: string | null | undefined) {
   return id ? `https://i.ytimg.com/vi/${id}/maxresdefault.jpg` : null;
 }
 
-export default {
-  async fetch(request, env) {
+// Worker-isolate hot cache prevents repeated scans if edge cache is not warmed.
+// Public catalogue endpoints contain no user-specific data.
+const hotCatalogueCache = new Map<string, { expiresAt: number; body: string }>();
+const MAX_HOT_CACHED_PAGES = 24;
+const MAX_HOT_CACHED_BODY = 400_000;
+
+function publicCatalogueCacheTtl(url: URL) {
+  if (url.pathname === "/api/catalogue-stats") return 1800;
+  if (url.pathname === "/api/series") return 900;
+  if (url.pathname === "/api/movies") {
+    return url.searchParams.get("scope") === "all" || url.searchParams.has("year") ? 1800 : 180;
+  }
+  return 0;
+}
+
+async function handleRequest(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/health") {
@@ -547,5 +561,68 @@ export default {
     }
 
     return new Response(null, { status: 404 });
+}
+
+export default {
+  async fetch(request, env, ctx) {
+    if (request.method !== "GET" || !env.DB) return handleRequest(request, env);
+    const cacheUrl = new URL(request.url);
+    const ttl = publicCatalogueCacheTtl(cacheUrl);
+    if (ttl <= 0) return handleRequest(request, env);
+
+    // Query parameter ordering does not affect a public catalogue answer.
+    cacheUrl.searchParams.sort();
+    const key = cacheUrl.toString();
+    const cachedInIsolate = hotCatalogueCache.get(key);
+    if (cachedInIsolate) {
+      if (cachedInIsolate.expiresAt > Date.now()) {
+        return new Response(cachedInIsolate.body, {
+          headers: { "Content-Type": "application/json; charset=utf-8",
+                     "Cache-Control": "public, max-age=60, s-maxage=300",
+                     "X-Catalogue-Cache": "hot" },
+        });
+      }
+      hotCatalogueCache.delete(key);
+    }
+
+    const cacheKey = new Request(key, { method: "GET" });
+    try {
+      const edgeHit = await caches.default.match(cacheKey);
+      if (edgeHit) return edgeHit;
+    } catch (error) {
+      console.warn("Catalogue edge-cache lookup unavailable", error);
+    }
+
+    const response = await handleRequest(request, env);
+    // Never cache D1 quota errors, failed requests, previews or private reviews.
+    if (response.status === 200 && !response.headers.has("Set-Cookie")) {
+      try {
+        const body = await response.clone().text();
+        if (body.length <= MAX_HOT_CACHED_BODY) {
+          if (hotCatalogueCache.size >= MAX_HOT_CACHED_PAGES) {
+            const oldest = hotCatalogueCache.keys().next().value;
+            if (oldest !== undefined) hotCatalogueCache.delete(oldest);
+          }
+          hotCatalogueCache.set(key, {
+            body,
+            expiresAt: Date.now() + ttl * 1000,
+          });
+        }
+      } catch (error) {
+        console.warn("Catalogue hot-cache fill failed", error);
+      }
+
+      try {
+        const forCache = response.clone();
+        const copy = new Response(forCache.body, { status: forCache.status, headers: forCache.headers });
+        copy.headers.set("Cache-Control", `public, max-age=${ttl}`);
+        ctx.waitUntil(caches.default.put(cacheKey, copy).catch((error) => {
+          console.warn("Catalogue edge-cache write unavailable", error);
+        }));
+      } catch (error) {
+        console.warn("Catalogue edge-cache preparation failed", error);
+      }
+    }
+    return response;
   },
 } satisfies ExportedHandler<Env>;
