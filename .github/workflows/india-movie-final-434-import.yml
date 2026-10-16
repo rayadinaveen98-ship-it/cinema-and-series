@@ -1,0 +1,158 @@
+name: India Movie — Complete Remaining 434 Audited Titles
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-movie-final-434-import.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: india-movie-category-import-pilot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  import-final-cohort:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Verify guarded import engine tests
+        run: python -m unittest tests.test_india_category_import tests.test_indian_movie_verification tests.test_media_identity_corrections -v
+
+      - name: Retrieve verified-source candidate archive from prior successful read-only scan
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-final/source
+          gh run download 38850773528 --repo "$GITHUB_REPOSITORY" \
+            --name india-movie-read-only-discovery \
+            --dir data/generated/india-final/source
+          test -s data/generated/india-final/source/india-movie-report.json
+
+      - name: Compile non-overlapping 250 and 184 title batches
+        shell: bash
+        run: |
+          for spec in 300:250 550:250; do
+            offset="${spec%%:*}"
+            cap="${spec##*:}"
+            python scripts/prepare_india_category_import.py \
+              --audit-json data/generated/india-final/source/india-movie-report.json \
+              --offset "$offset" \
+              --max-import "$cap" \
+              --out-json "data/generated/india-final/batch-${offset}.json" \
+              --out-sql "data/generated/india-final/batch-${offset}.sql"
+          done
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          base = Path("data/generated/india-final")
+          a = json.loads((base/"batch-300.json").read_text())
+          b = json.loads((base/"batch-550.json").read_text())
+          selected = a["selected"] + b["selected"]
+          qids = [str(row["wikidata_qid"]).upper() for row in selected]
+          if len(qids) != len(set(qids)):
+              raise SystemExit("Duplicate QIDs across the last two batches")
+          if not (1 <= len(a["selected"]) <= 250 and 1 <= len(b["selected"]) <= 250):
+              raise SystemExit("Out-of-range batch size")
+          if len(selected) > 434:
+              raise SystemExit("Unexpected candidate overflow")
+          print("FINAL_INDIA_IMPORT_BATCH_PLAN=" + json.dumps({
+              "first_batch": len(a["selected"]),
+              "second_batch": len(b["selected"]),
+              "total_attempted": len(selected),
+              "source_eligibility": a["summary"]["eligible_source_category_records"],
+          }, sort_keys=True))
+          PY
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Connect existing Cloudflare D1
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Read D1 count before changes
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS count FROM catalogue_titles;" \
+            > data/generated/india-final/before.json
+
+      - name: Import offset-300 category batch
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote \
+            --file=data/generated/india-final/batch-300.sql
+
+      - name: Import offset-550 category batch
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote \
+            --file=data/generated/india-final/batch-550.sql
+
+      - name: Verify count growth and cross-type identity integrity
+        shell: bash
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS count FROM catalogue_titles;" \
+            > data/generated/india-final/after.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS count FROM catalogue_titles c JOIN series_titles s ON c.wikidata_qid=s.wikidata_qid;" \
+            > data/generated/india-final/collisions.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          base = Path("data/generated/india-final")
+          def count(path):
+              return int(json.loads((base/path).read_text())[0]["results"][0]["count"])
+          before, after, collisions = count("before.json"), count("after.json"), count("collisions.json")
+          delta = after - before
+          output = {
+              "year_precision_before": before,
+              "year_precision_after": after,
+              "net_new_movie_rows": delta,
+              "cross_type_collisions": collisions,
+          }
+          print("FINAL_INDIA_PRODUCTION_RESULT=" + json.dumps(output, sort_keys=True))
+          (base/"result.json").write_text(json.dumps(output, indent=2) + "\n")
+          if not 0 <= delta <= 434:
+              raise SystemExit(f"Unexpected growth delta: {delta}")
+          if collisions:
+              raise SystemExit(f"Cross-type movie/series collisions: {collisions}")
+          PY
+
+      - name: Publish and preserve import evidence
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f data/generated/india-final/result.json ]]; then
+            cat data/generated/india-final/result.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-remaining-434-title-import
+          path: |
+            data/generated/india-final/batch-300.json
+            data/generated/india-final/batch-550.json
+            data/generated/india-final/batch-300.sql
+            data/generated/india-final/batch-550.sql
+            data/generated/india-final/before.json
+            data/generated/india-final/after.json
+            data/generated/india-final/collisions.json
+            data/generated/india-final/result.json
+          if-no-files-found: warn
+          retention-days: 30
