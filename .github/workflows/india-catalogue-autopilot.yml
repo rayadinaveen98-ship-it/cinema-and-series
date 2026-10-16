@@ -9,6 +9,8 @@ on:
     # Cloudflare D1 Free resets at 00:00 UTC. Give it 40 minutes.
     # 00:40 UTC is 06:10 IST. GitHub schedules may start later.
     - cron: "40 0 * * *"
+    # Extra Wikimedia discovery passes: 14:10 and 22:10 IST; no D1 access.
+    - cron: "40 8,16 * * *"
   workflow_dispatch:
     inputs:
       source_only:
@@ -33,6 +35,7 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       GH_TOKEN: ${{ github.token }}
+      SCHEDULE_CRON: ${{ github.event.schedule || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -84,8 +87,8 @@ jobs:
         env:
           SOURCE_ONLY_INPUT: ${{ inputs.source_only || false }}
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "push" || "$SOURCE_ONLY_INPUT" == "true" ]]; then
-            echo "Bootstrap/source-only run; no Cloudflare D1 connection required"
+          if [[ "$GITHUB_EVENT_NAME" == "push" || "$SOURCE_ONLY_INPUT" == "true" || ( "$GITHUB_EVENT_NAME" == "schedule" && "$SCHEDULE_CRON" != "40 0 * * *" ) ]]; then
+            echo "Bootstrap/extra source-only run; no Cloudflare D1 connection required"
           else
             test -n "$CLOUDFLARE_ACCOUNT_ID"
             test -n "$CLOUDFLARE_API_TOKEN"
@@ -100,7 +103,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/india-import-results"
           FLAGS=()
-          if [[ "$GITHUB_EVENT_NAME" == "push" || "$SOURCE_ONLY_INPUT" == "true" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "push" || "$SOURCE_ONLY_INPUT" == "true" || ( "$GITHUB_EVENT_NAME" == "schedule" && "$SCHEDULE_CRON" != "40 0 * * *" ) ]]; then
             FLAGS+=(--source-only)
           fi
           python scripts/india_daily_autopilot.py \
