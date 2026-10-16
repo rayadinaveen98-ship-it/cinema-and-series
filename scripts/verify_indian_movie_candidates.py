@@ -97,6 +97,8 @@ def sql_for_movie(item: dict) -> str:
         "WHERE NOT EXISTS (SELECT 1 FROM movies m WHERE "
         f"m.wikidata_qid={sql_quote(qid)} OR (LOWER(TRIM(m.title))=LOWER(TRIM({sql_quote(title)})) "
         f"AND CAST(substr(m.release_date,1,4) AS INTEGER)={year})) "
+        "AND NOT EXISTS (SELECT 1 FROM series_titles s WHERE "
+        f"s.wikidata_qid={sql_quote(qid)}) "
         "AND NOT EXISTS (SELECT 1 FROM catalogue_titles c WHERE "
         f"c.wikidata_qid={sql_quote(qid)} OR c.wikipedia_page_id={page_id} OR "
         f"(LOWER(TRIM(c.title))=LOWER(TRIM({sql_quote(title)})) AND c.release_year={year}));"
