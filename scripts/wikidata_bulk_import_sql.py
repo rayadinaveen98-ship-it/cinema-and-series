@@ -62,7 +62,7 @@ def load_stage(db_path: Path) -> list[dict]:
 def reconcile(stage_rows: list[dict], exact_movies: list[dict],
               year_movies: list[dict], series_rows: list[dict],
               max_preview: int = 1000) -> tuple[list[dict], dict]:
-    if not 1 <= max_preview <= 10000:
+    if not 0 <= max_preview <= 10000:
         raise ValueError("Preview limit out of bounds")
     known_qids = set()
     known_title_year = set()
