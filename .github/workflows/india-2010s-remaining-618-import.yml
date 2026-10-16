@@ -1,0 +1,155 @@
+name: India 2010s Movies — Complete Remaining 618 Cohort
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-2010s-remaining-618-import.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: india-movie-category-import-pilot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  import:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Verify importer, SQL and media identity guards
+        run: |
+          python -m unittest tests.test_india_category_import \
+            tests.test_indian_movie_verification tests.test_media_identity_corrections -v
+
+      - name: Download saved 2010s discovery; do not call Wikimedia
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-2010s-final/source
+          gh run download 38853062918 --repo "$GITHUB_REPOSITORY" \
+            --name india-2010s-discovery-and-safe-import-preview \
+            --dir data/generated/india-2010s-final/source
+          test -s data/generated/india-2010s-final/source/discovery.json
+
+      - name: Compile 250 + 250 + 118 disjoint source-backed records
+        shell: bash
+        run: |
+          for spec in 200:250 450:250 700:250; do
+            offset="${spec%%:*}"
+            cap="${spec##*:}"
+            python scripts/prepare_india_category_import.py \
+              --audit-json data/generated/india-2010s-final/source/discovery.json \
+              --offset "$offset" \
+              --max-import "$cap" \
+              --out-json "data/generated/india-2010s-final/batch-${offset}.json" \
+              --out-sql "data/generated/india-2010s-final/batch-${offset}.sql"
+          done
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("data/generated/india-2010s-final")
+          plans = [json.loads((root/f"batch-{offset}.json").read_text(encoding="utf-8"))
+                   for offset in (200, 450, 700)]
+          source_count = plans[0]["summary"]["eligible_source_category_records"]
+          lengths = [len(plan["selected"]) for plan in plans]
+          selected = [row for plan in plans for row in plan["selected"]]
+          qids = [str(row["wikidata_qid"]).upper() for row in selected]
+          if source_count != 818:
+              raise SystemExit(f"Unexpected archived source cohort: {source_count} not 818")
+          if lengths != [250, 250, 118]:
+              raise SystemExit(f"Wrong batch offsets or lengths: {lengths}")
+          if len(set(qids)) != 618:
+              raise SystemExit("Duplicated QIDs across historical import slices")
+          for row in selected:
+              if not (2010 <= row["year"] <= 2019):
+                  raise SystemExit("Unexpected release year outside scanned cohort")
+              if f"Category:{row['year']} Indian films" not in row["source_categories"]:
+                  raise SystemExit("Missing year-matched India source evidence")
+          print("INDIA_2010S_BATCH_PLAN=" + json.dumps(
+              {"batch_sizes": lengths, "records_attempted": len(qids),
+               "source_eligible_count": source_count}, sort_keys=True))
+          PY
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Bind existing Cloudflare D1 (no database creation)
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Snapshot catalogue count before writes
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS count FROM catalogue_titles;" \
+            > data/generated/india-2010s-final/before.json
+
+      - name: Apply three independent, insert-only batches
+        shell: bash
+        run: |
+          for offset in 200 450 700; do
+            npx wrangler d1 execute cinema-and-series --remote \
+              --file="data/generated/india-2010s-final/batch-${offset}.sql"
+          done
+
+      - name: Verify added rows and zero movie/series collisions
+        shell: bash
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS count FROM catalogue_titles;" \
+            > data/generated/india-2010s-final/after.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS count FROM catalogue_titles c JOIN series_titles s ON c.wikidata_qid=s.wikidata_qid;" \
+            > data/generated/india-2010s-final/collisions.json
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          root = Path("data/generated/india-2010s-final")
+          def count(filename):
+              return int(json.loads((root/filename).read_text(encoding="utf-8"))[0]["results"][0]["count"])
+          before, after, collisions = count("before.json"), count("after.json"), count("collisions.json")
+          delta = after - before
+          result = {"year_precision_before": before, "year_precision_after": after,
+                    "new_movies_added": delta, "cross_type_collisions": collisions}
+          print("INDIA_2010S_FINAL_IMPORT_RESULT=" + json.dumps(result, sort_keys=True))
+          (root/"result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+              fh.write("## 2010s Indian Movies\n\n")
+              fh.write(f"Year-precision movies: **{before:,} → {after:,}**\n\n")
+              fh.write(f"Net new: **{delta:,}**; cross-type collisions: **{collisions}**.\n")
+          if not 0 <= delta <= 618:
+              raise SystemExit(f"Unexpected movie growth: {delta}")
+          if collisions:
+              raise SystemExit(f"Movie/series identity collisions detected: {collisions}")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-2010s-remaining-618-production-import
+          path: |
+            data/generated/india-2010s-final/batch-200.json
+            data/generated/india-2010s-final/batch-450.json
+            data/generated/india-2010s-final/batch-700.json
+            data/generated/india-2010s-final/before.json
+            data/generated/india-2010s-final/after.json
+            data/generated/india-2010s-final/collisions.json
+            data/generated/india-2010s-final/result.json
+          if-no-files-found: warn
+          retention-days: 30
