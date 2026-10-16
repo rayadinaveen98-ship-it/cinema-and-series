@@ -1,0 +1,142 @@
+name: India 2010s Movies — Discovery and Import Preview
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-2010s-movie-cohort.yml"
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: "Earliest year to scan"
+        required: true
+        default: "2010"
+      end_year:
+        description: "Latest year to scan"
+        required: true
+        default: "2019"
+      category_offset:
+        description: "Resume from numbered category seed after previous rate-limit"
+        required: true
+        default: "0"
+      max_categories:
+        description: "Maximum category seeds in this paced run"
+        required: true
+        default: "20"
+
+concurrency:
+  group: india-2010s-readonly-cohort
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  discovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      START_YEAR: ${{ inputs.start_year || '2010' }}
+      END_YEAR: ${{ inputs.end_year || '2019' }}
+      CATEGORY_OFFSET: ${{ inputs.category_offset || '0' }}
+      MAX_CATEGORIES: ${{ inputs.max_categories || '20' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Test India film discovery and import-preparation guards
+        run: |
+          python -m unittest \
+            tests.test_indian_movie_growth_audit \
+            tests.test_india_category_import \
+            tests.test_indian_movie_verification -v
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Access existing D1 read-only
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Snapshot current Movie IDs to avoid re-imports
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-2010s
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,release_date FROM movies;" \
+            > data/generated/india-2010s/exact-movies.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year FROM catalogue_titles;" \
+            > data/generated/india-2010s/year-movies.json
+
+      - name: Paced Indian movie discovery, deduplicated against current production
+        shell: bash
+        run: |
+          python scripts/audit_indian_movie_growth.py \
+            --start-year "$START_YEAR" \
+            --end-year "$END_YEAR" \
+            --category-offset "$CATEGORY_OFFSET" \
+            --max-categories "$MAX_CATEGORIES" \
+            --max-candidates 8000 \
+            --exact-movies data/generated/india-2010s/exact-movies.json \
+            --year-movies data/generated/india-2010s/year-movies.json \
+            --out-json data/generated/india-2010s/discovery.json \
+            --out-md data/generated/india-2010s/discovery.md
+
+      - name: Prepare guarded 100-film import candidate preview (no writes)
+        shell: bash
+        run: |
+          python scripts/prepare_india_category_import.py \
+            --audit-json data/generated/india-2010s/discovery.json \
+            --max-import 100 \
+            --offset 0 \
+            --out-json data/generated/india-2010s/import-preview.json \
+            --out-sql data/generated/india-2010s/import-preview.sql
+
+      - name: Summarize observed new candidate yield
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("data/generated/india-2010s")
+          discovery = json.loads((root/"discovery.json").read_text(encoding="utf-8"))
+          preview = json.loads((root/"import-preview.json").read_text(encoding="utf-8"))
+          summary = {
+              "years": [int(__import__("os").environ["START_YEAR"]),
+                        int(__import__("os").environ["END_YEAR"])],
+              "discovered_pages": discovery["summary"]["discovered_unique_pages"],
+              "net_new_discovery_candidates": discovery["summary"]["total_net_new_discovery_candidates"],
+              "india_category_importable_leads": preview["summary"]["eligible_source_category_records"],
+              "guarded_sql_preview_rows": len(preview["selected"]),
+              "source_incomplete": discovery["source"].get("source_incomplete"),
+              "halt_reason": discovery["source"].get("halt_reason"),
+              "next_category_offset": discovery["source"].get("next_category_offset"),
+          }
+          print("INDIA_HISTORICAL_COHORT=" + json.dumps(summary, sort_keys=True))
+          with open(__import__("os").environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as fh:
+              fh.write("## Indian Historical Movie Discovery\n\n")
+              fh.write("This run DID NOT import anything into production.\n\n")
+              for key, value in summary.items():
+                  fh.write(f"- {key.replace('_', ' ')}: **{value}**\n")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-2010s-discovery-and-safe-import-preview
+          path: |
+            data/generated/india-2010s/discovery.json
+            data/generated/india-2010s/discovery.md
+            data/generated/india-2010s/import-preview.json
+            data/generated/india-2010s/import-preview.sql
+          if-no-files-found: warn
+          retention-days: 30
