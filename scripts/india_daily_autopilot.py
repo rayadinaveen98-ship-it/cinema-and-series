@@ -27,6 +27,11 @@ from prepare_india_category_import import select_batch
 from production_catalogue_quality import load_d1_rows
 from verify_indian_movie_candidates import sql_for_movie, QID
 
+# Prioritize high-quality year-level Indian-film categories (one seed/year).
+# Existing broader language-category audits remain available for backfill.
+# Resume offsets are in INDIA-ONLY year-category units, not old 13-per-year units.
+# Previously archived scans already captured the newest one/two years in
+# later decades; still re-check conservatively when a rate-limit interrupted.
 # Historical decades first; then resume partially scanned decades.
 DECADES = [
     (1960, 1969, 0),
@@ -34,17 +39,17 @@ DECADES = [
     (1940, 1949, 0),
     (1930, 1939, 0),
     (1913, 1929, 0),
-    (1970, 1979, 10),
-    (1980, 1989, 20),
-    (1990, 1999, 11),
-    (2000, 2009, 20),
-    (2010, 2019, 19),
-    (2020, 2026, 20),
+    (1970, 1979, 1),
+    (1980, 1989, 2),
+    (1990, 1999, 1),
+    (2000, 2009, 2),
+    (2010, 2019, 2),
+    (2020, 2026, 2),
 ]
 MAX_DISCOVERY_CATEGORIES = 16
-MAX_NEW_PER_DAY = 500
+MAX_NEW_PER_DAY = 1500
 SQL_BATCH_SIZE = 75
-MAX_IMPORT_ROWS_READ = 750_000   # Reserve most free-tier D1 rows for the app.
+MAX_IMPORT_ROWS_READ = 1_200_000  # Reserve at least 3.8M of D1's 5M free reads for app activity.
 TARGET_ADDITIONAL_MOVIES = 10_000
 CONFIRMED_PRE_AUTOPILOT = 1552  # Previously audited +734 and +818.
 
@@ -71,7 +76,7 @@ def initial_state() -> dict:
         "autopilot_added_confirmed": 0,
         "attempted_by_autopilot": [],
         "queue": {},
-        "scan": {"decade_index": 0, "offset": 0, "finished": False},
+        "scan": {"decade_index": 0, "offset": 0, "finished": False, "mode": "india_only"},
         "last_run": {},
         "history": [],
     }
@@ -150,6 +155,12 @@ def bootstrap(state: dict, archive_year: Path | None, archive_history: Path | No
 
 def source_step(state: dict) -> dict:
     progress = state["scan"]
+    if progress.get("mode") != "india_only":
+        # Migrate safely from the previous 13-category/year cursor. Rounding
+        # down deliberately revisits the partially scanned year's India
+        # category, rather than ever skipping an unvisited historical year.
+        progress["offset"] = max(0, int(progress.get("offset", 0)) // 13)
+        progress["mode"] = "india_only"
     if progress.get("finished"):
         return {"status": "completed", "added_source_qids": 0}
     index = int(progress["decade_index"])
@@ -161,11 +172,11 @@ def source_step(state: dict) -> dict:
     prior = len(state["queue"])
     records, source = discover(start, end, max_candidates=8000,
                                max_categories=MAX_DISCOVERY_CATEGORIES,
-                               category_offset=offset)
+                               category_offset=offset, india_only=True)
     for row in records:
         merge_source(state["queue"], row)
     next_offset = int(source.get("next_category_offset", offset))
-    total_seeds = (end - start + 1) * 13
+    total_seeds = end - start + 1
     if next_offset >= total_seeds and source.get("halt_reason") != "wikipedia_rate_limit":
         progress["decade_index"] = index + 1
         progress["offset"] = 0
@@ -336,8 +347,8 @@ def main() -> int:
     parser.add_argument("--max-reads", type=int, default=MAX_IMPORT_ROWS_READ)
     parser.add_argument("--source-only", action="store_true")
     args = parser.parse_args()
-    if not (1 <= args.max_new <= 750 and 10000 <= args.max_reads <= 1_000_000):
-        parser.error("max-new must be 1..750 and import read budget 10k..1M")
+    if not (1 <= args.max_new <= 2000 and 10000 <= args.max_reads <= 1_500_000):
+        parser.error("max-new must be 1..2000 and import read budget 10k..1.5M")
     args.output_dir.mkdir(parents=True, exist_ok=True)
     args.state.parent.mkdir(parents=True, exist_ok=True)
     args.out_report.parent.mkdir(parents=True, exist_ok=True)
