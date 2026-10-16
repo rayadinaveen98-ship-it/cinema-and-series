@@ -79,6 +79,34 @@ class DailyAutopilotTests(unittest.TestCase):
         self.assertEqual(state["scan"]["offset"], 5)
         self.assertEqual(len(state["queue"]), 1)
 
+    def test_legacy_scan_offset_migrates_without_skipping_years(self):
+        state = initial_state()
+        # Old index 16 means one complete 13-category year plus three of next.
+        # Fast mode rechecks the partial year rather than skipping it.
+        state["scan"].pop("mode")
+        state["scan"]["offset"] = 16
+        with patch("india_daily_autopilot.discover", return_value=(
+            [item("Q25", 1968)],
+            {"halt_reason": "category_batch_complete", "next_category_offset": 2,
+             "categories_failed": 0},
+        )) as discover_mock:
+            source_step(state)
+        self.assertTrue(discover_mock.call_args.kwargs["india_only"])
+        self.assertEqual(discover_mock.call_args.kwargs["category_offset"], 1)
+        self.assertEqual(state["scan"]["offset"], 2)
+        self.assertEqual(state["scan"]["mode"], "india_only")
+
+    def test_decade_boundary_advances_after_india_only_seed_count(self):
+        state = initial_state()
+        with patch("india_daily_autopilot.discover", return_value=(
+            [item("Q26", 1960)],
+            {"halt_reason": "category_batch_complete", "next_category_offset": 10,
+             "categories_failed": 0},
+        )):
+            source_step(state)
+        self.assertEqual(state["scan"]["decade_index"], 1)
+        self.assertEqual(state["scan"]["offset"], 0)
+
     def test_existing_movie_and_series_are_not_imported(self):
         state = initial_state()
         for qid in ("Q50", "Q51", "Q52"):
