@@ -41,10 +41,17 @@ REQUEST_PAUSE = 1.35  # Courtesy throttle; stop rather than hammer a 429 respons
 QID_PATTERN = re.compile(r"^Q[1-9][0-9]*$")
 
 
-def category_seeds(start_year: int, end_year: int):
-    """Include confirmed India category and explicitly weaker language signals."""
+def category_seeds(start_year: int, end_year: int, india_only: bool = False):
+    """Prioritize country-evidence year categories; retain optional language backfill.
+
+    India-only mode scans one category per year instead of thirteen, allowing
+    the existing courtesy rate limit to cover much more history per run.
+    Wikipedia category membership is discovery evidence, never verification.
+    """
     for year in range(end_year, start_year - 1, -1):
         yield (f"Category:{year} Indian films", year, None, "india_category")
+        if india_only:
+            continue
         for language, suffix in LANGUAGE_CATEGORIES.items():
             yield (f"Category:{year} {suffix}", year, language, "language_category")
 
@@ -111,10 +118,10 @@ def resolve_page_qids(page_ids: list[int]) -> tuple[dict[int, str], int, bool]:
     return mapping, failed_batches, stopped_for_rate_limit
 
 
-def discover(start_year: int, end_year: int, max_candidates: int, max_categories: int = 20, category_offset: int = 0) -> tuple[list[dict], dict]:
+def discover(start_year: int, end_year: int, max_candidates: int, max_categories: int = 20, category_offset: int = 0, india_only: bool = False) -> tuple[list[dict], dict]:
     by_page: dict[int, dict] = {}
     reports = []
-    seeds = category_seeds(start_year, end_year)
+    seeds = category_seeds(start_year, end_year, india_only=india_only)
     incomplete = False
     halt_reason = None
     next_category_offset = category_offset
@@ -193,6 +200,7 @@ def discover(start_year: int, end_year: int, max_candidates: int, max_categories
         })
     meta = {
         "categories_attempted": len(reports),
+        "india_only": india_only,
         "categories_failed": sum(p["status"] != "ok" for p in reports),
         "qid_resolution_failed_batches": failed_qid_batches,
         "pageprops_rate_limited": pageprops_rate_limited,

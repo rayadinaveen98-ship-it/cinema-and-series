@@ -109,8 +109,8 @@ jobs:
             --archive-history "$RUNNER_TEMP/india-archive/history/merged-candidates.json" \
             --output-dir "$RUNNER_TEMP/india-import-results" \
             --out-report "$RUNNER_TEMP/india-autopilot-report.json" \
-            --max-new 500 \
-            --max-reads 750000 \
+            --max-new 1500 \
+            --max-reads 1200000 \
             "${FLAGS[@]}"
 
       - name: Persist source queue, source cursor and import checkpoint across days

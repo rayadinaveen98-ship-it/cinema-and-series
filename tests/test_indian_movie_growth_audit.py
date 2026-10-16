@@ -26,6 +26,25 @@ class IndiaMovieAuditTests(unittest.TestCase):
         self.assertIn(("Category:2025 Telugu-language films", 2025, "Telugu", "language_category"), seeds)
         self.assertEqual(len(seeds), 2 * 13)
 
+    def test_fast_india_only_year_scan_avoids_twelve_language_requests(self):
+        seeds = list(category_seeds(2008, 2009, india_only=True))
+        self.assertEqual(seeds, [
+            ("Category:2009 Indian films", 2009, None, "india_category"),
+            ("Category:2008 Indian films", 2008, None, "india_category"),
+        ])
+        with (patch("audit_indian_movie_growth.category_pages",
+                    return_value=[{"page_id": 222, "title": "New Film",
+                                   "wikidata_qid": "Q222"}]) as pages,
+              patch("audit_indian_movie_growth.time.sleep")):
+            records, meta = discover(2008, 2009, 8000, max_categories=16,
+                                     india_only=True)
+        self.assertEqual(pages.call_count, 2)
+        self.assertEqual(len(records), 1)
+        self.assertTrue(meta["india_only"])
+        self.assertEqual(meta["next_category_offset"], 2)
+        self.assertFalse(meta["source_incomplete"])
+        self.assertTrue(records[0]["india_category"])
+
     def test_qid_page_title_year_dedup_and_uncertainty(self):
         exact = [{"id": "m1", "title": "Existing Film", "wikidata_qid": "Q10", "release_date": "2023-04-05"}]
         year = [{"id": "y1", "title": "Old Classic", "wikidata_qid": "Q11",
