@@ -1,0 +1,170 @@
+name: India Cinema — Daily Catalogue Autopilot
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-catalogue-autopilot.yml"
+  schedule:
+    # Cloudflare D1 Free resets at 00:00 UTC. Give it 40 minutes.
+    # 00:40 UTC is 06:10 IST. GitHub schedules may start later.
+    - cron: "40 0 * * *"
+  workflow_dispatch:
+    inputs:
+      source_only:
+        description: "Collect source leads only, no D1 reads or writes"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: india-catalogue-autopilot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  daily:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Unit tests for daily imports, source queues and quota handling
+        shell: bash
+        run: |
+          python -m unittest tests.test_india_daily_autopilot \
+            tests.test_india_category_import tests.test_indian_movie_growth_audit -v
+
+      - name: Restore durable checkpoint from separate automation branch
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --heads origin automation/india-growth-state >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/automation/india-growth-state
+            git show FETCH_HEAD:.automation/india-growth-state.json > "$RUNNER_TEMP/india-state.json"
+            echo "Restored Indian movie source queue and last checkpoint"
+          else
+            echo '{}' > "$RUNNER_TEMP/india-state.json"
+            echo "Initializing durable Indian movie growth state"
+          fi
+
+      - name: Load archived 2000s and historical evidence only on first run
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/india-archive/2000s" "$RUNNER_TEMP/india-archive/history"
+          if python -c 'import json,sys; s=json.load(open(sys.argv[1])); sys.exit(0 if s.get("queue") else 1)' "$RUNNER_TEMP/india-state.json"; then
+            echo "Persistent source queue already populated"
+          else
+            gh run download 38854248987 --repo "$GITHUB_REPOSITORY" \
+              --name india-2000s-discovery-and-safe-import-preview \
+              --dir "$RUNNER_TEMP/india-archive/2000s"
+            gh run download 38856796933 --repo "$GITHUB_REPOSITORY" \
+              --name india-1970s-1990s-deduplicated-source-manifest \
+              --dir "$RUNNER_TEMP/india-archive/history"
+            test -s "$RUNNER_TEMP/india-archive/2000s/discovery.json"
+            test -s "$RUNNER_TEMP/india-archive/history/merged-candidates.json"
+          fi
+
+      - name: Prepare existing D1 connection when production work is permitted
+        shell: bash
+        env:
+          SOURCE_ONLY_INPUT: ${{ inputs.source_only || false }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "push" || "$SOURCE_ONLY_INPUT" == "true" ]]; then
+            echo "Bootstrap/source-only run; no Cloudflare D1 connection required"
+          else
+            test -n "$CLOUDFLARE_ACCOUNT_ID"
+            test -n "$CLOUDFLARE_API_TOKEN"
+            npm install --no-audit --no-fund
+            python scripts/cloudflare_bootstrap.py
+          fi
+
+      - name: Process daily discovery, quota-aware idempotent imports and verification
+        shell: bash
+        env:
+          SOURCE_ONLY_INPUT: ${{ inputs.source_only || false }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/india-import-results"
+          FLAGS=()
+          if [[ "$GITHUB_EVENT_NAME" == "push" || "$SOURCE_ONLY_INPUT" == "true" ]]; then
+            FLAGS+=(--source-only)
+          fi
+          python scripts/india_daily_autopilot.py \
+            --state "$RUNNER_TEMP/india-state.json" \
+            --archive-2000 "$RUNNER_TEMP/india-archive/2000s/discovery.json" \
+            --archive-history "$RUNNER_TEMP/india-archive/history/merged-candidates.json" \
+            --output-dir "$RUNNER_TEMP/india-import-results" \
+            --out-report "$RUNNER_TEMP/india-autopilot-report.json" \
+            --max-new 500 \
+            --max-reads 750000 \
+            "${FLAGS[@]}"
+
+      - name: Persist source queue, source cursor and import checkpoint across days
+        if: always()
+        shell: bash
+        run: |
+          test -s "$RUNNER_TEMP/india-state.json"
+          if git ls-remote --exit-code --heads origin automation/india-growth-state >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/automation/india-growth-state
+            git worktree add --detach "$RUNNER_TEMP/india-growth-branch" FETCH_HEAD
+          else
+            git worktree add -b automation/india-growth-state "$RUNNER_TEMP/india-growth-branch" HEAD
+          fi
+          mkdir -p "$RUNNER_TEMP/india-growth-branch/.automation"
+          cp "$RUNNER_TEMP/india-state.json" \
+            "$RUNNER_TEMP/india-growth-branch/.automation/india-growth-state.json"
+          cd "$RUNNER_TEMP/india-growth-branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .automation/india-growth-state.json
+          if git diff --cached --quiet; then
+            echo "No checkpoint changes to persist"
+          else
+            git commit -m "chore(autopilot): save daily India cinema growth checkpoint"
+            git push origin HEAD:refs/heads/automation/india-growth-state
+          fi
+
+      - name: Publish run status
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f "$RUNNER_TEMP/india-autopilot-report.json" ]]; then
+            python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report=json.loads((Path(os.environ["RUNNER_TEMP"])/"india-autopilot-report.json").read_text())
+          p=report.get("production",{})
+          source=report.get("source_discovery",{})
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as output:
+              output.write("## India Movie Catalogue Autopilot\n\n")
+              output.write(f"Production: **{p.get('status','unknown')}**\n\n")
+              output.write(f"New confirmed today: **{p.get('new_movies_added_today',0)}**\n\n")
+              output.write(f"Progress toward 10K: **{p.get('confirmed_target_progress','pending verification')}**\n\n")
+              output.write(f"Source leads stored: **{report.get('source_queue_qids')}**\n\n")
+              output.write(f"Source crawl: **{source.get('status','not run')}**\n\n")
+          PY
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-catalogue-autopilot-checkpoint-and-daily-report
+          path: |
+            ${{ runner.temp }}/india-state.json
+            ${{ runner.temp }}/india-autopilot-report.json
+          if-no-files-found: warn
+          retention-days: 30
