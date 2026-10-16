@@ -36,6 +36,20 @@ class IndiaImportTests(unittest.TestCase):
         self.assertEqual(summary["eligible_source_category_records"], 2)
         self.assertEqual(summary["excluded_reasons"]["duplicate_discovery_qid"], 1)
 
+    def test_disjoint_candidate_offsets(self):
+        rows = [candidate(qid=f"Q{123 + i}", title=f"Film {i}") for i in range(7)]
+        report = {"candidates": rows}
+        first, f = select_batch(report, 3, 0)
+        second, s = select_batch(report, 3, 3)
+        third, t = select_batch(report, 3, 6)
+        self.assertEqual(len(first), 3)
+        self.assertEqual(len(second), 3)
+        self.assertEqual(len(third), 1)
+        self.assertTrue({x["wikidata_qid"] for x in first}.isdisjoint(
+            {x["wikidata_qid"] for x in second}))
+        self.assertEqual(s["batch_offset"], 3)
+        self.assertEqual(t["proposed_batch_count"], 1)
+
     def test_insert_protects_existing_movie_title_year_and_series_id(self):
         db = sqlite3.connect(":memory:")
         db.executescript("""
