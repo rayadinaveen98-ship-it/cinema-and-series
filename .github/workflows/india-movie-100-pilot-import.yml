@@ -1,0 +1,150 @@
+name: India Movie — One-Time 100-Title Import Pilot
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-movie-100-pilot-import.yml"
+  workflow_dispatch:
+    inputs:
+      audit_run_id:
+        description: "Successful India discovery audit run ID containing a report artifact"
+        required: true
+        default: "38850773528"
+
+concurrency:
+  group: india-movie-category-import-pilot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  reviewed-category-import:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      AUDIT_RUN_ID: ${{ inputs.audit_run_id || '38850773528' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Run import and SQL-protection tests
+        run: python -m unittest tests.test_india_category_import tests.test_indian_movie_verification -v
+
+      - name: Retrieve previously recorded source evidence (no Wikimedia calls)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-pilot/source
+          gh run download "$AUDIT_RUN_ID" \
+            --repo "$GITHUB_REPOSITORY" \
+            --name india-movie-read-only-discovery \
+            --dir data/generated/india-pilot/source
+          test -s data/generated/india-pilot/source/india-movie-report.json
+
+      - name: Compile at most 100 Indian-category, QID-backed SQL inserts
+        shell: bash
+        run: |
+          python scripts/prepare_india_category_import.py \
+            --audit-json data/generated/india-pilot/source/india-movie-report.json \
+            --max-import 100 \
+            --out-json data/generated/india-pilot/import-plan.json \
+            --out-sql data/generated/india-pilot/import-upserts.sql
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          plan = json.loads(Path("data/generated/india-pilot/import-plan.json").read_text(encoding="utf-8"))
+          count = len(plan["selected"])
+          if not 1 <= count <= 100:
+              raise SystemExit(f"Refusing import of {count} entries: allowed range is 1..100")
+          for row in plan["selected"]:
+              if row["classification"] != "new_indian_category_candidates":
+                  raise SystemExit("Unsafe candidate classification")
+              if f"Category:{row['year']} Indian films" not in row["source_categories"]:
+                  raise SystemExit("Origin category mismatch")
+              if not row.get("wikidata_qid"):
+                  raise SystemExit("Missing Wikidata ID")
+          print(f"PRECHECK_IMPORT_BATCH={count}")
+          PY
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Confirm existing D1 binding without creating a database
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Save catalogue baseline
+        shell: bash
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS count FROM catalogue_titles;" \
+            > data/generated/india-pilot/before.json
+
+      - name: Import prepared 100-title pilot batch into production
+        shell: bash
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote \
+            --file=data/generated/india-pilot/import-upserts.sql
+
+      - name: Verify post-write movie growth and no cross-type collisions
+        shell: bash
+        run: |
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS count FROM catalogue_titles;" \
+            > data/generated/india-pilot/after.json
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS count FROM catalogue_titles c JOIN series_titles s ON c.wikidata_qid=s.wikidata_qid;" \
+            > data/generated/india-pilot/cross-type-collisions.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root = Path("data/generated/india-pilot")
+          def count(filename):
+              payload = json.loads((root / filename).read_text(encoding="utf-8"))
+              return int(payload[0]["results"][0]["count"])
+          before, after, collisions = count("before.json"), count("after.json"), count("cross-type-collisions.json")
+          delta = after - before
+          summary = {"year_precision_movies_before": before,
+                     "year_precision_movies_after": after,
+                     "new_movies_added": delta, "cross_type_collisions": collisions}
+          print("INDIA_PRODUCTION_IMPORT_RESULT=" + json.dumps(summary, sort_keys=True))
+          (root / "production-result.json").write_text(json.dumps(summary, indent=2) + "\n")
+          if not 0 <= delta <= 100:
+              raise SystemExit(f"Unexpected import delta: {delta}")
+          if collisions:
+              raise SystemExit(f"Movie/series identity collisions detected: {collisions}")
+          PY
+
+      - name: Publish pilot report
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f data/generated/india-pilot/production-result.json ]]; then
+            cat data/generated/india-pilot/production-result.json >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-100-movie-production-pilot
+          path: |
+            data/generated/india-pilot/import-plan.json
+            data/generated/india-pilot/import-upserts.sql
+            data/generated/india-pilot/before.json
+            data/generated/india-pilot/after.json
+            data/generated/india-pilot/cross-type-collisions.json
+            data/generated/india-pilot/production-result.json
+          if-no-files-found: warn
+          retention-days: 30
