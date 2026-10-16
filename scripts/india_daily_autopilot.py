@@ -67,6 +67,7 @@ def initial_state() -> dict:
         "goal_additional_indian_films": TARGET_ADDITIONAL_MOVIES,
         "previously_confirmed": CONFIRMED_PRE_AUTOPILOT,
         "2000s_import_present": 0,
+        "2000s_seed_qids": [],
         "autopilot_added_confirmed": 0,
         "attempted_by_autopilot": [],
         "queue": {},
@@ -136,6 +137,15 @@ def bootstrap(state: dict, archive_year: Path | None, archive_history: Path | No
             raise ValueError("Unsupported source archive; refusing to bootstrap")
         for row in report.get("candidates", []):
             merge_source(state["queue"], row)
+            if archive == archive_year:
+                qid = str(row.get("wikidata_qid") or "").upper()
+                year = row.get("year")
+                if (row.get("classification") == "new_indian_category_candidates"
+                        and QID.fullmatch(qid) and isinstance(year, int)
+                        and 2000 <= year <= 2009
+                        and f"Category:{year} Indian films" in row.get("source_categories", [])):
+                    state["2000s_seed_qids"].append(qid)
+    state["2000s_seed_qids"] = sorted(set(state["2000s_seed_qids"]))
 
 
 def source_step(state: dict) -> dict:
@@ -241,12 +251,7 @@ def process_d1(state: dict, output_dir: Path, max_daily: int, max_reads: int) ->
     series = query_rows("SELECT wikidata_qid FROM series_titles WHERE wikidata_qid IS NOT NULL;")
     year_qids = {str(row.get("wikidata_qid") or "").upper() for row in year}
     # Explicitly verify the 689-title 2000s import from the prior incomplete run.
-    year_2000 = {str(item.get("wikidata_qid") or "").upper()
-                 for item in state["queue"].values()
-                 if len(item.get("observed_years", [])) == 1
-                 and 2000 <= item["observed_years"][0] <= 2009
-                 and f"Category:{item['observed_years'][0]} Indian films"
-                    in item.get("source_categories", [])}
+    year_2000 = set(state.get("2000s_seed_qids") or [])
     state["2000s_import_present"] = len(year_2000 & year_qids)
     # Crash recovery: submitted rows not verified in a previous run count only
     # when the database actually contains their QIDs.
