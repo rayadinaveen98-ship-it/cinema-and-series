@@ -109,14 +109,7 @@ const combinedCatalogueCte = `WITH combined_catalogue AS (
     m.backdrop_url,
     m.artwork_source,
     m.artwork_source_url,
-    (
-      SELECT o.external_url
-      FROM source_observations o
-      WHERE o.title = m.title
-        AND o.review_status = 'accepted'
-      ORDER BY o.observed_at DESC
-      LIMIT 1
-    ) AS official_observation_url,
+    NULL AS official_observation_url,
     m.updated_at
   FROM movies m
   LEFT JOIN source_channels s ON s.source_key = m.release_date_source
@@ -472,12 +465,40 @@ export default {
         ).bind(today, next7, next30).first<PeriodCountsRow>(),
       ]);
 
+      // Resolve accepted official thumbnail sources only for the current page.
+      // The previous correlated subquery ran inside every aggregate/facet scan
+      // over the whole catalogue; this page-local lookup avoids that CPU blow-up.
+      const officialUrls = new Map<string, string>();
+      const pageTitles = [...new Set(result.results
+        .filter((movie) => movie.date_precision === "day")
+        .map((movie) => movie.title))];
+      if (pageTitles.length) {
+        try {
+          const placeholders = pageTitles.map((_, index) => `?${index + 1}`).join(",");
+          const observations = await env.DB.prepare(
+            `SELECT title, external_url FROM source_observations
+             WHERE review_status='accepted' AND title IN (${placeholders})
+             ORDER BY observed_at DESC LIMIT 1000`,
+          ).bind(...pageTitles).all<{ title: string; external_url: string }>();
+          for (const observation of observations.results) {
+            if (!officialUrls.has(observation.title)) {
+              officialUrls.set(observation.title, observation.external_url);
+            }
+          }
+        } catch (error) {
+          // Artwork is optional. Failure must not take down the movie catalogue.
+          console.warn("Optional accepted thumbnail lookup failed", error);
+        }
+      }
       const visualArtwork = url.searchParams.get("artwork") === "1"
         ? await resolveVisualArtwork(result.results.map((movie) => movie.wikidata_qid).filter((qid): qid is string => Boolean(qid)))
         : new Map();
 
       const movies = result.results.map((movie) => {
-        const officialPoster = officialYoutubeArtwork(movie.official_observation_url);
+        const officialUrl = movie.date_precision === "day"
+          ? officialUrls.get(movie.title) ?? movie.official_observation_url
+          : undefined;
+        const officialPoster = officialYoutubeArtwork(officialUrl);
         const wikimediaPoster = visualArtwork.get(movie.wikidata_qid ?? "");
         return {
           id: movie.id,
@@ -497,7 +518,7 @@ export default {
           artworkSource: movie.artwork_source
             ?? (officialPoster ? "official_youtube_thumbnail" : wikimediaPoster?.sourceName),
           artworkSourceUrl: movie.artwork_source_url
-            ?? (officialPoster ? movie.official_observation_url ?? undefined : wikimediaPoster?.sourceUrl ?? undefined),
+            ?? (officialPoster ? officialUrl ?? undefined : wikimediaPoster?.sourceUrl ?? undefined),
         };
       });
       const latestUpdate = [statsResult?.latest_updated_at, sourcesResult?.latest_updated_at].filter((value): value is string => Boolean(value)).sort().at(-1);
