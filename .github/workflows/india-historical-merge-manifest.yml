@@ -1,0 +1,66 @@
+name: India History — Consolidate 1970s–1990s Film Leads
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-historical-merge-manifest.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  merge-source-evidence:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Check source-only merge contracts
+        run: |
+          python -m unittest tests.test_combine_india_historical_sources \
+            tests.test_india_historical_offline_discovery -v
+      - name: Download completed 1970s, 1980s and 1990s offline source reports
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-history/{1970s,1980s,1990s}
+          gh run download 38855998282 --repo "$GITHUB_REPOSITORY" \
+            --name india-1970s-source-only --dir data/generated/india-history/1970s
+          gh run download 38855777749 --repo "$GITHUB_REPOSITORY" \
+            --name india-1980s-source-only --dir data/generated/india-history/1980s
+          gh run download 38855470497 --repo "$GITHUB_REPOSITORY" \
+            --name india-historical-source-only --dir data/generated/india-history/1990s
+          test -s data/generated/india-history/1970s/discovery.json
+          test -s data/generated/india-history/1980s/discovery.json
+          test -s data/generated/india-history/1990s/discovery.json
+      - name: Deduplicate source evidence without touching production D1
+        shell: bash
+        run: |
+          python scripts/combine_india_historical_sources.py \
+            --source data/generated/india-history/1970s/discovery.json \
+                     data/generated/india-history/1980s/discovery.json \
+                     data/generated/india-history/1990s/discovery.json \
+            --out-json data/generated/india-history/merged-candidates.json \
+            --out-md data/generated/india-history/merged-report.md
+      - name: Publish audited source-only evidence
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f data/generated/india-history/merged-report.md ]]; then
+            cat data/generated/india-history/merged-report.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-1970s-1990s-deduplicated-source-manifest
+          path: |
+            data/generated/india-history/merged-candidates.json
+            data/generated/india-history/merged-report.md
+          if-no-files-found: warn
+          retention-days: 30
