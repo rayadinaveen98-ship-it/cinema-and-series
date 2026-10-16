@@ -58,21 +58,24 @@ def category_pages(category: str, cap: int = PAGE_CAP) -> list[dict]:
     continuation = None
     while len(collected) < cap:
         params = {
-            "action": "query", "list": "categorymembers", "cmtitle": category,
-            "cmnamespace": "0", "cmtype": "page",
-            "cmlimit": str(min(500, cap - len(collected))),
+            "action": "query", "generator": "categorymembers", "gcmtitle": category,
+            "gcmnamespace": "0", "gcmtype": "page",
+            "gcmlimit": str(min(500, cap - len(collected))),
+            "prop": "pageprops", "ppprop": "wikibase_item",
             "format": "json", "formatversion": "2",
         }
         if continuation:
-            params["cmcontinue"] = continuation
+            params["gcmcontinue"] = continuation
         payload = wiki.request_json(wiki.ENWIKI_API, params)
-        for page in payload.get("query", {}).get("categorymembers", []):
+        for page in payload.get("query", {}).get("pages", []):
             name = str(page.get("title") or "").strip()
             page_id = int(page.get("pageid") or 0)
             if page_id <= 0 or not name or name.casefold().startswith(("list of ", "lists of ")):
                 continue
-            collected.append({"page_id": page_id, "title": name})
-        continuation = payload.get("continue", {}).get("cmcontinue")
+            qid = str(page.get("pageprops", {}).get("wikibase_item") or "").upper()
+            collected.append({"page_id": page_id, "title": name,
+                              "wikidata_qid": qid if QID_PATTERN.fullmatch(qid) else None})
+        continuation = payload.get("continue", {}).get("gcmcontinue")
         if not continuation:
             break
         time.sleep(REQUEST_PAUSE)
@@ -152,7 +155,10 @@ def discover(start_year: int, end_year: int, max_candidates: int, max_categories
                 "page_id": page_id, "title": page["title"],
                 "years": set(), "languages": set(), "categories": set(),
                 "india_category": False,
+                "wikidata_qid": page.get("wikidata_qid"),
             })
+            if not item.get("wikidata_qid") and page.get("wikidata_qid"):
+                item["wikidata_qid"] = page["wikidata_qid"]
             item["years"].add(year)
             item["categories"].add(category)
             if language:
@@ -160,7 +166,12 @@ def discover(start_year: int, end_year: int, max_candidates: int, max_categories
             if evidence == "india_category":
                 item["india_category"] = True
         time.sleep(REQUEST_PAUSE)
-    qids, failed_qid_batches, pageprops_rate_limited = resolve_page_qids(sorted(by_page))
+    # Generator responses include Wikidata IDs in the same category request.
+    # Only attempt separate pageprops for pages where Wikimedia omitted the ID.
+    missing_qids = sorted(pid for pid, row in by_page.items() if not row.get("wikidata_qid"))
+    qids, failed_qid_batches, pageprops_rate_limited = (
+        resolve_page_qids(missing_qids) if missing_qids else ({}, 0, False)
+    )
     if failed_qid_batches:
         incomplete = True
     records = []
@@ -170,7 +181,7 @@ def discover(start_year: int, end_year: int, max_candidates: int, max_categories
         years = sorted(item["years"])
         records.append({
             "page_id": page_id,
-            "wikidata_qid": qids.get(page_id),
+            "wikidata_qid": item.get("wikidata_qid") or qids.get(page_id),
             "title": item["title"],
             "year": years[0] if len(years) == 1 else None,
             "observed_years": years,
