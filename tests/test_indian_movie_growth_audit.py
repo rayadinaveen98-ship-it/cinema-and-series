@@ -1,10 +1,12 @@
 """Offline contract tests for the read-only Indian movie growth audit."""
 import sys
 import unittest
+import urllib.error
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from audit_indian_movie_growth import audit, category_seeds, markdown_report
+from audit_indian_movie_growth import audit, category_seeds, markdown_report, discover, rate_limited, resolve_page_qids
 
 
 def candidate(page, qid, title, year, language, india=False, years=None):
@@ -59,6 +61,48 @@ class IndiaMovieAuditTests(unittest.TestCase):
         ], [], existing)
         self.assertEqual(report["summary"]["already_in_production"], 2)
         self.assertEqual(report["summary"]["possible_existing_title_year_match"], 1)
+
+    def test_crawl_stops_at_first_rate_limit(self):
+        errors = []
+        def fetch(category):
+            if "2026 Indian films" in category:
+                return [{"page_id": 100, "title": "First Film"}]
+            raise urllib.error.HTTPError("https://en.wikipedia.org", 429, "Too Many Requests", {}, None)
+
+        with patch("audit_indian_movie_growth.category_pages", side_effect=fetch) as pages, \
+             patch("audit_indian_movie_growth.resolve_page_qids", return_value=({}, 0, False)), \
+             patch("audit_indian_movie_growth.time.sleep"):
+            records, source = discover(2026, 2026, 8000, max_categories=13, category_offset=0)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(pages.call_count, 2)
+        self.assertEqual(source["categories_attempted"], 2)
+        self.assertEqual(source["categories_failed"], 1)
+        self.assertEqual(source["halt_reason"], "wikipedia_rate_limit")
+        self.assertEqual(source["next_category_offset"], 1)
+
+    def test_category_offset_and_small_batch(self):
+        with patch("audit_indian_movie_growth.category_pages",
+                   return_value=[{"page_id": 222, "title": "Film"}]) as pages, \
+             patch("audit_indian_movie_growth.resolve_page_qids", return_value=({}, 0, False)), \
+             patch("audit_indian_movie_growth.time.sleep"):
+            records, source = discover(2025, 2026, 8000, max_categories=2, category_offset=13)
+        self.assertEqual(len(records), 1)
+        self.assertEqual(source["category_offset"], 13)
+        self.assertEqual(source["next_category_offset"], 15)
+        self.assertEqual(source["halt_reason"], "category_batch_complete")
+        self.assertEqual(pages.call_count, 2)
+
+    def test_429_is_distinct_from_other_errors(self):
+        self.assertTrue(rate_limited(urllib.error.HTTPError("https://test", 429, "rate", {}, None)))
+        self.assertFalse(rate_limited(urllib.error.HTTPError("https://test", 503, "busy", {}, None)))
+
+    def test_pageprops_stops_after_first_rate_limit(self):
+        with patch("audit_indian_movie_growth.wiki.request_json",
+                   side_effect=urllib.error.HTTPError("https://test", 429, "rate", {}, None)) as req, \
+             patch("audit_indian_movie_growth.time.sleep"):
+            resolved, failed, blocked = resolve_page_qids(list(range(1, 201)))
+        self.assertEqual((resolved, failed, blocked), ({}, 1, True))
+        self.assertEqual(req.call_count, 1)
 
     def test_two_languages_same_page_not_two_new_films(self):
         report = audit([
