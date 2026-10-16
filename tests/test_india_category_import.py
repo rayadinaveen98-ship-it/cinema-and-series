@@ -50,6 +50,47 @@ class IndiaImportTests(unittest.TestCase):
         self.assertEqual(s["batch_offset"], 3)
         self.assertEqual(t["proposed_batch_count"], 1)
 
+    def test_production_indexes_can_serve_all_duplicate_guards(self):
+        db = sqlite3.connect(":memory:")
+        db.executescript("""
+          CREATE TABLE movies(id TEXT PRIMARY KEY, wikidata_qid TEXT UNIQUE,
+                              title TEXT, release_date TEXT);
+          CREATE INDEX idx_movies_title_nocase ON movies(title COLLATE NOCASE);
+          CREATE TABLE series_titles(wikidata_qid TEXT UNIQUE);
+          CREATE TABLE catalogue_titles(
+              id TEXT PRIMARY KEY, wikidata_qid TEXT UNIQUE,
+              wikipedia_page_id INTEGER UNIQUE, title TEXT,
+              release_year INTEGER, date_precision TEXT, language_name TEXT,
+              country_code TEXT, source_category TEXT,
+              source_url TEXT, verification_status TEXT, updated_at TEXT);
+          CREATE INDEX idx_catalogue_titles_year_title
+              ON catalogue_titles(release_year DESC, title COLLATE NOCASE);
+        """)
+        explain = db.execute("EXPLAIN QUERY PLAN " + sql_for_movie(candidate())).fetchall()
+        details = " | ".join(str(row[3]) for row in explain)
+        self.assertNotIn("SCAN m", details)
+        self.assertNotIn("SCAN c", details)
+        self.assertNotIn("SCAN s", details)
+        self.assertIn("idx_movies_title_nocase", details)
+        self.assertIn("idx_catalogue_titles_year_title", details)
+        db.close()
+
+    def test_case_insensitive_title_year_still_blocks_duplicate(self):
+        db = sqlite3.connect(":memory:")
+        db.executescript("""
+          CREATE TABLE movies(id TEXT PRIMARY KEY, wikidata_qid TEXT, title TEXT, release_date TEXT);
+          CREATE TABLE series_titles(wikidata_qid TEXT);
+          CREATE TABLE catalogue_titles(
+              id TEXT PRIMARY KEY, wikidata_qid TEXT UNIQUE, wikipedia_page_id INTEGER UNIQUE,
+              title TEXT, release_year INTEGER, date_precision TEXT,
+              language_name TEXT, country_code TEXT, source_category TEXT,
+              source_url TEXT, verification_status TEXT, updated_at TEXT);
+        """)
+        db.execute("INSERT INTO movies VALUES ('x', 'Q999', 'indian FILM', '2025-01-05')")
+        db.executescript(sql_for_movie(candidate()))
+        self.assertEqual(db.execute("SELECT COUNT(*) FROM catalogue_titles").fetchone()[0], 0)
+        db.close()
+
     def test_insert_protects_existing_movie_title_year_and_series_id(self):
         db = sqlite3.connect(":memory:")
         db.executescript("""

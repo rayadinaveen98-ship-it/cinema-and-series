@@ -94,14 +94,25 @@ def sql_for_movie(item: dict) -> str:
         f"{sql_quote('wd-' + qid)},{sql_quote(qid)},{page_id},{sql_quote(title)},{year},"
         f"'year',{sql_quote(language)},'IN',{sql_quote(category)},{sql_quote(source_url)},"
         "'unconfirmed',CURRENT_TIMESTAMP "
+        # Keep separate indexable predicates. The previous OR with LOWER(TRIM)
+        # forced large scans (~4 million rows read in the 689-title pilot).
+        # Existing schema indexes: movies.wikidata_qid UNIQUE,
+        # idx_movies_title_nocase; series_titles.wikidata_qid UNIQUE;
+        # catalogue_titles QID/page UNIQUE and year+title NOCASE.
         "WHERE NOT EXISTS (SELECT 1 FROM movies m WHERE "
-        f"m.wikidata_qid={sql_quote(qid)} OR (LOWER(TRIM(m.title))=LOWER(TRIM({sql_quote(title)})) "
-        f"AND CAST(substr(m.release_date,1,4) AS INTEGER)={year})) "
+        f"m.wikidata_qid={sql_quote(qid)}) "
+        "AND NOT EXISTS (SELECT 1 FROM movies m WHERE "
+        f"m.title={sql_quote(title)} COLLATE NOCASE "
+        f"AND m.release_date BETWEEN {sql_quote(str(year)+'-01-01')} "
+        f"AND {sql_quote(str(year)+'-12-31')}) "
         "AND NOT EXISTS (SELECT 1 FROM series_titles s WHERE "
         f"s.wikidata_qid={sql_quote(qid)}) "
         "AND NOT EXISTS (SELECT 1 FROM catalogue_titles c WHERE "
-        f"c.wikidata_qid={sql_quote(qid)} OR c.wikipedia_page_id={page_id} OR "
-        f"(LOWER(TRIM(c.title))=LOWER(TRIM({sql_quote(title)})) AND c.release_year={year}));"
+        f"c.wikidata_qid={sql_quote(qid)}) "
+        "AND NOT EXISTS (SELECT 1 FROM catalogue_titles c WHERE "
+        f"c.wikipedia_page_id={page_id}) "
+        "AND NOT EXISTS (SELECT 1 FROM catalogue_titles c WHERE "
+        f"c.release_year={year} AND c.title={sql_quote(title)} COLLATE NOCASE);"
     )
 
 
