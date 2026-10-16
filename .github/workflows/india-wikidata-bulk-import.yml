@@ -73,7 +73,7 @@ jobs:
             --command "SELECT id,wikidata_qid,title,release_date FROM movies;" \
             > data/generated/wikidata-import/exact.json
           npx wrangler d1 execute cinema-and-series --remote --json \
-            --command "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year FROM catalogue_titles;" \
+            --command "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year,source_category FROM catalogue_titles;" \
             > data/generated/wikidata-import/year.json
           npx wrangler d1 execute cinema-and-series --remote --json \
             --command "SELECT wikidata_qid,title,first_air_year FROM series_titles;" \
