@@ -1,0 +1,89 @@
+name: Indian Films — Wikidata CC0 Bulk Stage (No Production Writes)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-wikidata-bulk-stage.yml"
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: "First release year to stage"
+        required: true
+        default: "2000"
+      end_year:
+        description: "Last release year to stage"
+        required: true
+        default: "2020"
+      max_quarters:
+        description: "Maximum three-month source shards in this run (1–160)"
+        required: true
+        default: "48"
+
+concurrency:
+  group: india-wikidata-bulk-stage
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  cc0-stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 95
+    env:
+      START_YEAR: ${{ inputs.start_year || '2018' }}
+      END_YEAR: ${{ inputs.end_year || '2020' }}
+      MAX_QUARTERS: ${{ inputs.max_quarters || '4' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Verify bulk ingestion safety and index-backed import previews
+        shell: bash
+        run: |
+          python -m unittest tests.test_wikidata_bulk_stage \
+            tests.test_india_category_import -v
+
+      - name: Query CC0 film+India+release-year claims into local SQLite
+        shell: bash
+        run: |
+          mkdir -p data/generated/wikidata-bulk
+          python scripts/wikidata_bulk_stage.py \
+            --start-year "$START_YEAR" \
+            --end-year "$END_YEAR" \
+            --max-quarters "$MAX_QUARTERS" \
+            --db data/generated/wikidata-bulk/stage.sqlite \
+            --out-json data/generated/wikidata-bulk/source-report.json
+
+      - name: Publish source count, completeness and explicit no-import status
+        if: always()
+        shell: bash
+        run: |
+          if [[ -s data/generated/wikidata-bulk/source-report.json ]]; then
+            python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          r = json.loads(Path("data/generated/wikidata-bulk/source-report.json").read_text())
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as f:
+              f.write("## Wikidata CC0 Indian-film bulk source staging\n\n")
+              f.write("**No Cloudflare D1 queries or production writes were performed.**\n\n")
+              for key in ("years", "completed_shards", "intended_shards",
+                          "distinct_source_qids", "source_qualified_unconflicted",
+                          "conflicting_source_ids", "stopped_reason"):
+                  f.write(f"- {key.replace('_',' ')}: **{r[key]}**\n")
+              f.write("\nThis must be reconciled against a fresh production snapshot before import.\n")
+          PY
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: indian-films-wikidata-cc0-sqlite-stage
+          path: |
+            data/generated/wikidata-bulk/stage.sqlite
+            data/generated/wikidata-bulk/source-report.json
+          if-no-files-found: warn
+          retention-days: 30
