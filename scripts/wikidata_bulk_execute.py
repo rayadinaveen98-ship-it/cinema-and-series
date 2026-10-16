@@ -27,11 +27,11 @@ def apply_batch_files(selected: list[dict], sql_dir: Path,
     if not 10_000 <= max_row_reads <= 2_000_000:
         raise ValueError("Invalid daily bulk import row-read budget")
     files = sorted(sql_dir.glob("wikidata-*.sql"))
-    if not files and qids:
-        raise ValueError("SQL preview was not generated")
     if not apply:
         return {"status": "dry_run_no_d1", "preview_qids": len(qids),
                 "verified_added_qids": 0, "rows_read_reported": 0, "executed_sql_files": 0}
+    if not files and qids:
+        raise ValueError("SQL preview was not generated")
     attempted, present, usage = 0, set(), 0
     status = "completed"
     for filename in files:
