@@ -1,0 +1,77 @@
+name: India 1980s — Source-Only Movie Discovery
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-1980s-source-only.yml"
+  workflow_dispatch:
+    inputs:
+      start_year:
+        description: "Oldest year in source-only scan"
+        required: true
+        default: "1980"
+      end_year:
+        description: "Newest year in source-only scan"
+        required: true
+        default: "1989"
+      category_offset:
+        description: "Skip already scanned category seeds"
+        required: true
+        default: "0"
+      max_categories:
+        description: "Maximum categories before stopping"
+        required: true
+        default: "20"
+
+concurrency:
+  group: india-1980s-source-only
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  discovery-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 50
+    env:
+      START_YEAR: ${{ inputs.start_year || '1980' }}
+      END_YEAR: ${{ inputs.end_year || '1989' }}
+      CATEGORY_OFFSET: ${{ inputs.category_offset || '0' }}
+      MAX_CATEGORIES: ${{ inputs.max_categories || '20' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Test source-only safety labels and discovery gate
+        run: |
+          python -m unittest tests.test_india_historical_offline_discovery \
+            tests.test_indian_movie_growth_audit -v
+      - name: Discover historical source candidates without ANY D1 operations
+        run: |
+          python scripts/discover_india_historical_offline.py \
+            --start-year "$START_YEAR" \
+            --end-year "$END_YEAR" \
+            --category-offset "$CATEGORY_OFFSET" \
+            --max-categories "$MAX_CATEGORIES" \
+            --max-candidates 8000 \
+            --out-json data/generated/india-1980s-source-only/discovery.json \
+            --out-md data/generated/india-1980s-source-only/discovery.md
+      - name: Publish source-only report
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f data/generated/india-1980s-source-only/discovery.md ]]; then
+            cat data/generated/india-1980s-source-only/discovery.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-1980s-source-only
+          path: |
+            data/generated/india-1980s-source-only/discovery.json
+            data/generated/india-1980s-source-only/discovery.md
+          if-no-files-found: warn
+          retention-days: 30
