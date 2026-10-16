@@ -45,7 +45,7 @@ def apply_batch_files(selected: list[dict], sql_dir: Path,
         contents = filename.read_text(encoding="utf-8")
         if contents.count("INSERT OR IGNORE INTO catalogue_titles") != len(chunk):
             raise ValueError(f"SQL file mismatched submitted identities: {filename.name}")
-        if "DELETE FROM" in contents.upper() or "UPDATE catalogue_titles" in contents:
+        if "DELETE FROM" in contents.upper() or "UPDATE CATALOGUE_TITLES" in contents.upper():
             raise ValueError("Bulk production SQL must be insert-only")
         try:
             _, batch_reads = d1_execute(sql_file=filename)
