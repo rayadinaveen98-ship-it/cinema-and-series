@@ -69510,26 +69510,572 @@
       ],
       "observed_languages": [],
       "india_category": true
+    },
+    "Q1214408": {
+      "wikidata_qid": "Q1214408",
+      "page_id": 2399730,
+      "title": "Prem Sanyas",
+      "observed_years": [
+        1925
+      ],
+      "source_categories": [
+        "Category:1925 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q152901": {
+      "wikidata_qid": "Q152901",
+      "page_id": 3261072,
+      "title": "Daughters of Today (1928 film)",
+      "observed_years": [
+        1928
+      ],
+      "source_categories": [
+        "Category:1928 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q3025388": {
+      "wikidata_qid": "Q3025388",
+      "page_id": 6465157,
+      "title": "Devdas (1928 film)",
+      "observed_years": [
+        1928
+      ],
+      "source_categories": [
+        "Category:1928 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q4912051": {
+      "wikidata_qid": "Q4912051",
+      "page_id": 8614335,
+      "title": "Bilwamangal (1919 film)",
+      "observed_years": [
+        1919
+      ],
+      "source_categories": [
+        "Category:1919 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q15043353": {
+      "wikidata_qid": "Q15043353",
+      "page_id": 8615648,
+      "title": "Bilat Ferat",
+      "observed_years": [
+        1921
+      ],
+      "source_categories": [
+        "Category:1921 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q1603098": {
+      "wikidata_qid": "Q1603098",
+      "page_id": 12973724,
+      "title": "A Throw of Dice",
+      "observed_years": [
+        1929
+      ],
+      "source_categories": [
+        "Category:1929 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q7928860": {
+      "wikidata_qid": "Q7928860",
+      "page_id": 14825379,
+      "title": "Vigathakumaran",
+      "observed_years": [
+        1928
+      ],
+      "source_categories": [
+        "Category:1928 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q7426946": {
+      "wikidata_qid": "Q7426946",
+      "page_id": 20149733,
+      "title": "Satyawadi Raja Harishchandra",
+      "observed_years": [
+        1917
+      ],
+      "source_categories": [
+        "Category:1917 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q7426942": {
+      "wikidata_qid": "Q7426942",
+      "page_id": 37197039,
+      "title": "Satyavadi Raja Harishchandra",
+      "observed_years": [
+        1917
+      ],
+      "source_categories": [
+        "Category:1917 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q6487151": {
+      "wikidata_qid": "Q6487151",
+      "page_id": 37197040,
+      "title": "Lanka Dahan",
+      "observed_years": [
+        1917
+      ],
+      "source_categories": [
+        "Category:1917 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q6787781": {
+      "wikidata_qid": "Q6787781",
+      "page_id": 37951764,
+      "title": "Matri Sneha",
+      "observed_years": [
+        1923
+      ],
+      "source_categories": [
+        "Category:1923 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q16243793": {
+      "wikidata_qid": "Q16243793",
+      "page_id": 38835971,
+      "title": "Bhakta Vidur",
+      "observed_years": [
+        1921
+      ],
+      "source_categories": [
+        "Category:1921 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q19573280": {
+      "wikidata_qid": "Q19573280",
+      "page_id": 45330915,
+      "title": "Netaji Palkar (film)",
+      "observed_years": [
+        1927
+      ],
+      "source_categories": [
+        "Category:1927 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q19571994": {
+      "wikidata_qid": "Q19571994",
+      "page_id": 45337530,
+      "title": "Gopal Krishna (1929 film)",
+      "observed_years": [
+        1929
+      ],
+      "source_categories": [
+        "Category:1929 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q19720657": {
+      "wikidata_qid": "Q19720657",
+      "page_id": 46187780,
+      "title": "Husn Ka Daku",
+      "observed_years": [
+        1929
+      ],
+      "source_categories": [
+        "Category:1929 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q19891343": {
+      "wikidata_qid": "Q19891343",
+      "page_id": 46569028,
+      "title": "Dil Farosh",
+      "observed_years": [
+        1927
+      ],
+      "source_categories": [
+        "Category:1927 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q19882225": {
+      "wikidata_qid": "Q19882225",
+      "page_id": 46569544,
+      "title": "Balidan",
+      "observed_years": [
+        1927
+      ],
+      "source_categories": [
+        "Category:1927 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q20649815": {
+      "wikidata_qid": "Q20649815",
+      "page_id": 46967777,
+      "title": "Savkari Pash",
+      "observed_years": [
+        1925
+      ],
+      "source_categories": [
+        "Category:1925 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q20649191": {
+      "wikidata_qid": "Q20649191",
+      "page_id": 46984910,
+      "title": "Kulin Kanta",
+      "observed_years": [
+        1925
+      ],
+      "source_categories": [
+        "Category:1925 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q21646091": {
+      "wikidata_qid": "Q21646091",
+      "page_id": 47755930,
+      "title": "Andhare Alo (1922 film)",
+      "observed_years": [
+        1922
+      ],
+      "source_categories": [
+        "Category:1922 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q21869819": {
+      "wikidata_qid": "Q21869819",
+      "page_id": 48604620,
+      "title": "Shri Krishna Janma",
+      "observed_years": [
+        1918
+      ],
+      "source_categories": [
+        "Category:1918 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q21869481": {
+      "wikidata_qid": "Q21869481",
+      "page_id": 48604779,
+      "title": "Kaliya Mardan",
+      "observed_years": [
+        1919
+      ],
+      "source_categories": [
+        "Category:1919 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q22000594": {
+      "wikidata_qid": "Q22000594",
+      "page_id": 54531532,
+      "title": "Shiraz (film)",
+      "observed_years": [
+        1928
+      ],
+      "source_categories": [
+        "Category:1928 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q52389708": {
+      "wikidata_qid": "Q52389708",
+      "page_id": 57285077,
+      "title": "Sairandhri (1920 film)",
+      "observed_years": [
+        1920
+      ],
+      "source_categories": [
+        "Category:1920 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q52563761": {
+      "wikidata_qid": "Q52563761",
+      "page_id": 57315110,
+      "title": "Katorabhar Khoon",
+      "observed_years": [
+        1920
+      ],
+      "source_categories": [
+        "Category:1920 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q52688296": {
+      "wikidata_qid": "Q52688296",
+      "page_id": 57338186,
+      "title": "Shakuntala (1920 film)",
+      "observed_years": [
+        1920
+      ],
+      "source_categories": [
+        "Category:1920 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q16342589": {
+      "wikidata_qid": "Q16342589",
+      "page_id": 67365365,
+      "title": "Bhishma Pratigna (1921 film)",
+      "observed_years": [
+        1921
+      ],
+      "source_categories": [
+        "Category:1921 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q58433729": {
+      "wikidata_qid": "Q58433729",
+      "page_id": 74912455,
+      "title": "Prithvi Vallabh (1924 film)",
+      "observed_years": [
+        1924
+      ],
+      "source_categories": [
+        "Category:1924 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q58430158": {
+      "wikidata_qid": "Q58430158",
+      "page_id": 75123978,
+      "title": "Mojili Mumbai",
+      "observed_years": [
+        1925
+      ],
+      "source_categories": [
+        "Category:1925 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q58434996": {
+      "wikidata_qid": "Q58434996",
+      "page_id": 75318986,
+      "title": "Gunsundari (1927 film)",
+      "observed_years": [
+        1927
+      ],
+      "source_categories": [
+        "Category:1927 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q58429021": {
+      "wikidata_qid": "Q58429021",
+      "page_id": 76242194,
+      "title": "Chhatrapati Sambhaji (1925 film)",
+      "observed_years": [
+        1925
+      ],
+      "source_categories": [
+        "Category:1925 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q58456269": {
+      "wikidata_qid": "Q58456269",
+      "page_id": 77165092,
+      "title": "Giribala",
+      "observed_years": [
+        1929
+      ],
+      "source_categories": [
+        "Category:1929 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q13060058": {
+      "wikidata_qid": "Q13060058",
+      "page_id": 77239343,
+      "title": "Sukumari (film)",
+      "observed_years": [
+        1929
+      ],
+      "source_categories": [
+        "Category:1929 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q137259420": {
+      "wikidata_qid": "Q137259420",
+      "page_id": 80393831,
+      "title": "Gul-e-Bakavali (1924 film)",
+      "observed_years": [
+        1924
+      ],
+      "source_categories": [
+        "Category:1924 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q58455527": {
+      "wikidata_qid": "Q58455527",
+      "page_id": 83832093,
+      "title": "Kapalkundala (1929 film)",
+      "observed_years": [
+        1929
+      ],
+      "source_categories": [
+        "Category:1929 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q58428681": {
+      "wikidata_qid": "Q58428681",
+      "page_id": 83855755,
+      "title": "Bishabriksha (1922 film)",
+      "observed_years": [
+        1922
+      ],
+      "source_categories": [
+        "Category:1922 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q140942740": {
+      "wikidata_qid": "Q140942740",
+      "page_id": 83915495,
+      "title": "Durgesh Nandini (1927 film)",
+      "observed_years": [
+        1927
+      ],
+      "source_categories": [
+        "Category:1927 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q141084898": {
+      "wikidata_qid": "Q141084898",
+      "page_id": 83980767,
+      "title": "Indira (1929 film)",
+      "observed_years": [
+        1929
+      ],
+      "source_categories": [
+        "Category:1929 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q141142566": {
+      "wikidata_qid": "Q141142566",
+      "page_id": 84020126,
+      "title": "Sinhagad (1923 film)",
+      "observed_years": [
+        1923
+      ],
+      "source_categories": [
+        "Category:1923 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q141278434": {
+      "wikidata_qid": "Q141278434",
+      "page_id": 84134910,
+      "title": "Bajirao Mastani (1925 film)",
+      "observed_years": [
+        1925
+      ],
+      "source_categories": [
+        "Category:1925 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q58429962": {
+      "wikidata_qid": "Q58429962",
+      "page_id": 84150167,
+      "title": "Razia Begum",
+      "observed_years": [
+        1924
+      ],
+      "source_categories": [
+        "Category:1924 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q141431601": {
+      "wikidata_qid": "Q141431601",
+      "page_id": 84198791,
+      "title": "The Loves Of A Mughal Prince",
+      "observed_years": [
+        1928
+      ],
+      "source_categories": [
+        "Category:1928 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
     }
   },
   "scan": {
     "decade_index": 4,
-    "offset": 0,
+    "offset": 14,
     "finished": false,
     "mode": "india_only"
   },
   "last_run": {
-    "timestamp_utc": "2026-10-16T19:40:44.093238+00:00",
-    "source_queue_qids": 4793,
+    "timestamp_utc": "2026-10-17T12:21:54.620009+00:00",
+    "source_queue_qids": 4835,
     "source_discovery": {
-      "status": "category_batch_complete",
-      "decade": "1930-1939",
-      "next_offset": 10,
-      "new_source_qids": 198,
-      "failed_categories": 0,
-      "wikipedia_rate_limited": false
+      "status": "wikipedia_rate_limit",
+      "decade": "1913-1929",
+      "next_offset": 14,
+      "new_source_qids": 42,
+      "failed_categories": 1,
+      "wikipedia_rate_limited": true
     },
-    "category_qualified_queue": 4276,
+    "category_qualified_queue": 4318,
     "production": {
       "status": "source_only"
     }
@@ -69563,6 +70109,12 @@
       "timestamp": "2026-10-16T19:40:44.093238+00:00",
       "production_status": "source_only",
       "discovery_status": "category_batch_complete",
+      "new_movies_added_today": 0
+    },
+    {
+      "timestamp": "2026-10-17T12:21:54.620009+00:00",
+      "production_status": "source_only",
+      "discovery_status": "wikipedia_rate_limit",
       "new_movies_added_today": 0
     }
   ]
