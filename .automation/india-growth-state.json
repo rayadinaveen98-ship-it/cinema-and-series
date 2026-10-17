@@ -70056,26 +70056,65 @@
       ],
       "observed_languages": [],
       "india_category": true
+    },
+    "Q2985396": {
+      "wikidata_qid": "Q2985396",
+      "page_id": 2170497,
+      "title": "Raja Harishchandra",
+      "observed_years": [
+        1913
+      ],
+      "source_categories": [
+        "Category:1913 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q16251783": {
+      "wikidata_qid": "Q16251783",
+      "page_id": 38980471,
+      "title": "Mohini Bhasmasur",
+      "observed_years": [
+        1913
+      ],
+      "source_categories": [
+        "Category:1913 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
+    },
+    "Q16979204": {
+      "wikidata_qid": "Q16979204",
+      "page_id": 40929869,
+      "title": "Satyavan Savitri",
+      "observed_years": [
+        1914
+      ],
+      "source_categories": [
+        "Category:1914 Indian films"
+      ],
+      "observed_languages": [],
+      "india_category": true
     }
   },
   "scan": {
-    "decade_index": 4,
-    "offset": 14,
+    "decade_index": 5,
+    "offset": 0,
     "finished": false,
     "mode": "india_only"
   },
   "last_run": {
-    "timestamp_utc": "2026-10-17T12:21:54.620009+00:00",
-    "source_queue_qids": 4835,
+    "timestamp_utc": "2026-10-17T18:46:14.161588+00:00",
+    "source_queue_qids": 4838,
     "source_discovery": {
-      "status": "wikipedia_rate_limit",
+      "status": "category_batch_complete",
       "decade": "1913-1929",
-      "next_offset": 14,
-      "new_source_qids": 42,
-      "failed_categories": 1,
-      "wikipedia_rate_limited": true
+      "next_offset": 17,
+      "new_source_qids": 3,
+      "failed_categories": 0,
+      "wikipedia_rate_limited": false
     },
-    "category_qualified_queue": 4318,
+    "category_qualified_queue": 4321,
     "production": {
       "status": "source_only"
     }
@@ -70115,6 +70154,12 @@
       "timestamp": "2026-10-17T12:21:54.620009+00:00",
       "production_status": "source_only",
       "discovery_status": "wikipedia_rate_limit",
+      "new_movies_added_today": 0
+    },
+    {
+      "timestamp": "2026-10-17T18:46:14.161588+00:00",
+      "production_status": "source_only",
+      "discovery_status": "category_batch_complete",
       "new_movies_added_today": 0
     }
   ]
