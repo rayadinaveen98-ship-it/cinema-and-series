@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, Navigate, NavLink, Route, Routes } from "react-router";
+import { appendUniquePage, cataloguePageSearch, readCataloguePage } from "./catalogue-pages";
 
 type Movie = {
   id: string;
@@ -135,23 +136,6 @@ function useSeries(query: Record<string, string>, limit = 60) {
 
 type PageRequestState = { key: string; page: number; loading: boolean; error: boolean; message?: string };
 
-async function readCataloguePage<T>(result: Response): Promise<T> {
-  if (!result.ok) {
-    if (result.status === 503) {
-      const details = await result.json().catch(() => null) as { error?: string } | null;
-      if (details?.error === "catalogue_daily_read_limit") {
-        throw new Error("The catalogue has reached its daily database limit. Please try again after 5:30 AM IST.");
-      }
-    }
-    throw new Error("Catalogue could not load. Check your connection and try again.");
-  }
-  const data = await result.json() as T;
-  if (result.headers.get("X-Catalogue-Cache") === "stale-on-quota" && data && typeof data === "object") {
-    return { ...data, staleDuringQuota: true } as T;
-  }
-  return data;
-}
-
 // A browse page retains previously loaded cards, but never mixes items from
 // two different search/filter queries. All requests remain bounded to 60 rows.
 function usePagedMovies(query: Record<string, string>, limit = 60) {
@@ -164,7 +148,7 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit), artwork: "1", ...query });
+    const params = cataloguePageSearch(query, limit, page);
     setRequest({ key: queryKey, page, loading: true, error: false });
     fetch(`/api/movies?${params}`, { signal: controller.signal })
       .then((result) => readCataloguePage<MovieResponse>(result))
@@ -174,7 +158,7 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
           key: queryKey,
           payload: page === 0 ? next : {
             ...next,
-            movies: [...(previous.key === queryKey ? previous.payload.movies : []), ...next.movies],
+            movies: appendUniquePage(previous.key === queryKey ? previous.payload.movies : [], next.movies, page),
             staleDuringQuota: Boolean(next.staleDuringQuota || (previous.key === queryKey && previous.payload.staleDuringQuota)),
           },
         }));
@@ -209,7 +193,7 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit), artwork: "1", ...query });
+    const params = cataloguePageSearch(query, limit, page);
     setRequest({ key: queryKey, page, loading: true, error: false });
     fetch(`/api/series?${params}`, { signal: controller.signal })
       .then((result) => readCataloguePage<SeriesResponse>(result))
@@ -219,7 +203,7 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
           key: queryKey,
           payload: page === 0 ? next : {
             ...next,
-            series: [...(previous.key === queryKey ? previous.payload.series : []), ...next.series],
+            series: appendUniquePage(previous.key === queryKey ? previous.payload.series : [], next.series, page),
             staleDuringQuota: Boolean(next.staleDuringQuota || (previous.key === queryKey && previous.payload.staleDuringQuota)),
           },
         }));
