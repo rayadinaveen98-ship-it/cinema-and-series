@@ -6,8 +6,8 @@ on:
     paths:
       - ".github/workflows/india-catalogue-autopilot.yml"
   schedule:
-    # Cloudflare D1 Free resets at 00:00 UTC. Give it 40 minutes.
-    # 00:40 UTC is 06:10 IST. GitHub schedules may start later.
+    # First +10K growth milestone complete: all recurring runs are source-only.
+    # Retain source discovery at 00:40 UTC without touching D1.
     - cron: "40 0 * * *"
     # Extra Wikimedia discovery passes: 14:10 and 22:10 IST; no D1 access.
     - cron: "40 8,16 * * *"
@@ -16,7 +16,7 @@ on:
       source_only:
         description: "Collect source leads only, no D1 reads or writes"
         required: false
-        default: false
+        default: true
         type: boolean
 
 concurrency:
@@ -87,7 +87,7 @@ jobs:
         env:
           SOURCE_ONLY_INPUT: ${{ inputs.source_only || false }}
         run: |
-          if [[ "$GITHUB_EVENT_NAME" == "push" || "$SOURCE_ONLY_INPUT" == "true" || ( "$GITHUB_EVENT_NAME" == "schedule" && "$SCHEDULE_CRON" != "40 0 * * *" ) ]]; then
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$SOURCE_ONLY_INPUT" == "true" ]]; then
             echo "Bootstrap/extra source-only run; no Cloudflare D1 connection required"
           else
             test -n "$CLOUDFLARE_ACCOUNT_ID"
@@ -103,7 +103,7 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/india-import-results"
           FLAGS=()
-          if [[ "$GITHUB_EVENT_NAME" == "push" || "$SOURCE_ONLY_INPUT" == "true" || ( "$GITHUB_EVENT_NAME" == "schedule" && "$SCHEDULE_CRON" != "40 0 * * *" ) ]]; then
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "$SOURCE_ONLY_INPUT" == "true" ]]; then
             FLAGS+=(--source-only)
           fi
           python scripts/india_daily_autopilot.py \
