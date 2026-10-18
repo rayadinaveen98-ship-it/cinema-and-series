@@ -229,17 +229,49 @@ function officialYoutubeArtwork(value: string | null | undefined) {
 
 // Worker-isolate hot cache prevents repeated scans if edge cache is not warmed.
 // Public catalogue endpoints contain no user-specific data.
-const hotCatalogueCache = new Map<string, { expiresAt: number; body: string }>();
+type CachedCatalogue = { expiresAt: number; staleUntil: number; body: string };
+const hotCatalogueCache = new Map<string, CachedCatalogue>();
 const MAX_HOT_CACHED_PAGES = 24;
 const MAX_HOT_CACHED_BODY = 400_000;
+const STALE_SAFETY_WINDOW_SECONDS = 26 * 60 * 60;
 
 function publicCatalogueCacheTtl(url: URL) {
-  if (url.pathname === "/api/catalogue-stats") return 1800;
-  if (url.pathname === "/api/series") return 900;
+  if (url.pathname === "/api/catalogue-stats") return 3600;
+  if (url.pathname === "/api/series") return 6 * 60 * 60;
   if (url.pathname === "/api/movies") {
-    return url.searchParams.get("scope") === "all" || url.searchParams.has("year") ? 1800 : 180;
+    // Historical/year-only films change slowly. Upcoming dates need shorter freshness.
+    return url.searchParams.get("scope") === "all" || url.searchParams.has("year")
+      ? 6 * 60 * 60 : 1800;
   }
   return 0;
+}
+
+function isD1ReadQuotaError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /D1_ERROR.*(daily row read limit|code[: ]*7500)|exceeded D1.*daily row read limit/i.test(message);
+}
+
+function d1QuotaResponse(): Response {
+  const now = new Date();
+  const retryAt = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1));
+  const response = json({
+    error: "catalogue_daily_read_limit",
+    message: "The catalogue is temporarily at its daily database read limit. Please retry after the next UTC reset.",
+    retryAt: retryAt.toISOString(),
+  }, 503, "no-store");
+  response.headers.set("Retry-After", String(Math.max(60, Math.ceil((retryAt.getTime() - now.getTime()) / 1000))));
+  return response;
+}
+
+function serveStaleCatalogue(body: string): Response {
+  return new Response(body, {
+    status: 200,
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      "Cache-Control": "public, max-age=60",
+      "X-Catalogue-Cache": "stale-on-quota",
+    },
+  });
 }
 
 async function handleRequest(request: Request, env: Env): Promise<Response> {
@@ -591,26 +623,46 @@ export default {
     cacheUrl.searchParams.sort();
     const key = cacheUrl.toString();
     const cachedInIsolate = hotCatalogueCache.get(key);
-    if (cachedInIsolate) {
-      if (cachedInIsolate.expiresAt > Date.now()) {
-        return new Response(cachedInIsolate.body, {
-          headers: { "Content-Type": "application/json; charset=utf-8",
-                     "Cache-Control": "public, max-age=60, s-maxage=300",
-                     "X-Catalogue-Cache": "hot" },
-        });
-      }
-      hotCatalogueCache.delete(key);
+    const now = Date.now();
+    if (cachedInIsolate?.expiresAt && cachedInIsolate.expiresAt > now) {
+      return new Response(cachedInIsolate.body, {
+        headers: { "Content-Type": "application/json; charset=utf-8",
+                   "Cache-Control": "public, max-age=60, s-maxage=300",
+                   "X-Catalogue-Cache": "hot" },
+      });
     }
+    if (cachedInIsolate && cachedInIsolate.staleUntil <= now) hotCatalogueCache.delete(key);
 
     const cacheKey = new Request(key, { method: "GET" });
+    let staleEdge: Response | null = null;
     try {
       const edgeHit = await caches.default.match(cacheKey);
-      if (edgeHit) return edgeHit;
+      if (edgeHit) {
+        const freshUntil = Number(edgeHit.headers.get("X-Catalogue-Fresh-Until"));
+        // Backward-compatible with existing cache entries written without a soft TTL.
+        if (!Number.isFinite(freshUntil) || freshUntil === 0 || freshUntil > now) return edgeHit;
+        staleEdge = edgeHit;
+      }
     } catch (error) {
       console.warn("Catalogue edge-cache lookup unavailable", error);
     }
 
-    const response = await handleRequest(request, env);
+    let response: Response;
+    try {
+      response = await handleRequest(request, env);
+    } catch (error) {
+      if (!isD1ReadQuotaError(error)) throw error;
+      // During D1 quota exhaustion, prefer a recent, explicitly stale catalogue
+      // snapshot to an opaque 500. Never pretend the cached data is freshly read.
+      if (cachedInIsolate && cachedInIsolate.staleUntil > now) {
+        return serveStaleCatalogue(cachedInIsolate.body);
+      }
+      if (staleEdge) {
+        const body = await staleEdge.text();
+        return serveStaleCatalogue(body);
+      }
+      return d1QuotaResponse();
+    }
     // Never cache D1 quota errors, failed requests, previews or private reviews.
     if (response.status === 200 && !response.headers.has("Set-Cookie")) {
       try {
@@ -623,6 +675,7 @@ export default {
           hotCatalogueCache.set(key, {
             body,
             expiresAt: Date.now() + ttl * 1000,
+            staleUntil: Date.now() + STALE_SAFETY_WINDOW_SECONDS * 1000,
           });
         }
       } catch (error) {
@@ -632,7 +685,8 @@ export default {
       try {
         const forCache = response.clone();
         const copy = new Response(forCache.body, { status: forCache.status, headers: forCache.headers });
-        copy.headers.set("Cache-Control", `public, max-age=${ttl}`);
+        copy.headers.set("X-Catalogue-Fresh-Until", String(Date.now() + ttl * 1000));
+        copy.headers.set("Cache-Control", `public, max-age=${STALE_SAFETY_WINDOW_SECONDS}`);
         ctx.waitUntil(caches.default.put(cacheKey, copy).catch((error) => {
           console.warn("Catalogue edge-cache write unavailable", error);
         }));
