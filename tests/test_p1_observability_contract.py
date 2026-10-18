@@ -63,8 +63,10 @@ class P1ObservabilityContractTests(unittest.TestCase):
         self.assertIn('violations.append("shard_index")', self.snapshot)
         self.assertIn('"state": "unsafe" if violations else "used"', self.snapshot)
 
-    def test_status_runs_after_daily_controller_and_uploads_compact_artifact(self):
-        self.assertIn('cron: "5 1 * * *"', self.workflow)
+    def test_status_is_manual_after_p1_closeout_and_uploads_compact_artifact(self):
+        self.assertIn("workflow_dispatch:", self.workflow)
+        self.assertNotIn('cron: "5 1 * * *"', self.workflow)
+        self.assertNotIn("\n  schedule:", self.workflow)
         self.assertIn("p1-production-status-${{ github.run_id }}", self.workflow)
         self.assertIn("p1-production-status.json", self.workflow)
         self.assertIn("p1-production-status.md", self.workflow)
