@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, NavLink, Route, Routes } from "react-router";
 import { appendUniquePage, cataloguePageSearch, readCataloguePage } from "./catalogue-pages";
 
@@ -228,15 +228,66 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
   return { payload, loading, error, errorMessage, loadMore, retry: () => setRetryIndex((index) => index + 1) };
 }
 
-function useModalLock(active: boolean, onClose: () => void) {
+/** Shared focus management for accessible movie and series detail dialogs. */
+function useModalLock(onClose: () => void) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+  // Stable keyboard listeners must call the most recent onClose without
+  // restoring focus every time the parent passes a new callback identity.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
-    if (!active) return;
-    const previous = document.body.style.overflow;
+    const dialog = dialogRef.current;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", onKey); };
-  }, [active, onClose]);
+    const initialFocus = dialog?.querySelector<HTMLElement>("[data-modal-initial-focus]");
+    (initialFocus ?? dialog)?.focus();
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => element.getClientRects().length > 0 && element.getAttribute("aria-hidden") !== "true");
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = document.activeElement;
+      if (event.shiftKey && (active === first || !dialog.contains(active))) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    const onFocus = (event: FocusEvent) => {
+      if (dialog && event.target instanceof Node && !dialog.contains(event.target)) {
+        (initialFocus ?? dialog).focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("focusin", onFocus);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("focusin", onFocus);
+      // The activating card stays mounted behind the sheet.
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, []);
+
+  return dialogRef;
 }
 
 function TopNav() {
@@ -309,14 +360,15 @@ function RailError({ message, retry }: { message?: string; retry: () => void }) 
 }
 
 function MovieDetail({ movie, onClose }: { movie: Movie; onClose: () => void }) {
-  useModalLock(true, onClose);
+  const dialogRef = useModalLock(onClose);
+  const titleId = useId();
   return (
     <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <article className={`detail-sheet tone-${toneIndex(movie.title)}`} role="dialog" aria-modal="true">
-        <button className="modal-close" onClick={onClose}>×</button>
+      <article ref={dialogRef} tabIndex={-1} className={`detail-sheet tone-${toneIndex(movie.title)}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <button type="button" className="modal-close" data-modal-initial-focus aria-label="Close movie details" onClick={onClose}>×</button>
         <div className="detail-hero">
           <PosterArtwork key={movie.backdropUrl || movie.posterUrl || movie.id} url={movie.backdropUrl || movie.posterUrl} title={movie.title} hero />
-          <div><p>MOVIE</p><h2>{movie.title}</h2><small>{formatDate(movie.releaseDate)} · {movie.language} · {countryLabel(movie.countryCode)}</small></div>
+          <div><p>MOVIE</p><h2 id={titleId}>{movie.title}</h2><small>{formatDate(movie.releaseDate)} · {movie.language} · {countryLabel(movie.countryCode)}</small></div>
         </div>
         <div className="detail-content">
           <p>{movie.datePrecision === "year" || !movie.releaseDate ? `Release year sourced from ${movie.releaseSourceName || "the catalogue"}. The exact release date is not independently verified.` : movie.verificationStatus === "verified" ? `Release information is verified against ${movie.releaseSourceName || "a first-party source"}.` : "This title is in the catalogue while stronger first-party release evidence is still being collected."}</p>
@@ -329,14 +381,15 @@ function MovieDetail({ movie, onClose }: { movie: Movie; onClose: () => void }) 
 }
 
 function SeriesDetail({ item, onClose }: { item: SeriesTitle; onClose: () => void }) {
-  useModalLock(true, onClose);
+  const dialogRef = useModalLock(onClose);
+  const titleId = useId();
   return (
     <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <article className={`detail-sheet tone-${toneIndex(item.title)}`} role="dialog" aria-modal="true">
-        <button className="modal-close" onClick={onClose}>×</button>
+      <article ref={dialogRef} tabIndex={-1} className={`detail-sheet tone-${toneIndex(item.title)}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <button type="button" className="modal-close" data-modal-initial-focus aria-label="Close series details" onClick={onClose}>×</button>
         <div className="detail-hero">
           <PosterArtwork key={item.backdropUrl || item.posterUrl || item.id} url={item.backdropUrl || item.posterUrl} title={item.title} hero />
-          <div><p>{kindLabel(item.seriesKind).toUpperCase()}</p><h2>{item.title}</h2><small>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"} · {countryLabel(item.countryCode)}</small></div>
+          <div><p>{kindLabel(item.seriesKind).toUpperCase()}</p><h2 id={titleId}>{item.title}</h2><small>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"} · {countryLabel(item.countryCode)}</small></div>
         </div>
         <div className="detail-content">
           <p>Series information stays inside Cinema & Series. External references are sources, not the browsing experience.</p>
