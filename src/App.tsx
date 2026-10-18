@@ -89,11 +89,30 @@ function addDaysKey(value: string, days: number) {
 }
 
 function useCounts() {
-  const [counts, setCounts] = useState<CatalogueCounts>({ movies: 0, series: 0, total: 0 });
+  const [counts, setCounts] = useState<CatalogueCounts | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retryIndex, setRetryIndex] = useState(0);
   useEffect(() => {
-    fetch("/api/catalogue-stats").then((response) => response.ok ? response.json() as Promise<CatalogueCounts> : Promise.reject()).then(setCounts).catch(() => undefined);
-  }, []);
-  return counts;
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    fetch("/api/catalogue-stats", { signal: controller.signal })
+      .then((result) => readCataloguePage<CatalogueCounts>(result))
+      .then((next) => {
+        if (controller.signal.aborted) return;
+        if (![next.movies, next.series, next.total].every((value) => Number.isFinite(value) && value >= 0)) {
+          throw new Error("Catalogue counts are unavailable. Please retry.");
+        }
+        setCounts(next);
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Catalogue counts are unavailable.");
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [retryIndex]);
+  return { counts, loading, error, retry: () => setRetryIndex((index) => index + 1) };
 }
 
 // Avoid a new expensive D1 catalogue query for every keystroke in search.
@@ -106,38 +125,13 @@ function useDebouncedValue(value: string, delayMs = 400) {
   return settled;
 }
 
+// Compact rails share the abort-safe, error-aware catalogue reader.
 function useMovies(query: Record<string, string>, limit = 60) {
-  const [payload, setPayload] = useState<MovieResponse>({ movies: [] });
-  const [loading, setLoading] = useState(true);
-  const queryKey = JSON.stringify(query);
-  useEffect(() => {
-    const controller = new AbortController();
-    const params = new URLSearchParams({ limit: String(limit), offset: "0", artwork: "1", ...query });
-    setLoading(true);
-    fetch(`/api/movies?${params}`, { signal: controller.signal })
-      .then((response) => { if (!response.ok) throw new Error("movies unavailable"); return response.json() as Promise<MovieResponse>; })
-      .then(setPayload).catch(() => undefined).finally(() => setLoading(false));
-    return () => controller.abort();
-  }, [queryKey, limit]);
-  return { payload, loading };
+  return usePagedMovies(query, limit);
 }
-
 function useSeries(query: Record<string, string>, limit = 60) {
-  const [payload, setPayload] = useState<SeriesResponse>({ series: [] });
-  const [loading, setLoading] = useState(true);
-  const queryKey = JSON.stringify(query);
-  useEffect(() => {
-    const controller = new AbortController();
-    const params = new URLSearchParams({ limit: String(limit), offset: "0", artwork: "1", ...query });
-    setLoading(true);
-    fetch(`/api/series?${params}`, { signal: controller.signal })
-      .then((response) => { if (!response.ok) throw new Error("series unavailable"); return response.json() as Promise<SeriesResponse>; })
-      .then(setPayload).catch(() => undefined).finally(() => setLoading(false));
-    return () => controller.abort();
-  }, [queryKey, limit]);
-  return { payload, loading };
+  return usePagedSeries(query, limit);
 }
-
 
 type PageRequestState = { key: string; page: number; loading: boolean; error: boolean; message?: string };
 
