@@ -237,6 +237,11 @@ def run_stage(db: sqlite3.Connection, start_year: int, end_year: int, max_quarte
     return report_for(db, start_year, end_year, new_shards, stopped_reason)
 
 
+def stage_exit_code(report: dict) -> int:
+    """Return success for progress or a fully completed resumable range."""
+    return 0 if report["all_shards_completed"] or report["new_shard_results"] else 2
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--start-year", type=int, default=2000)
@@ -256,8 +261,10 @@ def main() -> int:
             "source_qualified_unconflicted", "stopped_reason",
             "all_shards_completed", "production_rows_imported"
         )}, sort_keys=True))
-    # Rate-limit or 60sec query timeout yields partial artifacts, not lost work.
-    return 0 if report["new_shard_results"] else 2
+    # A fully complete checkpoint is a successful idempotent no-op. Do not
+    # treat zero newly fetched shards as a failure once the range is complete.
+    # An incomplete range with no progress still fails (e.g. rate limiting).
+    return stage_exit_code(report)
 
 
 if __name__ == "__main__":
