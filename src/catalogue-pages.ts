@@ -2,11 +2,15 @@
  * Shared V1 catalogue request and page primitives.
  * All page fetches remain bounded; callers own the query-key and AbortController.
  */
-export function cataloguePageSearch(query: Record<string, string>, limit: number, page: number): string {
+export function cataloguePageSearch(query: Record<string, string>, limit: number, page: number, includeMetadata = true): string {
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new RangeError("Invalid catalogue page size");
   if (!Number.isInteger(page) || page < 0) throw new RangeError("Invalid catalogue page");
   // Constrain caller input so pagination cannot silently be overridden.
   const params = new URLSearchParams({ ...query, artwork: "1", limit: String(limit), offset: String(page * limit) });
+  // Only the first full browse page needs catalogue-wide facets and totals.
+  // Home rails and subsequent pages request rows + filtered count only.
+  if (page > 0 || !includeMetadata) params.set("meta", "0");
+  else params.delete("meta");
   return params.toString();
 }
 
