@@ -119,6 +119,26 @@ class DailyAutopilotTests(unittest.TestCase):
         selection = safe_queue_selection(state, exact, year, series, 100)
         self.assertEqual([x["wikidata_qid"] for x in selection], ["Q52"])
 
+    def test_large_daily_selection_pages_past_250_and_refills_after_series(self):
+        state = initial_state()
+        for number in range(1000, 1800):
+            title = "Shared Film Title" if number in (1150, 1151) else f"Film {number}"
+            merge_source(state["queue"], item(f"Q{number}", 1985, title=title))
+        series = [{"wikidata_qid": f"Q{number}"} for number in range(1000, 1150)]
+        selected = safe_queue_selection(state, [], [], series, 600)
+        self.assertEqual(len(selected), 600)
+        self.assertFalse({row["wikidata_qid"] for row in selected} &
+                         {row["wikidata_qid"] for row in series})
+        self.assertEqual(len({(row["title"].casefold(), row["year"])
+                              for row in selected}), 600)
+
+    def test_daily_selection_rejects_unsafe_cap(self):
+        state = initial_state()
+        with self.assertRaises(ValueError):
+            safe_queue_selection(state, [], [], [], 1501)
+        with self.assertRaises(ValueError):
+            safe_queue_selection(state, [], [], [], 0)
+
     def test_7500_d1_quota_stops_and_does_not_retry(self):
         failed = subprocess.CompletedProcess(
             args=[], returncode=1, stdout="",
