@@ -37,8 +37,11 @@ async function mockApi(page, options = {}) {
     const payload = {
       movies: items,
       pagination: { limit, offset, total: selected.length, hasMore: offset + limit < selected.length },
-      facets: { years: [{ value: '2027', count: 137 }], languages: [{ value: 'Telugu', count: 137 }], countries: [{ value: 'IN', count: 137 }] },
-      stats: { total: 137, verified: 137, supported: 0, unconfirmed: 0, activeSources: 21 },
+      metadataLevel: u.searchParams.get('meta') === '0' ? 'page-only' : 'full',
+      ...(u.searchParams.get('meta') === '0' ? {} : {
+        facets: { years: [{ value: '2027', count: 137 }], languages: [{ value: 'Telugu', count: 137 }], countries: [{ value: 'IN', count: 137 }] },
+        stats: { total: 137, verified: 137, supported: 0, unconfirmed: 0, activeSources: 21 },
+      }),
     };
     return route.fulfill({ status: 200, headers: jsonHeaders, body: JSON.stringify(payload) });
   });
@@ -49,7 +52,10 @@ async function mockApi(page, options = {}) {
     const payload = {
       series: series.slice(offset, offset + limit),
       pagination: { limit, offset, total: series.length, hasMore: false },
-      facets: { years: [{ value: '2026', count: 1 }], languages: [{ value: 'Telugu', count: 1 }], countries: [{ value: 'IN', count: 1 }], kinds: [{ value: 'web_series', count: 1 }] },
+      metadataLevel: u.searchParams.get('meta') === '0' ? 'page-only' : 'full',
+      ...(u.searchParams.get('meta') === '0' ? {} : {
+        facets: { years: [{ value: '2026', count: 1 }], languages: [{ value: 'Telugu', count: 1 }], countries: [{ value: 'IN', count: 1 }], kinds: [{ value: 'web_series', count: 1 }] },
+      }),
     };
     return route.fulfill({ status: 200, headers: jsonHeaders, body: JSON.stringify(payload) });
   });
@@ -183,4 +189,31 @@ test('Unknown country and failed remote poster use honest fallback copy', async 
   await expect(modal.getByText('Country unknown', { exact: false }).first()).toBeVisible();
   await expect(modal.getByText('2026 · Exact date unconfirmed', { exact: false })).toBeVisible();
   await page.screenshot({ path: `artifacts/browser-results/long-title-${test.info().project.name}.png` });
+});
+
+test('Compact Home rails and Load More do not request global D1 facets', async ({ page }) => {
+  const calls = [];
+  page.on('request', (request) => {
+    if (request.url().includes('/api/movies?') || request.url().includes('/api/series?')) {
+      calls.push(new URL(request.url()));
+    }
+  });
+  await mockApi(page);
+  await page.goto('/#/');
+  await expect(page.getByRole('heading', { name: 'Series to discover' })).toBeVisible();
+  await expect.poll(() => calls.filter((url) => url.pathname.endsWith('/api/movies') || url.pathname.endsWith('/api/series')).length).toBeGreaterThanOrEqual(2);
+  expect(calls.every((url) => url.searchParams.get('meta') === '0')).toBe(true);
+  await page.goto('/#/upcoming');
+  await expect(page.getByText('Showing 60 of 137 upcoming movies')).toBeVisible();
+  const upcoming = calls.filter((url) => url.pathname.endsWith('/api/movies') && url.searchParams.get('limit') === '60');
+  expect(upcoming.some((url) => url.searchParams.get('offset') === '0' && !url.searchParams.has('meta'))).toBe(true);
+  await page.getByRole('button', { name: 'Load more releases' }).click();
+  await expect(page.getByText('Showing 120 of 137 upcoming movies')).toBeVisible();
+  const pageTwo = calls.filter((url) => url.pathname.endsWith('/api/movies') && url.searchParams.get('offset') === '60');
+  expect(pageTwo.some((url) => url.searchParams.get('meta') === '0')).toBe(true);
+  await expect(page.getByLabel('Language')).toHaveValue('all');
+  await page.getByLabel('Language').selectOption('Telugu');
+  await expect(page.getByText('Showing 60 of 137 upcoming movies')).toBeVisible();
+  // Facets from page zero remain usable after lightweight pagination.
+  await expect(page.getByLabel('Language')).toHaveValue('Telugu');
 });

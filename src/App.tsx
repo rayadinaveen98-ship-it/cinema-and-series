@@ -126,17 +126,17 @@ function useDebouncedValue(value: string, delayMs = 400) {
 
 // Compact rails share the abort-safe, error-aware catalogue reader.
 function useMovies(query: Record<string, string>, limit = 60) {
-  return usePagedMovies(query, limit);
+  return usePagedMovies(query, limit, false);
 }
 function useSeries(query: Record<string, string>, limit = 60) {
-  return usePagedSeries(query, limit);
+  return usePagedSeries(query, limit, false);
 }
 
 type PageRequestState = { key: string; page: number; loading: boolean; error: boolean; message?: string };
 
 // A browse page retains previously loaded cards, but never mixes items from
 // two different search/filter queries. All requests remain bounded to 60 rows.
-function usePagedMovies(query: Record<string, string>, limit = 60) {
+function usePagedMovies(query: Record<string, string>, limit = 60, includeMetadata = true) {
   const queryKey = JSON.stringify(query);
   const [cursor, setCursor] = useState({ key: "", page: 0 });
   const [response, setResponse] = useState<{ key: string; payload: MovieResponse }>({ key: "", payload: { movies: [] } });
@@ -146,7 +146,7 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const params = cataloguePageSearch(query, limit, page);
+    const params = cataloguePageSearch(query, limit, page, includeMetadata);
     setRequest({ key: queryKey, page, loading: true, error: false });
     fetch(`/api/movies?${params}`, { signal: controller.signal })
       .then((result) => readCataloguePage<MovieResponse>(result))
@@ -157,6 +157,10 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
           payload: page === 0 ? next : {
             ...next,
             movies: appendUniquePage(previous.key === queryKey ? previous.payload.movies : [], next.movies, page),
+            // Metadata is from page zero; page N deliberately omits expensive
+            // catalogue-wide aggregates. Keep the first-page filter choices.
+            facets: next.facets ?? (previous.key === queryKey ? previous.payload.facets : undefined),
+            stats: next.stats ?? (previous.key === queryKey ? previous.payload.stats : undefined),
             staleDuringQuota: Boolean(next.staleDuringQuota || (previous.key === queryKey && previous.payload.staleDuringQuota)),
           },
         }));
@@ -169,7 +173,7 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
         });
       });
     return () => controller.abort();
-  }, [queryKey, page, limit, retryIndex]);
+  }, [queryKey, page, limit, includeMetadata, retryIndex]);
 
   const payload: MovieResponse = response.key === queryKey ? response.payload : { movies: [] };
   const loading = request.key !== queryKey || request.page !== page || request.loading;
@@ -181,7 +185,7 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
   return { payload, loading, error, errorMessage, loadMore, retry: () => setRetryIndex((index) => index + 1) };
 }
 
-function usePagedSeries(query: Record<string, string>, limit = 60) {
+function usePagedSeries(query: Record<string, string>, limit = 60, includeMetadata = true) {
   const queryKey = JSON.stringify(query);
   const [cursor, setCursor] = useState({ key: "", page: 0 });
   const [response, setResponse] = useState<{ key: string; payload: SeriesResponse }>({ key: "", payload: { series: [] } });
@@ -191,7 +195,7 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const params = cataloguePageSearch(query, limit, page);
+    const params = cataloguePageSearch(query, limit, page, includeMetadata);
     setRequest({ key: queryKey, page, loading: true, error: false });
     fetch(`/api/series?${params}`, { signal: controller.signal })
       .then((result) => readCataloguePage<SeriesResponse>(result))
@@ -202,6 +206,10 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
           payload: page === 0 ? next : {
             ...next,
             series: appendUniquePage(previous.key === queryKey ? previous.payload.series : [], next.series, page),
+            // Metadata is from page zero; page N deliberately omits expensive
+            // catalogue-wide aggregates. Keep the first-page filter choices.
+            facets: next.facets ?? (previous.key === queryKey ? previous.payload.facets : undefined),
+            stats: next.stats ?? (previous.key === queryKey ? previous.payload.stats : undefined),
             staleDuringQuota: Boolean(next.staleDuringQuota || (previous.key === queryKey && previous.payload.staleDuringQuota)),
           },
         }));
@@ -214,7 +222,7 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
         });
       });
     return () => controller.abort();
-  }, [queryKey, page, limit, retryIndex]);
+  }, [queryKey, page, limit, includeMetadata, retryIndex]);
 
   const payload: SeriesResponse = response.key === queryKey ? response.payload : { series: [] };
   const loading = request.key !== queryKey || request.page !== page || request.loading;

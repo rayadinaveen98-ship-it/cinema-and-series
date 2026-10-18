@@ -1,4 +1,5 @@
 import { resolveVisualArtwork } from "./visual-artwork";
+import { catalogueMetadataNeeded } from "./catalogue-query-policy";
 interface Env {
   DB?: D1Database;
 }
@@ -354,6 +355,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         });
       }
 
+      const includeMetadata = catalogueMetadataNeeded(url.searchParams);
       const requestedYear = url.searchParams.get("year");
       const search = (url.searchParams.get("q") ?? "").trim().slice(0, 120);
       const language = (url.searchParams.get("language") ?? "").trim().slice(0, 80);
@@ -372,14 +374,15 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       if (kind) conditions.push(`s.series_kind = ${bind(kind)}`);
       const where = conditions.join(" AND ");
 
-      const [rows, filteredCount, statsResult, yearsResult, languagesResult, countriesResult, kindsResult] = await Promise.all([
+      const [rows, filteredCount, metadata] = await Promise.all([
         env.DB.prepare(
           `SELECT s.* FROM series_titles s WHERE ${where}
            ORDER BY CASE WHEN s.first_air_year IS NULL THEN 1 ELSE 0 END ASC, s.first_air_year DESC, s.title COLLATE NOCASE ASC, s.id ASC
            LIMIT ?${bindings.length + 1} OFFSET ?${bindings.length + 2}`,
         ).bind(...bindings, limit, offset).all<SeriesRow>(),
         env.DB.prepare(`SELECT COUNT(*) AS count FROM series_titles s WHERE ${where}`).bind(...bindings).first<{ count: number }>(),
-        env.DB.prepare(
+        includeMetadata ? Promise.all([
+env.DB.prepare(
           `SELECT COUNT(*) AS total,
              COALESCE(SUM(CASE WHEN first_air_year IS NOT NULL THEN 1 ELSE 0 END), 0) AS with_first_air_year,
              COALESCE(SUM(CASE WHEN series_kind='web_series' THEN 1 ELSE 0 END), 0) AS web_series,
@@ -391,7 +394,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         env.DB.prepare("SELECT language_name AS value, COUNT(*) AS count FROM series_titles GROUP BY language_name ORDER BY count DESC, value COLLATE NOCASE ASC LIMIT 100").all<FacetRow>(),
         env.DB.prepare("SELECT country_code AS value, COUNT(*) AS count FROM series_titles GROUP BY country_code ORDER BY count DESC, value ASC LIMIT 100").all<FacetRow>(),
         env.DB.prepare("SELECT series_kind AS value, COUNT(*) AS count FROM series_titles GROUP BY series_kind ORDER BY count DESC, value ASC").all<FacetRow>(),
+        ]) : Promise.resolve(null),
       ]);
+      const [statsResult, yearsResult, languagesResult, countriesResult, kindsResult] = metadata ?? [];
+
 
       const visualArtwork = url.searchParams.get("artwork") === "1"
         ? await resolveVisualArtwork(rows.results.map((item) => item.wikidata_qid).filter((qid): qid is string => Boolean(qid)))
@@ -423,20 +429,23 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         series,
         source: "d1",
         generatedAt: new Date().toISOString(),
-        catalogueUpdatedAt: d1TimestampToIso(statsResult?.latest_updated_at),
         pagination: { limit, offset, total: filteredTotal, hasMore: offset + series.length < filteredTotal },
-        facets: {
-          years: facet(yearsResult.results),
-          languages: facet(languagesResult.results),
-          countries: facet(countriesResult.results),
-          kinds: facet(kindsResult.results),
-        },
-        stats: {
-          total: Number(statsResult?.total ?? series.length),
-          withFirstAirYear: Number(statsResult?.with_first_air_year ?? 0),
-          webSeries: Number(statsResult?.web_series ?? 0),
-          miniseries: Number(statsResult?.miniseries ?? 0),
-        },
+        metadataLevel: includeMetadata ? "full" : "page-only",
+        ...(includeMetadata ? {
+          catalogueUpdatedAt: d1TimestampToIso(statsResult?.latest_updated_at),
+          facets: {
+            years: facet(yearsResult?.results ?? []),
+            languages: facet(languagesResult?.results ?? []),
+            countries: facet(countriesResult?.results ?? []),
+            kinds: facet(kindsResult?.results ?? []),
+          },
+          stats: {
+            total: Number(statsResult?.total ?? series.length),
+            withFirstAirYear: Number(statsResult?.with_first_air_year ?? 0),
+            webSeries: Number(statsResult?.web_series ?? 0),
+            miniseries: Number(statsResult?.miniseries ?? 0),
+          },
+        } : {}),
       });
     }
 
@@ -461,6 +470,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         });
       }
 
+      const includeMetadata = catalogueMetadataNeeded(url.searchParams);
       const scope = url.searchParams.get("scope") ?? "upcoming";
       const requestedYear = url.searchParams.get("year");
       const search = (url.searchParams.get("q") ?? "").trim().slice(0, 120);
@@ -505,10 +515,11 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       const next7 = addDays(today, 6);
       const next30 = addDays(today, 29);
 
-      const [result, filteredCount, statsResult, sourcesResult, yearsResult, languagesResult, countriesResult, periodCountsResult] = await Promise.all([
+      const [result, filteredCount, metadata] = await Promise.all([
         listStatement.all<CatalogueRow>(),
         countStatement.first<{ count: number }>(),
-        env.DB.prepare(
+        includeMetadata ? Promise.all([
+env.DB.prepare(
           `${combinedCatalogueCte} SELECT COUNT(*) AS total,
              COALESCE(SUM(CASE WHEN verification_status='verified' THEN 1 ELSE 0 END), 0) AS verified,
              COALESCE(SUM(CASE WHEN verification_status='supported' THEN 1 ELSE 0 END), 0) AS supported,
@@ -525,7 +536,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
              COALESCE(SUM(CASE WHEN m.release_date BETWEEN ?1 AND ?3 THEN 1 ELSE 0 END), 0) AS next_30_days
            FROM movies m WHERE ${visibleMovieClause}`,
         ).bind(today, next7, next30).first<PeriodCountsRow>(),
+        ]) : Promise.resolve(null),
       ]);
+      const [statsResult, sourcesResult, yearsResult, languagesResult, countriesResult, periodCountsResult] = metadata ?? [];
+
 
       // Resolve accepted official thumbnail sources only for the current page.
       // The previous correlated subquery ran inside every aggregate/facet scan
@@ -591,21 +605,28 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         movies,
         source: "d1",
         generatedAt: new Date().toISOString(),
-        catalogueUpdatedAt: d1TimestampToIso(latestUpdate),
         pagination: { limit, offset, total: filteredTotal, hasMore: offset + movies.length < filteredTotal },
-        facets: { years: facet(yearsResult.results), languages: facet(languagesResult.results), countries: facet(countriesResult.results) },
-        periodCounts: {
-          upcoming: Number(periodCountsResult?.upcoming ?? 0),
-          next7Days: Number(periodCountsResult?.next_7_days ?? 0),
-          next30Days: Number(periodCountsResult?.next_30_days ?? 0),
-        },
-        stats: {
-          total: Number(statsResult?.total ?? movies.length),
-          verified: Number(statsResult?.verified ?? 0),
-          supported: Number(statsResult?.supported ?? 0),
-          unconfirmed: Number(statsResult?.unconfirmed ?? 0),
-          activeSources: Number(sourcesResult?.count ?? 0),
-        },
+        metadataLevel: includeMetadata ? "full" : "page-only",
+        ...(includeMetadata ? {
+          catalogueUpdatedAt: d1TimestampToIso(latestUpdate),
+          facets: {
+            years: facet(yearsResult?.results ?? []),
+            languages: facet(languagesResult?.results ?? []),
+            countries: facet(countriesResult?.results ?? []),
+          },
+          periodCounts: {
+            upcoming: Number(periodCountsResult?.upcoming ?? 0),
+            next7Days: Number(periodCountsResult?.next_7_days ?? 0),
+            next30Days: Number(periodCountsResult?.next_30_days ?? 0),
+          },
+          stats: {
+            total: Number(statsResult?.total ?? movies.length),
+            verified: Number(statsResult?.verified ?? 0),
+            supported: Number(statsResult?.supported ?? 0),
+            unconfirmed: Number(statsResult?.unconfirmed ?? 0),
+            activeSources: Number(sourcesResult?.count ?? 0),
+          },
+        } : {}),
       });
     }
 
