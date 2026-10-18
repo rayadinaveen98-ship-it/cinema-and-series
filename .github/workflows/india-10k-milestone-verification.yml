@@ -1,0 +1,93 @@
+name: India +10K Growth — Final Read-Only Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-10k-milestone-verification.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Connect to pre-existing production D1 (no migrations or writes)
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Read year-precision film identities and stable growth state
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-10k-closeout
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year,source_category FROM catalogue_titles;" \
+            > data/generated/india-10k-closeout/year.json
+          git fetch --no-tags origin refs/heads/automation/india-growth-state
+          git show FETCH_HEAD:.automation/india-growth-state.json \
+            > data/generated/india-10k-closeout/state.json
+
+      - name: Verify exact shared 10K progress from fresh production D1 rows
+        shell: bash
+        run: |
+          python scripts/india_bulk_target.py \
+            --year-movies data/generated/india-10k-closeout/year.json \
+            --autopilot-state data/generated/india-10k-closeout/state.json \
+            --max-requested 1 \
+            --out-env "$GITHUB_ENV" \
+            --out-json data/generated/india-10k-closeout/goal.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          report=json.loads(Path("data/generated/india-10k-closeout/goal.json").read_text())
+          print("INDIA_10K_FINAL_GOAL=" + json.dumps(report, sort_keys=True), flush=True)
+          if report["goal"] != 10000 or report["confirmed_total"] != 10000 or report["remaining"] != 0:
+              raise SystemExit("India first 10K milestone is not yet fully confirmed in fresh D1")
+          PY
+
+      - name: Cross-check Indian movie visibility in the public API
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import urllib.request
+          url=("https://cinema-and-series.rayadinaveen98.workers.dev"
+               "/api/movies?scope=all&country=IN&limit=1&offset=0&audit=india-10k-final")
+          req=urllib.request.Request(url,headers={"Accept":"application/json",
+              "User-Agent":"CinemaAndSeries-India10K-MilestoneAudit/1.0"})
+          with urllib.request.urlopen(req,timeout=25) as resp:
+              payload=json.load(resp)
+              if resp.status != 200 or payload.get("source") != "d1":
+                  raise SystemExit("Public Indian movie catalogue failed D1 API verification")
+              total=int((payload.get("pagination") or {}).get("total") or 0)
+              print("PUBLIC_INDIAN_MOVIE_COUNT=" + str(total))
+              if total < 10000:
+                  raise SystemExit("Public Indian movie count is unexpectedly below 10K")
+          PY
+
+      - name: Archive verified growth evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: india-10k-growth-final-read-only-attestation
+          path: data/generated/india-10k-closeout/goal.json
+          if-no-files-found: warn
+          retention-days: 30
