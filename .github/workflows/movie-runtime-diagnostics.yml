@@ -56,7 +56,10 @@ jobs:
                   if any(key in line.lower() for key in ("error","failed","denied")):
                       print("TAIL_SETUP=" + line[:400])
                   continue
-              req=(event.get("event") or {}).get("request") or {}
+              if not isinstance(event, dict):
+                  continue
+              event_data=event.get("event")
+              req=(event_data.get("request") or {}) if isinstance(event_data,dict) else {}
               path=req.get("url") or ""
               if "/api/" not in path:
                   continue
