@@ -1,0 +1,72 @@
+name: Catalogue Availability — Read Only
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/catalogue-availability-check.yml"
+  workflow_dispatch:
+  # One small daily check after Cloudflare's midnight UTC D1 quota reset.
+  schedule:
+    - cron: "45 0 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Check the public API without database credentials
+        shell: bash
+        env:
+          BASE_URL: https://cinema-and-series.rayadinaveen98.workers.dev
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          healthy, paused, failed = [], [], []
+          for route in ("/api/health", "/api/movies?scope=all&limit=1&offset=0",
+                        "/api/series?limit=1&offset=0"):
+              request = urllib.request.Request(os.environ["BASE_URL"] + route,
+                  headers={"Accept": "application/json",
+                           "User-Agent": "CinemaAndSeries-ReadOnlyAvailability/1.0"})
+              try:
+                  with urllib.request.urlopen(request, timeout=18) as response:
+                      payload = json.load(response)
+                      if route == "/api/health" and payload.get("ok") is not True:
+                          failed.append(route + ": unhealthy")
+                      elif route != "/api/health" and payload.get("source") != "d1":
+                          failed.append(route + ": not backed by D1")
+                      else:
+                          healthy.append(route)
+                      print("CATALOGUE_CHECK=" + json.dumps({"path":route,"http":response.status,
+                          "total":(payload.get("pagination") or {}).get("total")},sort_keys=True))
+              except urllib.error.HTTPError as exc:
+                  try:
+                      payload=json.loads(exc.read(600))
+                  except (ValueError, TypeError):
+                      payload={}
+                  if (exc.code == 503 and payload.get("error") == "catalogue_daily_read_limit"
+                      and isinstance(payload.get("retryAt"),str)):
+                      paused.append(route)
+                      print("CATALOGUE_QUOTA_PAUSED=" + json.dumps(
+                          {"path":route,"retryAt":payload["retryAt"]},sort_keys=True))
+                  else:
+                      failed.append(route + ": HTTP " + str(exc.code))
+              except (OSError,ValueError) as exc:
+                  failed.append(route + ": " + type(exc).__name__)
+          print("CATALOGUE_AVAILABILITY=" + json.dumps({
+              "healthy":healthy,"daily_quota_paused":paused,"unexpected_failure":failed},sort_keys=True))
+          if failed:
+              sys.exit(1)
+          # Daily post-reset availability is expected to be fully healthy;
+          # quota exhaustion later in the day is tracked as an explicit warning.
+          if paused and os.environ.get("GITHUB_EVENT_NAME") == "schedule":
+              sys.exit(1)
+          PY
