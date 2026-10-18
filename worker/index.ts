@@ -16,6 +16,7 @@ type CatalogueRow = {
   verification_status: "verified" | "supported" | "unconfirmed";
   release_date_source: string;
   release_source_name: string | null;
+  release_source_url: string | null;
   poster_url: string | null;
   backdrop_url: string | null;
   artwork_source: string | null;
@@ -105,6 +106,7 @@ const combinedCatalogueCte = `WITH combined_catalogue AS (
     m.verification_status,
     m.release_date_source,
     s.source_name AS release_source_name,
+    NULL AS release_source_url,
     m.poster_url,
     m.backdrop_url,
     m.artwork_source,
@@ -128,8 +130,22 @@ const combinedCatalogueCte = `WITH combined_catalogue AS (
     ct.release_year,
     'year' AS date_precision,
     ct.verification_status,
-    'wikipedia' AS release_date_source,
-    'English Wikipedia category' AS release_source_name,
+    CASE
+      WHEN ct.source_category LIKE 'wikidata:%' THEN 'wikidata'
+      ELSE 'wikipedia'
+    END AS release_date_source,
+    CASE
+      WHEN ct.source_category LIKE 'wikidata:%' THEN 'Wikidata film and year claims'
+      ELSE 'English Wikipedia film category'
+    END AS release_source_name,
+    CASE
+      WHEN ct.source_category LIKE 'wikidata:%'
+        AND ct.wikidata_qid GLOB 'Q[0-9]*'
+        THEN 'https://www.wikidata.org/wiki/' || ct.wikidata_qid
+      WHEN ct.source_url LIKE 'https://en.wikipedia.org/%'
+        THEN ct.source_url
+      ELSE NULL
+    END AS release_source_url,
     NULL AS poster_url,
     NULL AS backdrop_url,
     NULL AS artwork_source,
@@ -527,6 +543,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
           verificationStatus: movie.verification_status,
           releaseSource: movie.release_date_source,
           releaseSourceName: movie.release_source_name ?? undefined,
+          releaseSourceUrl: movie.release_source_url ?? undefined,
           posterUrl: movie.poster_url ?? officialPoster ?? wikimediaPoster?.posterUrl ?? undefined,
           backdropUrl: movie.backdrop_url ?? undefined,
           artworkSource: movie.artwork_source
