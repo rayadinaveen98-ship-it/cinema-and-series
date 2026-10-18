@@ -33,11 +33,16 @@ jobs:
               "/api/catalogue-stats",
               "/api/movies?scope=all&limit=1&offset=0",
               "/api/movies?scope=all&limit=60&offset=0",
+              "/api/movies?scope=all&limit=60&offset=60",
+              "/api/movies?scope=all&country=IN&limit=10&offset=0",
+              "/api/series?limit=60&offset=0",
+              "/api/series?limit=60&offset=60",
               "/api/movies?scope=all&official=1&limit=1&offset=0",
               "/api/movies?scope=all&official=1&limit=200&offset=0",
           )
           root = os.environ["BASE_URL"].rstrip("/")
           failures = []
+          pages = {}
           for path in paths:
               req = urllib.request.Request(
                   root + path,
@@ -49,6 +54,7 @@ jobs:
               try:
                   with urllib.request.urlopen(req, timeout=20) as res:
                       payload = json.load(res)
+                      pages[path] = payload
                       report = {
                           "path": path,
                           "http": res.status,
@@ -56,10 +62,11 @@ jobs:
                           "database": payload.get("database"),
                           "catalogue_total": (payload.get("pagination") or {}).get("total"),
                           "movies_page_size": (len(payload.get("movies")) if isinstance(payload.get("movies"), list) else None),
+                          "series_page_size": (len(payload.get("series")) if isinstance(payload.get("series"), list) else None),
                           "error": payload.get("error"),
                       }
                       print("MOVIE_API_SMOKE=" + json.dumps(report, sort_keys=True), flush=True)
-                      if res.status != 200 or (path.startswith("/api/movies") and payload.get("source") != "d1"):
+                      if res.status != 200 or (path.startswith(("/api/movies", "/api/series")) and payload.get("source") != "d1"):
                           failures.append(path)
               except urllib.error.HTTPError as exc:
                   print("MOVIE_API_FAILURE=" + json.dumps({
@@ -73,6 +80,27 @@ jobs:
                       "detail": str(exc)[:180],
                   }), flush=True)
                   failures.append(path)
+          # Load-more must return new titles, never the same first page again.
+          for kind, first, second in (
+              ("movies", "/api/movies?scope=all&limit=60&offset=0",
+               "/api/movies?scope=all&limit=60&offset=60"),
+              ("series", "/api/series?limit=60&offset=0",
+               "/api/series?limit=60&offset=60"),
+          ):
+              if first not in pages or second not in pages:
+                  continue
+              page_a = pages[first].get(kind) or []
+              page_b = pages[second].get(kind) or []
+              ids_a = {row.get("id") for row in page_a}
+              ids_b = {row.get("id") for row in page_b}
+              if (len(page_a) != 60 or len(page_b) != 60 or
+                      len(ids_a) != len(page_a) or len(ids_b) != len(page_b) or
+                      ids_a.intersection(ids_b) or
+                      (pages[second].get("pagination") or {}).get("offset") != 60):
+                  failures.append(f"{kind}_pagination_overlap_or_missing_rows")
+          india = pages.get("/api/movies?scope=all&country=IN&limit=10&offset=0")
+          if india and any(row.get("countryCode") != "IN" for row in india.get("movies") or []):
+              failures.append("india_country_filter_incorrect")
           if failures:
               print("FAILED_PUBLIC_ENDPOINTS=" + json.dumps(failures))
               sys.exit(1)
