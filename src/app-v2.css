@@ -85,3 +85,65 @@
  .upcoming-language-control{width:100%}
  .upcoming-language-control select{width:100%}
 }
+
+
+/* Phase 2 PR-C — cinematic but source-honest artwork and readable detail pages. */
+.media-card{display:block;border-radius:10px;min-width:0}
+.media-card .media-art{border-radius:10px;border:1px solid rgba(255,255,255,.13);box-shadow:0 15px 34px rgba(0,0,0,.28);isolation:isolate}
+.media-card:focus-visible .media-art{border-color:#ffd36b}
+.media-art img{z-index:1}
+.poster-placeholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:flex-start;justify-content:flex-end;overflow:hidden;padding:14px 12px 18px;background:radial-gradient(ellipse at 64% 25%,color-mix(in srgb,var(--a) 62%,transparent),transparent 56%),linear-gradient(148deg,var(--b),#151015 58%,#070707);color:#fff}
+.poster-placeholder:before{content:"";position:absolute;inset:12px;border:1px solid rgba(255,255,255,.15);border-radius:3px;pointer-events:none}
+.poster-placeholder:after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(100deg,transparent 0 32px,rgba(255,255,255,.025) 33px 34px);pointer-events:none}
+.poster-placeholder-mark{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%);font-family:"Bebas Neue",Impact,sans-serif;font-size:clamp(100px,12vw,175px);letter-spacing:.02em;line-height:1;color:rgba(255,255,255,.19);text-shadow:0 18px 40px rgba(0,0,0,.38)}
+.poster-placeholder-brand{position:relative;z-index:1;display:block;max-width:100%;color:#efbfaa;font-size:9px;font-weight:800;letter-spacing:.16em;line-height:1.4}
+.poster-placeholder-title{position:relative;z-index:1;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:3;max-width:100%;overflow:hidden;overflow-wrap:anywhere;font-family:"DM Sans",system-ui,sans-serif;font-size:clamp(13px,1.13vw,16px);font-weight:800;line-height:1.22;text-shadow:0 3px 16px rgba(0,0,0,.6);margin-top:6px}
+.media-art:after{z-index:2;pointer-events:none;opacity:.5}
+.quality-pill,.kind-pill{z-index:4}
+.media-copy{padding:12px 3px 0;gap:6px}
+.media-copy strong{font-size:14px;line-height:1.45;min-height:2.8em;letter-spacing:-.014em}
+.media-copy span{font-size:12px;line-height:1.45;color:#aeb0b4}
+.media-grid{row-gap:27px}
+.detail-sheet{border:1px solid rgba(255,255,255,.18);border-radius:18px;background:linear-gradient(#18171a,#0f0f12);box-shadow:0 25px 100px rgba(0,0,0,.8)}
+.detail-hero{min-height:340px;padding:clamp(22px,4vw,42px)}
+.detail-hero>.detail-fallback-letter{position:absolute;top:-14px;right:8%;z-index:-2;color:rgba(255,255,255,.12);font-family:"Bebas Neue",Impact,sans-serif;font-size:clamp(190px,28vw,330px);line-height:1;pointer-events:none}
+.detail-hero h2{font-size:clamp(42px,6vw,90px);line-height:.98;overflow-wrap:anywhere;max-width:780px}
+.detail-hero p{font-size:12px;font-weight:800;letter-spacing:.16em}
+.detail-hero small{display:block;max-width:700px;color:#dedbdc;font-size:13px;line-height:1.55}
+.detail-content{padding:28px clamp(20px,4vw,42px) 38px}
+.detail-content>p{max-width:740px;font-size:14px;line-height:1.7;color:#d0ccd0}
+.detail-facts{gap:11px}
+.detail-facts span{padding:16px 14px;border-color:rgba(255,255,255,.12);border-radius:10px;background:rgba(255,255,255,.04);font-size:13px;line-height:1.45;overflow-wrap:anywhere}
+.detail-facts b{margin-bottom:8px;font-size:11px;color:#bebabe;letter-spacing:.08em}
+.source-links{flex-wrap:wrap;gap:10px}
+.source-links a{display:inline-flex;align-items:center;min-height:44px;padding:10px 14px;border:1px solid rgba(255,255,255,.2);border-radius:7px;background:rgba(255,255,255,.065);font-size:13px;color:#eee}
+.source-links a:hover{background:rgba(255,255,255,.13)}
+.row-title h2,.catalogue-heading h2{letter-spacing:-.025em}
+.home-hero-copy h1{overflow-wrap:anywhere}
+@media(max-width:700px){
+ .poster-placeholder{padding:12px 10px 14px}
+ .poster-placeholder:before{inset:9px}
+ .poster-placeholder-mark{font-size:clamp(84px,29vw,124px)}
+ .poster-placeholder-brand{font-size:8px}
+ .poster-placeholder-title{font-size:13px;line-height:1.3}
+ .media-copy{padding-top:10px}
+ .media-copy strong{font-size:13px;line-height:1.45}
+ .media-copy span{font-size:11px}
+ .media-grid{row-gap:20px}
+ .detail-sheet{max-height:92dvh;border-radius:18px 18px 0 0}
+ .detail-hero{min-height:270px;padding:30px 18px}
+ .detail-hero h2{font-size:clamp(38px,12vw,64px)}
+ .detail-hero small{font-size:13px}
+ .detail-content{padding:23px 18px calc(26px + var(--safe))}
+ .detail-facts{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .detail-facts span{padding:14px 11px}
+ .detail-content>p{font-size:13px;line-height:1.65}
+}
+@media(max-width:430px){
+ .poster-placeholder-title{font-size:12px}
+ .poster-placeholder-brand{letter-spacing:.1em}
+ .detail-hero>.detail-fallback-letter{right:0}
+}
+@media(prefers-reduced-motion:reduce){
+ .media-art,.media-card .media-art{transition:none}
+}
