@@ -686,7 +686,7 @@ export default {
         const forCache = response.clone();
         const copy = new Response(forCache.body, { status: forCache.status, headers: forCache.headers });
         copy.headers.set("X-Catalogue-Fresh-Until", String(Date.now() + ttl * 1000));
-        copy.headers.set("Cache-Control", `public, max-age=${STALE_SAFETY_WINDOW_SECONDS}`);
+        copy.headers.set("Cache-Control", `public, max-age=60, s-maxage=${STALE_SAFETY_WINDOW_SECONDS}`);
         ctx.waitUntil(caches.default.put(cacheKey, copy).catch((error) => {
           console.warn("Catalogue edge-cache write unavailable", error);
         }));
