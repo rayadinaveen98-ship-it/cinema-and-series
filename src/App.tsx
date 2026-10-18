@@ -42,6 +42,7 @@ type SeriesTitle = {
 type FacetValue = { value: string; count: number };
 type MovieResponse = {
   movies: Movie[];
+  staleDuringQuota?: boolean;
   pagination?: { limit: number; offset: number; total: number; hasMore: boolean };
   facets?: { years: FacetValue[]; languages: FacetValue[]; countries: FacetValue[] };
   periodCounts?: { upcoming: number; next7Days: number; next30Days: number };
@@ -49,6 +50,7 @@ type MovieResponse = {
 };
 type SeriesResponse = {
   series: SeriesTitle[];
+  staleDuringQuota?: boolean;
   pagination?: { limit: number; offset: number; total: number; hasMore: boolean };
   facets?: { years: FacetValue[]; languages: FacetValue[]; countries: FacetValue[]; kinds: FacetValue[] };
   stats?: { total: number; withFirstAirYear: number; webSeries: number; miniseries: number };
@@ -149,7 +151,11 @@ async function readCataloguePage<T>(result: Response): Promise<T> {
     }
     throw new Error("Catalogue could not load. Check your connection and try again.");
   }
-  return result.json() as Promise<T>;
+  const data = await result.json() as T;
+  if (result.headers.get("X-Catalogue-Cache") === "stale-on-quota" && data && typeof data === "object") {
+    return { ...data, staleDuringQuota: true } as T;
+  }
+  return data;
 }
 
 // A browse page retains previously loaded cards, but never mixes items from
@@ -175,6 +181,7 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
           payload: page === 0 ? next : {
             ...next,
             movies: [...(previous.key === queryKey ? previous.payload.movies : []), ...next.movies],
+            staleDuringQuota: Boolean(next.staleDuringQuota || (previous.key === queryKey && previous.payload.staleDuringQuota)),
           },
         }));
         setRequest({ key: queryKey, page, loading: false, error: false });
@@ -219,6 +226,7 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
           payload: page === 0 ? next : {
             ...next,
             series: [...(previous.key === queryKey ? previous.payload.series : []), ...next.series],
+            staleDuringQuota: Boolean(next.staleDuringQuota || (previous.key === queryKey && previous.payload.staleDuringQuota)),
           },
         }));
         setRequest({ key: queryKey, page, loading: false, error: false });
@@ -409,6 +417,7 @@ function MoviesPage() {
         {filterOpen ? <div className="filter-panel"><label>Year<select value={filters.year} onChange={(event) => setFilters((current) => ({ ...current, year: event.target.value }))}><option value="all">All years</option>{facets?.years.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Language<select value={filters.language} onChange={(event) => setFilters((current) => ({ ...current, language: event.target.value }))}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Country<select value={filters.country} onChange={(event) => setFilters((current) => ({ ...current, country: event.target.value }))}><option value="all">All countries</option>{facets?.countries.map((item) => <option key={item.value} value={item.value}>{countryLabel(item.value)}</option>)}</select></label><button onClick={() => setFilters({ q: "", year: "all", language: "all", country: "all" })}>Reset</button></div> : null}
         {all.loading && !all.payload.movies.length ? <CardSkeletons /> : <div className="media-grid">{all.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</div>}
         {!all.loading && !all.error && !all.payload.movies.length ? <p className="catalogue-empty">No movies match these filters. Try another title, year, or language.</p> : null}
+        {all.payload.staleDuringQuota ? <p className="catalogue-stale-warning" role="status">Showing a saved catalogue page while the database resets. Recently added or edited titles may appear later.</p> : null}
         <div className="catalogue-pagination" aria-live="polite">
           {all.payload.movies.length ? <span>Showing {all.payload.movies.length.toLocaleString("en-IN")} of {(all.payload.pagination?.total ?? all.payload.movies.length).toLocaleString("en-IN")} movies</span> : null}
           {all.error ? <p role="status" className="catalogue-error-message">{all.errorMessage}</p> : null}
@@ -439,6 +448,7 @@ function SeriesPage() {
         {filterOpen ? <div className="filter-panel four"><label>Language<select value={filters.language} onChange={(event) => setFilters((current) => ({ ...current, language: event.target.value }))}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Country<select value={filters.country} onChange={(event) => setFilters((current) => ({ ...current, country: event.target.value }))}><option value="all">All countries</option>{facets?.countries.map((item) => <option key={item.value} value={item.value}>{countryLabel(item.value)}</option>)}</select></label><label>Year<select value={filters.year} onChange={(event) => setFilters((current) => ({ ...current, year: event.target.value }))}><option value="all">All years</option>{facets?.years.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Format<select value={filters.kind} onChange={(event) => setFilters((current) => ({ ...current, kind: event.target.value }))}><option value="all">All formats</option>{facets?.kinds.filter((item) => item.value !== "unknown").map((item) => <option key={item.value} value={item.value}>{kindLabel(item.value as SeriesKind)}</option>)}</select></label><button onClick={() => setFilters({ q: "", year: "all", language: "all", country: "all", kind: "all" })}>Reset</button></div> : null}
         {all.loading && !all.payload.series.length ? <CardSkeletons /> : <div className="media-grid">{all.payload.series.map((item) => <SeriesCard key={item.id} item={item} onOpen={setSelected} />)}</div>}
         {!all.loading && !all.error && !all.payload.series.length ? <p className="catalogue-empty">No series match these filters. Try another title, year, or language.</p> : null}
+        {all.payload.staleDuringQuota ? <p className="catalogue-stale-warning" role="status">Showing a saved catalogue page while the database resets. Recently added or edited titles may appear later.</p> : null}
         <div className="catalogue-pagination" aria-live="polite">
           {all.payload.series.length ? <span>Showing {all.payload.series.length.toLocaleString("en-IN")} of {(all.payload.pagination?.total ?? all.payload.series.length).toLocaleString("en-IN")} series</span> : null}
           {all.error ? <p role="status" className="catalogue-error-message">{all.errorMessage}</p> : null}
