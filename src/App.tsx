@@ -490,13 +490,34 @@ function UpcomingPage() {
   const [selected, setSelected] = useState<Movie | null>(null);
   const today = indiaDateKey();
   const query = useMemo(() => ({ scope: "upcoming", from: today, ...(window === "7d" ? { to: addDaysKey(today, 6) } : window === "30d" ? { to: addDaysKey(today, 29) } : {}), ...(language !== "all" ? { language } : {}) }), [window, language, today]);
-  const data = useMovies(query, 80);
+  // Query-key isolation and abort-safe pagination prevent stale results leaking
+  // between date windows or languages; the old 80-item hard limit is removed.
+  const data = usePagedMovies(query, 60);
   const facets = data.payload.facets;
+  const total = data.payload.pagination?.total;
+  const rows = data.payload.movies;
   return (
     <main className="page upcoming-page">
-      <section className="library-hero upcoming-hero"><div><p>UPCOMING</p><h1>Coming soon</h1><span>Upcoming theatrical releases and tracked release dates.</span></div><b>{data.payload.pagination?.total?.toLocaleString("en-IN") || "—"} titles</b></section>
-      <section className="upcoming-controls"><div className="segmented"><button className={window === "all" ? "active" : ""} onClick={() => setWindow("all")}>All upcoming</button><button className={window === "30d" ? "active" : ""} onClick={() => setWindow("30d")}>Next 30 days</button><button className={window === "7d" ? "active" : ""} onClick={() => setWindow("7d")}>Next 7 days</button></div><select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></section>
-      <section className="catalogue-section compact-top">{data.loading ? <CardSkeletons /> : <div className="media-grid">{data.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</div>}</section>
+      <section className="library-hero upcoming-hero"><div><p>UPCOMING</p><h1>Coming soon</h1><span>Upcoming theatrical releases and tracked release dates.</span></div><b>{total == null ? "— titles" : `${total.toLocaleString("en-IN")} titles`}</b></section>
+      <section className="upcoming-controls">
+        <div className="segmented" aria-label="Release window">
+          <button className={window === "all" ? "active" : ""} aria-pressed={window === "all"} onClick={() => setWindow("all")}>All upcoming</button>
+          <button className={window === "30d" ? "active" : ""} aria-pressed={window === "30d"} onClick={() => setWindow("30d")}>Next 30 days</button>
+          <button className={window === "7d" ? "active" : ""} aria-pressed={window === "7d"} onClick={() => setWindow("7d")}>Next 7 days</button>
+        </div>
+        <label className="upcoming-language-control">Language <select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label>
+      </section>
+      <section className="catalogue-section compact-top">
+        {data.loading && !rows.length ? <CardSkeletons /> : <div className="media-grid">{rows.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</div>}
+        {!data.loading && !data.error && rows.length === 0 ? <p className="catalogue-empty">No upcoming releases match this date range and language. Try another filter.</p> : null}
+        {data.payload.staleDuringQuota ? <p className="catalogue-stale-warning" role="status">Showing a saved catalogue page while the database resets. New releases may appear later.</p> : null}
+        <div className="catalogue-pagination" aria-live="polite">
+          {rows.length ? <span>Showing {rows.length.toLocaleString("en-IN")} of {(total ?? rows.length).toLocaleString("en-IN")} upcoming movies</span> : null}
+          {data.error ? <p className="catalogue-error-message" role="alert">{data.errorMessage}</p> : null}
+          {data.error ? <button type="button" onClick={data.retry}>Couldn’t load releases. Retry</button> : null}
+          {data.payload.pagination?.hasMore ? <button type="button" onClick={data.loadMore} disabled={data.loading || data.error}>{data.loading ? "Loading more…" : "Load more releases"}</button> : null}
+        </div>
+      </section>
       {selected ? <MovieDetail movie={selected} onClose={() => setSelected(null)} /> : null}
     </main>
   );
