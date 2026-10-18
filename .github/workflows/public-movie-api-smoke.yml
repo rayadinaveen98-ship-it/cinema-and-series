@@ -35,6 +35,7 @@ jobs:
               "/api/movies?scope=all&limit=60&offset=0",
               "/api/movies?scope=all&limit=60&offset=60",
               "/api/movies?scope=all&country=IN&limit=10&offset=0",
+              "/api/movies?scope=all&country=IN&year=2024&limit=40&offset=0",
               "/api/series?limit=60&offset=0",
               "/api/series?limit=60&offset=60",
               "/api/movies?scope=all&official=1&limit=1&offset=0",
@@ -101,6 +102,19 @@ jobs:
           india = pages.get("/api/movies?scope=all&country=IN&limit=10&offset=0")
           if india and any(row.get("countryCode") != "IN" for row in india.get("movies") or []):
               failures.append("india_country_filter_incorrect")
+          # Year-only sourced films must carry the correct origin and never
+          # masquerade as an officially verified release date.
+          year_page = pages.get("/api/movies?scope=all&country=IN&year=2024&limit=40&offset=0")
+          if year_page:
+              for film in year_page.get("movies") or []:
+                  if film.get("releaseSource") == "wikidata":
+                      qid = film.get("wikidataQid")
+                      if (film.get("releaseSourceName") != "Wikidata film and year claims"
+                          or film.get("releaseSourceUrl") != "https://www.wikidata.org/wiki/" + str(qid)
+                          or film.get("datePrecision") != "year"
+                          or film.get("verificationStatus") != "unconfirmed"):
+                          failures.append("wikidata_provenance_mismatch")
+                          break
           if failures:
               print("FAILED_PUBLIC_ENDPOINTS=" + json.dumps(failures))
               sys.exit(1)
