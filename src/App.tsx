@@ -42,6 +42,7 @@ type SeriesTitle = {
 type FacetValue = { value: string; count: number };
 type MovieResponse = {
   movies: Movie[];
+  staleDuringQuota?: boolean;
   pagination?: { limit: number; offset: number; total: number; hasMore: boolean };
   facets?: { years: FacetValue[]; languages: FacetValue[]; countries: FacetValue[] };
   periodCounts?: { upcoming: number; next7Days: number; next30Days: number };
@@ -49,6 +50,7 @@ type MovieResponse = {
 };
 type SeriesResponse = {
   series: SeriesTitle[];
+  staleDuringQuota?: boolean;
   pagination?: { limit: number; offset: number; total: number; hasMore: boolean };
   facets?: { years: FacetValue[]; languages: FacetValue[]; countries: FacetValue[]; kinds: FacetValue[] };
   stats?: { total: number; withFirstAirYear: number; webSeries: number; miniseries: number };
@@ -137,7 +139,24 @@ function useSeries(query: Record<string, string>, limit = 60) {
 }
 
 
-type PageRequestState = { key: string; page: number; loading: boolean; error: boolean };
+type PageRequestState = { key: string; page: number; loading: boolean; error: boolean; message?: string };
+
+async function readCataloguePage<T>(result: Response): Promise<T> {
+  if (!result.ok) {
+    if (result.status === 503) {
+      const details = await result.json().catch(() => null) as { error?: string } | null;
+      if (details?.error === "catalogue_daily_read_limit") {
+        throw new Error("The catalogue has reached its daily database limit. Please try again after 5:30 AM IST.");
+      }
+    }
+    throw new Error("Catalogue could not load. Check your connection and try again.");
+  }
+  const data = await result.json() as T;
+  if (result.headers.get("X-Catalogue-Cache") === "stale-on-quota" && data && typeof data === "object") {
+    return { ...data, staleDuringQuota: true } as T;
+  }
+  return data;
+}
 
 // A browse page retains previously loaded cards, but never mixes items from
 // two different search/filter queries. All requests remain bounded to 60 rows.
@@ -154,7 +173,7 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
     const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit), artwork: "1", ...query });
     setRequest({ key: queryKey, page, loading: true, error: false });
     fetch(`/api/movies?${params}`, { signal: controller.signal })
-      .then((result) => { if (!result.ok) throw new Error("movies unavailable"); return result.json() as Promise<MovieResponse>; })
+      .then((result) => readCataloguePage<MovieResponse>(result))
       .then((next) => {
         if (controller.signal.aborted) return;
         setResponse((previous) => ({
@@ -162,12 +181,16 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
           payload: page === 0 ? next : {
             ...next,
             movies: [...(previous.key === queryKey ? previous.payload.movies : []), ...next.movies],
+            staleDuringQuota: Boolean(next.staleDuringQuota || (previous.key === queryKey && previous.payload.staleDuringQuota)),
           },
         }));
         setRequest({ key: queryKey, page, loading: false, error: false });
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setRequest({ key: queryKey, page, loading: false, error: true });
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setRequest({
+          key: queryKey, page, loading: false, error: true,
+          message: error instanceof Error ? error.message : "Catalogue could not load. Please retry.",
+        });
       });
     return () => controller.abort();
   }, [queryKey, page, limit, retryIndex]);
@@ -175,10 +198,11 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
   const payload: MovieResponse = response.key === queryKey ? response.payload : { movies: [] };
   const loading = request.key !== queryKey || request.page !== page || request.loading;
   const error = request.key === queryKey && request.page === page && request.error;
+  const errorMessage = error ? request.message : undefined;
   const loadMore = () => {
     if (!loading && !error && payload.pagination?.hasMore) setCursor({ key: queryKey, page: page + 1 });
   };
-  return { payload, loading, error, loadMore, retry: () => setRetryIndex((index) => index + 1) };
+  return { payload, loading, error, errorMessage, loadMore, retry: () => setRetryIndex((index) => index + 1) };
 }
 
 function usePagedSeries(query: Record<string, string>, limit = 60) {
@@ -194,7 +218,7 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
     const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit), artwork: "1", ...query });
     setRequest({ key: queryKey, page, loading: true, error: false });
     fetch(`/api/series?${params}`, { signal: controller.signal })
-      .then((result) => { if (!result.ok) throw new Error("series unavailable"); return result.json() as Promise<SeriesResponse>; })
+      .then((result) => readCataloguePage<SeriesResponse>(result))
       .then((next) => {
         if (controller.signal.aborted) return;
         setResponse((previous) => ({
@@ -202,12 +226,16 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
           payload: page === 0 ? next : {
             ...next,
             series: [...(previous.key === queryKey ? previous.payload.series : []), ...next.series],
+            staleDuringQuota: Boolean(next.staleDuringQuota || (previous.key === queryKey && previous.payload.staleDuringQuota)),
           },
         }));
         setRequest({ key: queryKey, page, loading: false, error: false });
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setRequest({ key: queryKey, page, loading: false, error: true });
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setRequest({
+          key: queryKey, page, loading: false, error: true,
+          message: error instanceof Error ? error.message : "Catalogue could not load. Please retry.",
+        });
       });
     return () => controller.abort();
   }, [queryKey, page, limit, retryIndex]);
@@ -215,10 +243,11 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
   const payload: SeriesResponse = response.key === queryKey ? response.payload : { series: [] };
   const loading = request.key !== queryKey || request.page !== page || request.loading;
   const error = request.key === queryKey && request.page === page && request.error;
+  const errorMessage = error ? request.message : undefined;
   const loadMore = () => {
     if (!loading && !error && payload.pagination?.hasMore) setCursor({ key: queryKey, page: page + 1 });
   };
-  return { payload, loading, error, loadMore, retry: () => setRetryIndex((index) => index + 1) };
+  return { payload, loading, error, errorMessage, loadMore, retry: () => setRetryIndex((index) => index + 1) };
 }
 
 function useModalLock(active: boolean, onClose: () => void) {
@@ -388,8 +417,10 @@ function MoviesPage() {
         {filterOpen ? <div className="filter-panel"><label>Year<select value={filters.year} onChange={(event) => setFilters((current) => ({ ...current, year: event.target.value }))}><option value="all">All years</option>{facets?.years.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Language<select value={filters.language} onChange={(event) => setFilters((current) => ({ ...current, language: event.target.value }))}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Country<select value={filters.country} onChange={(event) => setFilters((current) => ({ ...current, country: event.target.value }))}><option value="all">All countries</option>{facets?.countries.map((item) => <option key={item.value} value={item.value}>{countryLabel(item.value)}</option>)}</select></label><button onClick={() => setFilters({ q: "", year: "all", language: "all", country: "all" })}>Reset</button></div> : null}
         {all.loading && !all.payload.movies.length ? <CardSkeletons /> : <div className="media-grid">{all.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</div>}
         {!all.loading && !all.error && !all.payload.movies.length ? <p className="catalogue-empty">No movies match these filters. Try another title, year, or language.</p> : null}
+        {all.payload.staleDuringQuota ? <p className="catalogue-stale-warning" role="status">Showing a saved catalogue page while the database resets. Recently added or edited titles may appear later.</p> : null}
         <div className="catalogue-pagination" aria-live="polite">
           {all.payload.movies.length ? <span>Showing {all.payload.movies.length.toLocaleString("en-IN")} of {(all.payload.pagination?.total ?? all.payload.movies.length).toLocaleString("en-IN")} movies</span> : null}
+          {all.error ? <p role="status" className="catalogue-error-message">{all.errorMessage}</p> : null}
           {all.error ? <button type="button" onClick={all.retry}>Couldn’t load movies. Retry</button> : null}
           {all.payload.pagination?.hasMore ? <button type="button" onClick={all.loadMore} disabled={all.loading || all.error}>{all.loading ? "Loading more…" : "Load more movies"}</button> : null}
         </div>
@@ -417,8 +448,10 @@ function SeriesPage() {
         {filterOpen ? <div className="filter-panel four"><label>Language<select value={filters.language} onChange={(event) => setFilters((current) => ({ ...current, language: event.target.value }))}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Country<select value={filters.country} onChange={(event) => setFilters((current) => ({ ...current, country: event.target.value }))}><option value="all">All countries</option>{facets?.countries.map((item) => <option key={item.value} value={item.value}>{countryLabel(item.value)}</option>)}</select></label><label>Year<select value={filters.year} onChange={(event) => setFilters((current) => ({ ...current, year: event.target.value }))}><option value="all">All years</option>{facets?.years.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Format<select value={filters.kind} onChange={(event) => setFilters((current) => ({ ...current, kind: event.target.value }))}><option value="all">All formats</option>{facets?.kinds.filter((item) => item.value !== "unknown").map((item) => <option key={item.value} value={item.value}>{kindLabel(item.value as SeriesKind)}</option>)}</select></label><button onClick={() => setFilters({ q: "", year: "all", language: "all", country: "all", kind: "all" })}>Reset</button></div> : null}
         {all.loading && !all.payload.series.length ? <CardSkeletons /> : <div className="media-grid">{all.payload.series.map((item) => <SeriesCard key={item.id} item={item} onOpen={setSelected} />)}</div>}
         {!all.loading && !all.error && !all.payload.series.length ? <p className="catalogue-empty">No series match these filters. Try another title, year, or language.</p> : null}
+        {all.payload.staleDuringQuota ? <p className="catalogue-stale-warning" role="status">Showing a saved catalogue page while the database resets. Recently added or edited titles may appear later.</p> : null}
         <div className="catalogue-pagination" aria-live="polite">
           {all.payload.series.length ? <span>Showing {all.payload.series.length.toLocaleString("en-IN")} of {(all.payload.pagination?.total ?? all.payload.series.length).toLocaleString("en-IN")} series</span> : null}
+          {all.error ? <p role="status" className="catalogue-error-message">{all.errorMessage}</p> : null}
           {all.error ? <button type="button" onClick={all.retry}>Couldn’t load series. Retry</button> : null}
           {all.payload.pagination?.hasMore ? <button type="button" onClick={all.loadMore} disabled={all.loading || all.error}>{all.loading ? "Loading more…" : "Load more series"}</button> : null}
         </div>
