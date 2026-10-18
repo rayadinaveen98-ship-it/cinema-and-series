@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from wikidata_bulk_stage import (
     connect, quarter_dates, sparql_for_quarter, parse_rows, stage_quarter,
-    run_stage, report_for,
+    run_stage, report_for, stage_exit_code,
 )
 from wikidata_bulk_import_sql import reconcile, sql_for_staged_movie, write_preview
 
@@ -85,6 +85,32 @@ class BulkWikidataStageTests(unittest.TestCase):
                 self.assertEqual(first["completed_shards"], 1)
                 self.assertEqual(second["completed_shards"], 2)
                 self.assertEqual(len(requested), 2)
+
+    def test_completed_range_is_successful_noop_without_network(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with connect(Path(temp) / "stage.sqlite") as db:
+                for quarter in (1, 2, 3, 4):
+                    stage_quarter(db, result(), 2020, quarter)
+                def unexpected_fetch(_):
+                    raise AssertionError("Completed quarter should not fetch the network")
+                report = run_stage(db, 2020, 2020, 4,
+                                   fetcher=unexpected_fetch, cooldown=0)
+                self.assertTrue(report["all_shards_completed"])
+                self.assertEqual(report["new_shard_results"], [])
+                self.assertIsNone(report["stopped_reason"])
+                self.assertEqual(stage_exit_code(report), 0)
+
+    def test_incomplete_stalled_range_is_not_false_success(self):
+        with tempfile.TemporaryDirectory() as temp:
+            with connect(Path(temp) / "stage.sqlite") as db:
+                def failed_fetch(_):
+                    raise urllib.error.HTTPError("https://query.wikidata.org", 429,
+                                                 "rate limited", {}, None)
+                report = run_stage(db, 2020, 2020, 4,
+                                   fetcher=failed_fetch, cooldown=0)
+                self.assertFalse(report["all_shards_completed"])
+                self.assertFalse(report["new_shard_results"])
+                self.assertEqual(stage_exit_code(report), 2)
 
     def test_rate_limited_stops_without_corrupt_checkpoint(self):
         with tempfile.TemporaryDirectory() as temp:
