@@ -55,3 +55,14 @@ test("Successful empty results are distinct from failure and stale pages are mar
   assert.equal(cached.staleDuringQuota, true);
   assert.equal(cached.movies[0].id, "cached");
 });
+
+test("Compact rails skip global metadata; full browse first page keeps it", () => {
+  const firstFull = new URLSearchParams(cataloguePageSearch({ scope: "all", meta: "0" }, 60, 0, true));
+  assert.equal(firstFull.has("meta"), false);
+  const firstRail = new URLSearchParams(cataloguePageSearch({ scope: "upcoming" }, 14, 0, false));
+  assert.equal(firstRail.get("meta"), "0");
+  assert.equal(firstRail.get("limit"), "14");
+  const nextFull = new URLSearchParams(cataloguePageSearch({ scope: "all" }, 60, 1, true));
+  assert.equal(nextFull.get("meta"), "0");
+  assert.equal(nextFull.get("offset"), "60");
+});
