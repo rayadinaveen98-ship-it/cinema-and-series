@@ -32,7 +32,9 @@ jobs:
               "/api/health",
               "/api/catalogue-stats",
               "/api/movies?scope=all&limit=1&offset=0",
+              "/api/movies?scope=all&limit=60&offset=0",
               "/api/movies?scope=all&official=1&limit=1&offset=0",
+              "/api/movies?scope=all&official=1&limit=200&offset=0",
           )
           root = os.environ["BASE_URL"].rstrip("/")
           failures = []
