@@ -61,6 +61,12 @@ test('Home has truthful counts and three usable content rails', async ({ page })
   await expect(page.getByRole('heading', { name: 'Release 001' })).toBeVisible();
   await expect(page.getByText('138 titles and growing')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Series to discover' })).toBeVisible();
+  const seriesCard = page.locator('.home-page .series-poster').first();
+  const badge = await seriesCard.locator('.kind-pill').boundingBox();
+  const fallbackTitle = await seriesCard.locator('.poster-placeholder-title').boundingBox();
+  expect(badge).toBeTruthy();
+  expect(fallbackTitle).toBeTruthy();
+  expect(badge.y + badge.height).toBeLessThan(fallbackTitle.y);
   await page.screenshot({ path: `artifacts/browser-results/home-${test.info().project.name}.png`, fullPage: true });
 });
 
