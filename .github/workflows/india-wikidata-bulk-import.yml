@@ -1,6 +1,12 @@
 name: Indian Films — Bulk D1 Reconcile and Guarded Import
 
 on:
+  # One-time explicit source-controlled batch. Pushing a dated marker after
+  # review triggers at most the configured 1200-QID guarded import per run.
+  push:
+    branches: [main]
+    paths:
+      - ".github/ops/india-bulk-import-20261018.trigger"
   schedule:
     # 08:10 AM IST, after the 06:10 AM daily catalogue autopilot and D1 reset.
     - cron: "40 2 * * *"
@@ -31,7 +37,7 @@ jobs:
     env:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      MAX_TITLES: ${{ inputs.max_titles || '4000' }}
+      MAX_TITLES: ${{ github.event_name == 'push' && '1200' || inputs.max_titles || '4000' }}
       EXPLICIT_APPLY: ${{ inputs.apply_to_production || false }}
     steps:
       - uses: actions/checkout@v4
@@ -107,7 +113,8 @@ jobs:
         shell: bash
         run: |
           FLAGS=()
-          if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$EXPLICIT_APPLY" == "true" ]]; then
+          # Push execution requires the dedicated dated marker path above.
+          if [[ "$GITHUB_EVENT_NAME" == "schedule" || "$EXPLICIT_APPLY" == "true" || ( "$GITHUB_EVENT_NAME" == "push" && "$GITHUB_REF" == "refs/heads/main" ) ]]; then
             FLAGS+=(--apply)
           fi
           python scripts/wikidata_bulk_execute.py \
