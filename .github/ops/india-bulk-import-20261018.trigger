@@ -1,4 +1,4 @@
-# Approved one-time India Wikidata catalogue import trigger
-# 2026-10-18: at most 1,200 new source-backed, year-precision Indian movie IDs.
-# All SQL remains guarded, insert-only and verified against fresh D1 snapshots.
-# Distinct source qualified films are not equivalent to officially verified release dates.
+# Indian film growth — deliberately triggered continuation batch 2
+# Date: 2026-10-18. Hard upper bound: 1200 new year-precision film QIDs.
+# Reconcile fresh D1 identity snapshots and 10k target before writing.
+# No officially verified release-day claims are implied.
