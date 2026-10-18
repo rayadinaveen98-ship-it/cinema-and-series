@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, NavLink, Route, Routes } from "react-router";
 import { appendUniquePage, cataloguePageSearch, readCataloguePage } from "./catalogue-pages";
+import { nextDialogTabTarget } from "./dialog-tab-navigation";
 
 type Movie = {
   id: string;
@@ -260,16 +261,12 @@ function useModalLock(onClose: () => void) {
         dialog.focus();
         return;
       }
-      const first = focusable[0];
-      const last = focusable[focusable.length - 1];
-      const active = document.activeElement;
-      if (event.shiftKey && (active === first || !dialog.contains(active))) {
-        event.preventDefault();
-        last.focus();
-      } else if (!event.shiftKey && (active === last || !dialog.contains(active))) {
-        event.preventDefault();
-        first.focus();
-      }
+      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      const targetIndex = nextDialogTabTarget(currentIndex, focusable.length, event.shiftKey);
+      if (targetIndex === null) return;
+      event.preventDefault();
+      if (targetIndex === -1) dialog.focus();
+      else focusable[targetIndex].focus();
     };
     const onFocus = (event: FocusEvent) => {
       if (dialog && event.target instanceof Node && !dialog.contains(event.target)) {
