@@ -30,3 +30,17 @@
 .catalogue-error-message{max-width:420px;margin:0;color:#f4b6ae;font-size:12px;line-height:1.5;text-align:center}
 
 .catalogue-stale-warning{padding:14px 0;color:#c9a976;font-size:12px;line-height:1.6}
+
+
+/* Phase 2 P0: visible request states rather than silent empty catalogue rails. */
+.rail-status,.rail-error{flex:0 0 min(410px,86vw);align-self:center;min-width:0;padding:18px 20px;border:1px solid var(--line);border-radius:8px;background:#151515;color:#c6c6c6;font-size:13px;line-height:1.5}
+.rail-status{margin:0}
+.rail-error{border-color:rgba(244,182,174,.38)}
+.rail-error p{margin:0 0 10px;color:#f4b6ae}
+.rail-error button{min-height:44px;padding:0 18px;border:1px solid #ededed;border-radius:5px;background:#ededed;color:#111;font-size:13px;font-weight:700;cursor:pointer}
+.rail-error button:hover{background:#fff}
+.home-library-callout .rail-error{margin-top:14px;max-width:440px}
+.upcoming-language-control{display:flex;align-items:center;gap:9px;color:#aaa;font-size:13px}
+.upcoming-language-control select{min-height:44px}
+.catalogue-pagination button{min-height:44px}
+@media(max-width:700px){.rail-status,.rail-error{flex-basis:min(330px,83vw)}.upcoming-language-control{align-items:stretch;flex-direction:column;gap:7px}}
