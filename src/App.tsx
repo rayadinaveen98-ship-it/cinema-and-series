@@ -13,6 +13,7 @@ type Movie = {
   verificationStatus: "verified" | "supported" | "unconfirmed";
   releaseSource?: string;
   releaseSourceName?: string;
+  releaseSourceUrl?: string;
   posterUrl?: string;
   backdropUrl?: string;
 };
@@ -257,13 +258,22 @@ function MobileNav() {
   );
 }
 
+// A broken remote image must reveal the designed title initial instead of
+// leaving an empty gradient card. The keyed instance resets when URLs change.
+function PosterArtwork({ url, title, hero = false }: { url?: string; title: string; hero?: boolean }) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) {
+    return <span className={hero ? "detail-fallback-letter" : "fallback-letter"}>{firstLetter(title)}</span>;
+  }
+  return <img src={url} alt="" loading={hero ? "eager" : "lazy"} referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+}
+
 function MovieCard({ movie, onOpen }: { movie: Movie; onOpen: (movie: Movie) => void }) {
   const artwork = movie.posterUrl || movie.backdropUrl;
   return (
     <button className={`media-card movie-card tone-${toneIndex(movie.title)}`} onClick={() => onOpen(movie)}>
       <div className="media-art">
-        {artwork ? <img src={artwork} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
-        {!artwork ? <span className="fallback-letter">{firstLetter(movie.title)}</span> : null}
+        <PosterArtwork key={artwork ?? movie.id} url={artwork} title={movie.title} />
         {movie.verificationStatus === "verified" ? <em className="quality-pill">Verified</em> : null}
       </div>
       <div className="media-copy"><strong>{movie.title}</strong><span>{movieYear(movie) || "—"} · {movie.language || "Cinema"}</span></div>
@@ -275,8 +285,7 @@ function SeriesCard({ item, onOpen }: { item: SeriesTitle; onOpen: (item: Series
   return (
     <button className={`media-card series-poster tone-${toneIndex(item.title)}`} onClick={() => onOpen(item)}>
       <div className="media-art series-fallback">
-        {item.posterUrl ? <img src={item.posterUrl} alt="" loading="lazy" referrerPolicy="no-referrer" onError={(event) => { event.currentTarget.style.display = "none"; }} /> : null}
-        {!item.posterUrl ? <span className="fallback-letter">{firstLetter(item.title)}</span> : null}
+        <PosterArtwork key={item.posterUrl ?? item.id} url={item.posterUrl} title={item.title} />
         <em className="kind-pill">{kindLabel(item.seriesKind)}</em>
       </div>
       <div className="media-copy"><strong>{item.title}</strong><span>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"}</span></div>
@@ -295,12 +304,13 @@ function MovieDetail({ movie, onClose }: { movie: Movie; onClose: () => void }) 
       <article className={`detail-sheet tone-${toneIndex(movie.title)}`} role="dialog" aria-modal="true">
         <button className="modal-close" onClick={onClose}>×</button>
         <div className="detail-hero">
-          {(movie.backdropUrl || movie.posterUrl) ? <img src={movie.backdropUrl || movie.posterUrl} alt="" referrerPolicy="no-referrer" /> : <span>{firstLetter(movie.title)}</span>}
+          <PosterArtwork key={movie.backdropUrl || movie.posterUrl || movie.id} url={movie.backdropUrl || movie.posterUrl} title={movie.title} hero />
           <div><p>MOVIE</p><h2>{movie.title}</h2><small>{formatDate(movie.releaseDate)} · {movie.language} · {countryLabel(movie.countryCode)}</small></div>
         </div>
         <div className="detail-content">
-          <p>{movie.datePrecision === "year" || !movie.releaseDate ? "This catalogue record currently supports the release year only. Exact day and month are not inferred." : movie.verificationStatus === "verified" ? `Release information is verified against ${movie.releaseSourceName || "a first-party source"}.` : "This title is in the catalogue while stronger first-party release evidence is still being collected."}</p>
-          <div className="detail-facts"><span><b>Year</b>{movieYear(movie) || "—"}</span><span><b>Language</b>{movie.language || "Unknown"}</span><span><b>Country</b>{countryLabel(movie.countryCode)}</span><span><b>Status</b>{movie.verificationStatus === "verified" ? "Verified" : "Catalogue"}</span></div>
+          <p>{movie.datePrecision === "year" || !movie.releaseDate ? `Release year sourced from ${movie.releaseSourceName || "the catalogue"}. The exact release date is not independently verified.` : movie.verificationStatus === "verified" ? `Release information is verified against ${movie.releaseSourceName || "a first-party source"}.` : "This title is in the catalogue while stronger first-party release evidence is still being collected."}</p>
+          <div className="detail-facts"><span><b>Year</b>{movieYear(movie) || "—"}</span><span><b>Language</b>{movie.language || "Unknown"}</span><span><b>Country</b>{countryLabel(movie.countryCode)}</span><span><b>Status</b>{movie.verificationStatus === "verified" ? "Verified" : "Unconfirmed"}</span></div>
+          {movie.releaseSourceUrl && (movie.datePrecision === "year" || !movie.releaseDate) ? <div className="source-links"><a href={movie.releaseSourceUrl} target="_blank" rel="noopener noreferrer">View {movie.releaseSource === "wikidata" ? "Wikidata film record" : "Wikipedia film source"} ↗</a></div> : null}
         </div>
       </article>
     </div>
@@ -314,7 +324,7 @@ function SeriesDetail({ item, onClose }: { item: SeriesTitle; onClose: () => voi
       <article className={`detail-sheet tone-${toneIndex(item.title)}`} role="dialog" aria-modal="true">
         <button className="modal-close" onClick={onClose}>×</button>
         <div className="detail-hero">
-          {item.backdropUrl || item.posterUrl ? <img src={item.backdropUrl || item.posterUrl} alt="" referrerPolicy="no-referrer" /> : <span>{firstLetter(item.title)}</span>}
+          <PosterArtwork key={item.backdropUrl || item.posterUrl || item.id} url={item.backdropUrl || item.posterUrl} title={item.title} hero />
           <div><p>{kindLabel(item.seriesKind).toUpperCase()}</p><h2>{item.title}</h2><small>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"} · {countryLabel(item.countryCode)}</small></div>
         </div>
         <div className="detail-content">
