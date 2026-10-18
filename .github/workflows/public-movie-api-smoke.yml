@@ -53,7 +53,7 @@ jobs:
                           "source": payload.get("source"),
                           "database": payload.get("database"),
                           "catalogue_total": (payload.get("pagination") or {}).get("total"),
-                          "movies_page_size": len(payload.get("movies") or []),
+                          "movies_page_size": (len(payload.get("movies")) if isinstance(payload.get("movies"), list) else None),
                           "error": payload.get("error"),
                       }
                       print("MOVIE_API_SMOKE=" + json.dumps(report, sort_keys=True), flush=True)
