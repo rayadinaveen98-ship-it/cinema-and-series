@@ -80,7 +80,7 @@ class MovieProvenanceContractTests(unittest.TestCase):
                           "2025-01-03"))
 
     def test_broken_poster_has_title_initial_fallback(self):
-        app = (WORKER.parents[0] / "src" / "App.tsx").read_text(encoding="utf-8")
+        app = (WORKER.parents[1] / "src" / "App.tsx").read_text(encoding="utf-8")
         self.assertIn("onError={() => setFailed(true)}", app)
         self.assertIn('if (!url || failed)', app)
         self.assertIn("PosterArtwork", app)
