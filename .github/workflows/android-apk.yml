@@ -2,7 +2,7 @@ name: Android APK — Phase 2 Final
 
 on:
   push:
-    branches: [main]
+    branches: [main, "feature/phase2-pr-c-android-apk-20261018"]
     paths:
       - "android-app/**"
       - ".github/workflows/android-apk.yml"
@@ -44,22 +44,23 @@ jobs:
         run: gradle -p android-app :app:assembleDebug --stacktrace
 
       - name: Prepare named APK
-        run: cp android-app/app/build/outputs/apk/debug/app-debug.apk Cinema-and-Series-v1.0.0.apk
+        run: cp android-app/app/build/outputs/apk/debug/app-debug.apk Cinema-and-Series-v1.1.0.apk
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Cinema-and-Series-v1.0.0
-          path: Cinema-and-Series-v1.0.0.apk
+          name: Cinema-and-Series-v1.1.0
+          path: Cinema-and-Series-v1.1.0.apk
           retention-days: 30
 
       - name: Publish APK release asset
+        if: github.ref == 'refs/heads/main'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          TAG="p2-final-apk-${{ github.run_number }}"
-          gh release create "$TAG" "Cinema-and-Series-v1.0.0.apk" \
+          TAG="p2-ux-apk-${{ github.run_number }}"
+          gh release create "$TAG" "Cinema-and-Series-v1.1.0.apk" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
-            --title "Cinema & Series Phase 2 Final APK $TAG" \
-            --notes "Phase 2 final APK built from commit $GITHUB_SHA. Artwork remains fail-closed where rights-qualified production assets are unavailable."
+            --title "Cinema & Series Phase 2 UX APK $TAG" \
+            --notes "Phase 2 UX APK built from commit $GITHUB_SHA. Artwork remains fail-closed where rights-qualified production assets are unavailable."
