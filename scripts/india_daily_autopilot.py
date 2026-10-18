@@ -240,18 +240,32 @@ def qids_present_in_year_table(qids: list[str]) -> set[str]:
 
 def safe_queue_selection(state: dict, exact: list[dict], year: list[dict],
                          series: list[dict], max_rows: int) -> list[dict]:
+    if not 1 <= max_rows <= MAX_NEW_PER_DAY:
+        raise ValueError("Daily batch must be between 1 and the configured safe daily cap")
     report = audit(eligible_queue_items(state["queue"]), exact, year)
-    selected, _ = select_batch(report, max_rows)
     known_series = {str(row.get("wikidata_qid") or "").upper() for row in series}
-    selected = [row for row in selected if row["wikidata_qid"] not in known_series]
-    # Refuse conflicting identities and repeated normalized title/year among this batch.
+    # The shared category importer caps *each selection window* at 250 rows.
+    # Keep its guard intact; collect disjoint windows until the daily cap is
+    # met. Filtering series/title collisions must not leave the queue stuck
+    # on the same initial window on every run.
     seen = set()
     safe = []
-    for item in selected:
-        key = (str(item["title"]).strip().casefold(), item["year"])
-        if key not in seen:
-            seen.add(key)
-            safe.append(item)
+    offset = 0
+    while len(safe) < max_rows:
+        page_size = min(250, max_rows - len(safe))
+        selected, _ = select_batch(report, page_size, offset=offset)
+        if not selected:
+            break
+        offset += len(selected)
+        for item in selected:
+            if item["wikidata_qid"] in known_series:
+                continue
+            key = (str(item["title"]).strip().casefold(), item["year"])
+            if key not in seen:
+                seen.add(key)
+                safe.append(item)
+        if len(selected) < page_size:
+            break
     return safe
 
 
