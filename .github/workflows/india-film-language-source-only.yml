@@ -1,0 +1,119 @@
+name: Indian Films — Resumable Language Evidence (Source Only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-film-language-source-only.yml"
+  schedule:
+    # Respectful, bounded twice-daily Wikidata source work. No Cloudflare D1.
+    - cron: "20 2,14 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: india-film-language-source-only
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate film-language evidence and safe resumability
+        run: python -m unittest tests.test_india_film_language_evidence -v
+      - name: Restore Wikidata film identities from the completed source stage
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-language
+          git fetch --no-tags origin refs/heads/automation/wikidata-bulk-stage
+          git show FETCH_HEAD:.automation/wikidata-bulk-stage.sqlite \
+            > data/generated/india-language/film-stage.sqlite
+          test -s data/generated/india-language/film-stage.sqlite
+
+      - name: Restore isolated durable language evidence checkpoint
+        shell: bash
+        run: |
+          if git ls-remote --exit-code --heads origin automation/india-language-evidence >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/automation/india-language-evidence
+            git show FETCH_HEAD:.automation/india-language-evidence.json \
+              > data/generated/india-language/checkpoint.json
+            echo "Restored source-only language evidence checkpoint"
+          else
+            echo '{"schema":"india-film-language-evidence-v1","records":{}}' \
+              > data/generated/india-language/checkpoint.json
+            echo "Initialized source-only language evidence checkpoint"
+          fi
+
+      - name: Collect at most 400 film-language source records (NO D1 ACCESS)
+        shell: bash
+        run: |
+          python scripts/india_film_language_evidence.py \
+            --stage data/generated/india-language/film-stage.sqlite \
+            --checkpoint data/generated/india-language/checkpoint.json \
+            --max-films 400 \
+            --out-report data/generated/india-language/report.json \
+            --out-proposals data/generated/india-language/proposals.json
+
+      - name: Persist checkpoint on separate automation branch
+        if: always()
+        shell: bash
+        run: |
+          test -s data/generated/india-language/checkpoint.json
+          if git ls-remote --exit-code --heads origin automation/india-language-evidence >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/automation/india-language-evidence
+            git worktree add --detach "$RUNNER_TEMP/language-checkpoint-branch" FETCH_HEAD
+          else
+            git worktree add -b automation/india-language-evidence \
+              "$RUNNER_TEMP/language-checkpoint-branch" HEAD
+          fi
+          mkdir -p "$RUNNER_TEMP/language-checkpoint-branch/.automation"
+          cp data/generated/india-language/checkpoint.json \
+            "$RUNNER_TEMP/language-checkpoint-branch/.automation/india-language-evidence.json"
+          cd "$RUNNER_TEMP/language-checkpoint-branch"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .automation/india-language-evidence.json
+          if git diff --cached --quiet; then
+            echo "Source checkpoint unchanged"
+          else
+            git commit -m "data(source-only): checkpoint film-language evidence"
+            git push origin HEAD:refs/heads/automation/india-language-evidence
+          fi
+
+      - name: Summarize proposals without claiming official verification
+        if: always()
+        shell: bash
+        run: |
+          if [[ -s data/generated/india-language/report.json ]]; then
+            python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report=json.loads(Path("data/generated/india-language/report.json").read_text())
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as summary:
+              summary.write("## Film language evidence — no D1 reads/writes\n\n")
+              summary.write(f"Checked this run: **{report['checked_this_run']}**\n\n")
+              summary.write(f"Total checked: **{report['cumulative_checked_qids']}**\n\n")
+              summary.write(f"Single-language source proposals: **{report['proposed_single_language']}**\n\n")
+              summary.write(f"Pending: **{report['pending_qids']}**\n\n")
+              summary.write("All proposals require separate production reconciliation and quality review.\n")
+          PY
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-film-language-source-evidence
+          path: |
+            data/generated/india-language/report.json
+            data/generated/india-language/proposals.json
+          if-no-files-found: warn
+          retention-days: 30
