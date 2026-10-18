@@ -327,7 +327,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       const [rows, filteredCount, statsResult, yearsResult, languagesResult, countriesResult, kindsResult] = await Promise.all([
         env.DB.prepare(
           `SELECT s.* FROM series_titles s WHERE ${where}
-           ORDER BY CASE WHEN s.first_air_year IS NULL THEN 1 ELSE 0 END ASC, s.first_air_year DESC, s.title COLLATE NOCASE ASC
+           ORDER BY CASE WHEN s.first_air_year IS NULL THEN 1 ELSE 0 END ASC, s.first_air_year DESC, s.title COLLATE NOCASE ASC, s.id ASC
            LIMIT ?${bindings.length + 1} OFFSET ?${bindings.length + 2}`,
         ).bind(...bindings, limit, offset).all<SeriesRow>(),
         env.DB.prepare(`SELECT COUNT(*) AS count FROM series_titles s WHERE ${where}`).bind(...bindings).first<{ count: number }>(),
@@ -448,8 +448,8 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
       const where = conditions.join(" AND ");
       const orderBy = scope === "all" || requestedYear
-        ? "c.release_year DESC, CASE WHEN c.date_precision='day' THEN 0 ELSE 1 END ASC, c.release_date DESC, c.title COLLATE NOCASE ASC"
-        : "c.release_date ASC, c.title COLLATE NOCASE ASC";
+        ? "c.release_year DESC, CASE WHEN c.date_precision='day' THEN 0 ELSE 1 END ASC, c.release_date DESC, c.title COLLATE NOCASE ASC, c.id ASC"
+        : "c.release_date ASC, c.title COLLATE NOCASE ASC, c.id ASC";
       const listStatement = env.DB.prepare(
         `${combinedCatalogueCte} SELECT c.* FROM combined_catalogue c WHERE ${where} ORDER BY ${orderBy} LIMIT ?${bindings.length + 1} OFFSET ?${bindings.length + 2}`,
       ).bind(...bindings, limit, offset);
