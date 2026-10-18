@@ -1,0 +1,5558 @@
+{
+  "records": {
+    "Q104880249": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q104880249",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q104880249",
+      "status": "single_language_evidence",
+      "title": "Tera Kya Hoga Lovely",
+      "year": 2024
+    },
+    "Q105886670": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q105886670",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q105886670",
+      "status": "single_language_evidence",
+      "title": "Hari Hara Veera Mallu",
+      "year": 2025
+    },
+    "Q105952623": {
+      "language": "English",
+      "language_qids": [
+        "Q1860"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q105952623",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q105952623",
+      "status": "single_language_evidence",
+      "title": "Monkey Man",
+      "year": 2024
+    },
+    "Q108660853": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q108660853",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q108660853",
+      "status": "single_language_evidence",
+      "title": "Oti Uttam",
+      "year": 2024
+    },
+    "Q108940313": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q108940313",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q108940313",
+      "status": "single_language_evidence",
+      "title": "Hanu Man",
+      "year": 2024
+    },
+    "Q110917109": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q110917109",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q110917109",
+      "status": "single_language_evidence",
+      "title": "Game Changer",
+      "year": 2025
+    },
+    "Q112083510": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q112083510",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q112083510",
+      "status": "single_language_evidence",
+      "title": "Pushpa 2: The Rule",
+      "year": 2024
+    },
+    "Q112430183": {
+      "language": null,
+      "language_qids": [
+        "Q1568",
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q112430183",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q112430183",
+      "status": "ambiguous_multilingual_or_conflicting",
+      "title": "Kalki 2898 AD",
+      "year": 2024
+    },
+    "Q113380380": {
+      "language": "English",
+      "language_qids": [
+        "Q1860"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q113380380",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q113380380",
+      "status": "single_language_evidence",
+      "title": "The Unbreakable Boy",
+      "year": 2025
+    },
+    "Q114889877": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q114889877",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q114889877",
+      "status": "missing_claim",
+      "title": "Fighter",
+      "year": 2024
+    },
+    "Q115516527": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q115516527",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q115516527",
+      "status": "single_language_evidence",
+      "title": "Ajayante Randam Moshanam",
+      "year": 2024
+    },
+    "Q115945804": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q115945804",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q115945804",
+      "status": "single_language_evidence",
+      "title": "Emergency",
+      "year": 2025
+    },
+    "Q116158209": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q116158209",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q116158209",
+      "status": "single_language_evidence",
+      "title": "Main Atal Hoon",
+      "year": 2024
+    },
+    "Q116371445": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q116371445",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q116371445",
+      "status": "single_language_evidence",
+      "title": "Malaikottai Vaaliban",
+      "year": 2024
+    },
+    "Q116468013": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q116468013",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q116468013",
+      "status": "single_language_evidence",
+      "title": "Suryapet Junction",
+      "year": 2025
+    },
+    "Q116689545": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q116689545",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q116689545",
+      "status": "single_language_evidence",
+      "title": "Ae Watan Mere Watan",
+      "year": 2024
+    },
+    "Q116791506": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q116791506",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q116791506",
+      "status": "single_language_evidence",
+      "title": "Padatik",
+      "year": 2024
+    },
+    "Q117842625": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q117842625",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q117842625",
+      "status": "single_language_evidence",
+      "title": "Mission: Chapter 1",
+      "year": 2024
+    },
+    "Q118223446": {
+      "language": "Punjabi",
+      "language_qids": [
+        "Q58635"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q118223446",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q118223446",
+      "status": "single_language_evidence",
+      "title": "Munda Rockstar",
+      "year": 2024
+    },
+    "Q118383015": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q118383015",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q118383015",
+      "status": "single_language_evidence",
+      "title": "Captain Miller",
+      "year": 2024
+    },
+    "Q118498805": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q118498805",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q118498805",
+      "status": "single_language_evidence",
+      "title": "Devi Chowdhurani: Bandit Queen of Bengal",
+      "year": 2024
+    },
+    "Q118502010": {
+      "language": null,
+      "language_qids": [
+        "Q1568",
+        "Q5885",
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q118502010",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q118502010",
+      "status": "ambiguous_multilingual_or_conflicting",
+      "title": "Devara: Part 1",
+      "year": 2024
+    },
+    "Q118904000": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q118904000",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q118904000",
+      "status": "single_language_evidence",
+      "title": "Songs of Paradise",
+      "year": 2025
+    },
+    "Q119439912": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q119439912",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q119439912",
+      "status": "single_language_evidence",
+      "title": "Birthmark",
+      "year": 2024
+    },
+    "Q121129679": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q121129679",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q121129679",
+      "status": "missing_claim",
+      "title": "Demonte Colony 2",
+      "year": 2024
+    },
+    "Q121360390": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q121360390",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q121360390",
+      "status": "single_language_evidence",
+      "title": "Hubba",
+      "year": 2024
+    },
+    "Q121501146": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q121501146",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q121501146",
+      "status": "single_language_evidence",
+      "title": "Raayan",
+      "year": 2024
+    },
+    "Q121734298": {
+      "language": "Kannada",
+      "language_qids": [
+        "Q33673"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q121734298",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q121734298",
+      "status": "single_language_evidence",
+      "title": "Koli Esru",
+      "year": 2024
+    },
+    "Q121792039": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q121792039",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q121792039",
+      "status": "single_language_evidence",
+      "title": "Abraham Ozler",
+      "year": 2024
+    },
+    "Q121842080": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q121842080",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q121842080",
+      "status": "single_language_evidence",
+      "title": "Bramayugam",
+      "year": 2024
+    },
+    "Q122469990": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q122469990",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q122469990",
+      "status": "single_language_evidence",
+      "title": "Pokkhirajer Dim",
+      "year": 2025
+    },
+    "Q122642379": {
+      "language": null,
+      "language_qids": [
+        "Q1568",
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q122642379",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q122642379",
+      "status": "ambiguous_multilingual_or_conflicting",
+      "title": "Merry Christmas",
+      "year": 2024
+    },
+    "Q122642767": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q122642767",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q122642767",
+      "status": "single_language_evidence",
+      "title": "Chhota Bheem and the Curse of Damyaan",
+      "year": 2024
+    },
+    "Q122678640": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q122678640",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q122678640",
+      "status": "single_language_evidence",
+      "title": "Razakar: The Silent Genocide of Hyderabad",
+      "year": 2024
+    },
+    "Q123193268": {
+      "language": null,
+      "language_qids": [
+        "Q1568",
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q123193268",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q123193268",
+      "status": "ambiguous_multilingual_or_conflicting",
+      "title": "Dard",
+      "year": 2024
+    },
+    "Q123244803": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q123244803",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q123244803",
+      "status": "single_language_evidence",
+      "title": "Badami Hyenar Kobole",
+      "year": 2024
+    },
+    "Q123414786": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q123414786",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q123414786",
+      "status": "single_language_evidence",
+      "title": "Siren",
+      "year": 2024
+    },
+    "Q123475104": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q123475104",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q123475104",
+      "status": "single_language_evidence",
+      "title": "Double Engine",
+      "year": 2024
+    },
+    "Q123484839": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q123484839",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q123484839",
+      "status": "single_language_evidence",
+      "title": "Eagle",
+      "year": 2024
+    },
+    "Q123528206": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q123528206",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q123528206",
+      "status": "single_language_evidence",
+      "title": "Singham Again",
+      "year": 2024
+    },
+    "Q123749605": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q123749605",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q123749605",
+      "status": "single_language_evidence",
+      "title": "Bastar: The Naxal Story",
+      "year": 2024
+    },
+    "Q123812949": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q123812949",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q123812949",
+      "status": "single_language_evidence",
+      "title": "Sabdham",
+      "year": 2025
+    },
+    "Q123956214": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q123956214",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q123956214",
+      "status": "single_language_evidence",
+      "title": "Crakk Jeetegaa... Toh Jiyegaa!",
+      "year": 2024
+    },
+    "Q123982001": {
+      "language": null,
+      "language_qids": [
+        "Q1348800",
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q123982001",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q123982001",
+      "status": "ambiguous_multilingual_or_conflicting",
+      "title": "Girls Will Be Girls",
+      "year": 2024
+    },
+    "Q123989791": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q123989791",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q123989791",
+      "status": "single_language_evidence",
+      "title": "Operation Valentine",
+      "year": 2024
+    },
+    "Q124006679": {
+      "language": "Marathi",
+      "language_qids": [
+        "Q1571"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124006679",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124006679",
+      "status": "single_language_evidence",
+      "title": "Satyashodhak",
+      "year": 2024
+    },
+    "Q124007194": {
+      "language": "Kannada",
+      "language_qids": [
+        "Q33673"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124007194",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124007194",
+      "status": "single_language_evidence",
+      "title": "Bachelor Party",
+      "year": 2024
+    },
+    "Q124030529": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124030529",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124030529",
+      "status": "single_language_evidence",
+      "title": "Murder Mubarak",
+      "year": 2024
+    },
+    "Q124038929": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124038929",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124038929",
+      "status": "single_language_evidence",
+      "title": "Bazooka",
+      "year": 2025
+    },
+    "Q124080292": {
+      "language": "Gujarati",
+      "language_qids": [
+        "Q5137"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124080292",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124080292",
+      "status": "single_language_evidence",
+      "title": "Ittaa Kittaa",
+      "year": 2024
+    },
+    "Q124154074": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q124154074",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124154074",
+      "status": "missing_claim",
+      "title": "O Seeker",
+      "year": 2024
+    },
+    "Q124176217": {
+      "language": "Punjabi",
+      "language_qids": [
+        "Q58635"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124176217",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124176217",
+      "status": "single_language_evidence",
+      "title": "Warning 2",
+      "year": 2024
+    },
+    "Q124209576": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124209576",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124209576",
+      "status": "single_language_evidence",
+      "title": "Aranam",
+      "year": 2024
+    },
+    "Q124254266": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124254266",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124254266",
+      "status": "single_language_evidence",
+      "title": "Stree 2",
+      "year": 2024
+    },
+    "Q124260479": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124260479",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124260479",
+      "status": "single_language_evidence",
+      "title": "Teri Baaton Mein Aisa Uljha Jiya",
+      "year": 2024
+    },
+    "Q124304409": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124304409",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124304409",
+      "status": "single_language_evidence",
+      "title": "Bhimaa",
+      "year": 2024
+    },
+    "Q124304410": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124304410",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124304410",
+      "status": "single_language_evidence",
+      "title": "Do Aur Do Pyaar",
+      "year": 2024
+    },
+    "Q124317237": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124317237",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124317237",
+      "status": "single_language_evidence",
+      "title": "Sentimentaaal",
+      "year": 2024
+    },
+    "Q124320664": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q124320664",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124320664",
+      "status": "missing_claim",
+      "title": "Gangs of Godavari",
+      "year": 2024
+    },
+    "Q124323601": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124323601",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124323601",
+      "status": "single_language_evidence",
+      "title": "Bhakshak",
+      "year": 2024
+    },
+    "Q124323602": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q124323602",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124323602",
+      "status": "missing_claim",
+      "title": "Bootcut Balaraju",
+      "year": 2024
+    },
+    "Q124325961": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124325961",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124325961",
+      "status": "single_language_evidence",
+      "title": "Article 370",
+      "year": 2024
+    },
+    "Q124328394": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124328394",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124328394",
+      "status": "single_language_evidence",
+      "title": "Bhootpori",
+      "year": 2024
+    },
+    "Q124340421": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124340421",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124340421",
+      "status": "single_language_evidence",
+      "title": "Aakhir Palaayan Kab Tak",
+      "year": 2024
+    },
+    "Q124343111": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124343111",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124343111",
+      "status": "single_language_evidence",
+      "title": "Love Insurance Corporation",
+      "year": 2025
+    },
+    "Q124364755": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124364755",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124364755",
+      "status": "single_language_evidence",
+      "title": "Lover",
+      "year": 2024
+    },
+    "Q124370506": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124370506",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124370506",
+      "status": "single_language_evidence",
+      "title": "Pariah",
+      "year": 2024
+    },
+    "Q124373515": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124373515",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124373515",
+      "status": "single_language_evidence",
+      "title": "Bijoyar Pore",
+      "year": 2024
+    },
+    "Q124412409": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124412409",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124412409",
+      "status": "single_language_evidence",
+      "title": "All India Rank",
+      "year": 2024
+    },
+    "Q124852530": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q124852530",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q124852530",
+      "status": "single_language_evidence",
+      "title": "War 2",
+      "year": 2025
+    },
+    "Q125137056": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q125137056",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q125137056",
+      "status": "single_language_evidence",
+      "title": "Odela 2",
+      "year": 2025
+    },
+    "Q125295778": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q125295778",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q125295778",
+      "status": "single_language_evidence",
+      "title": "Deva",
+      "year": 2025
+    },
+    "Q125637377": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q125637377",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q125637377",
+      "status": "single_language_evidence",
+      "title": "Sitaare Zameen Par",
+      "year": 2025
+    },
+    "Q125806341": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q125806341",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q125806341",
+      "status": "missing_claim",
+      "title": "Dragon",
+      "year": 2025
+    },
+    "Q125861557": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q125861557",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q125861557",
+      "status": "single_language_evidence",
+      "title": "Sikandar",
+      "year": 2025
+    },
+    "Q126013443": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q126013443",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q126013443",
+      "status": "single_language_evidence",
+      "title": "Jolly LLB 3",
+      "year": 2025
+    },
+    "Q126453800": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q126453800",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q126453800",
+      "status": "single_language_evidence",
+      "title": "Mrs.",
+      "year": 2025
+    },
+    "Q126537613": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q126537613",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q126537613",
+      "status": "single_language_evidence",
+      "title": "Dhadak 2",
+      "year": 2025
+    },
+    "Q126855062": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q126855062",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q126855062",
+      "status": "missing_claim",
+      "title": "Ace",
+      "year": 2025
+    },
+    "Q126918438": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q126918438",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q126918438",
+      "status": "single_language_evidence",
+      "title": "Raid 2",
+      "year": 2025
+    },
+    "Q127012906": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q127012906",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q127012906",
+      "status": "single_language_evidence",
+      "title": "Chhaava",
+      "year": 2025
+    },
+    "Q127118132": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q127118132",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q127118132",
+      "status": "single_language_evidence",
+      "title": "Coolie",
+      "year": 2025
+    },
+    "Q128474263": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q128474263",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q128474263",
+      "status": "single_language_evidence",
+      "title": "Telusu Kada",
+      "year": 2025
+    },
+    "Q130213533": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q130213533",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q130213533",
+      "status": "missing_claim",
+      "title": "Porichoy Gupta",
+      "year": 2025
+    },
+    "Q130460117": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q130460117",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q130460117",
+      "status": "single_language_evidence",
+      "title": "Son of Sardaar 2",
+      "year": 2025
+    },
+    "Q130550614": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q130550614",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q130550614",
+      "status": "single_language_evidence",
+      "title": "Metro... In Dino",
+      "year": 2025
+    },
+    "Q130553766": {
+      "language": null,
+      "language_qids": [
+        "Q5885",
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q130553766",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q130553766",
+      "status": "ambiguous_multilingual_or_conflicting",
+      "title": "Eleven",
+      "year": 2025
+    },
+    "Q131128597": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131128597",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131128597",
+      "status": "single_language_evidence",
+      "title": "Azaad",
+      "year": 2025
+    },
+    "Q131278913": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131278913",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131278913",
+      "status": "single_language_evidence",
+      "title": "Baaghi 4",
+      "year": 2025
+    },
+    "Q131315558": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131315558",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131315558",
+      "status": "single_language_evidence",
+      "title": "Thudarum",
+      "year": 2025
+    },
+    "Q131316522": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131316522",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131316522",
+      "status": "single_language_evidence",
+      "title": "Ouseppinte Osyath",
+      "year": 2025
+    },
+    "Q131363519": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131363519",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131363519",
+      "status": "single_language_evidence",
+      "title": "Ramam Raghavam",
+      "year": 2025
+    },
+    "Q131404012": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q131404012",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131404012",
+      "status": "missing_claim",
+      "title": "Mission Grey House",
+      "year": 2025
+    },
+    "Q131428405": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131428405",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131428405",
+      "status": "single_language_evidence",
+      "title": "Match Fixing",
+      "year": 2025
+    },
+    "Q131428415": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q131428415",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131428415",
+      "status": "missing_claim",
+      "title": "Test",
+      "year": 2025
+    },
+    "Q131438088": {
+      "language": "Punjabi",
+      "language_qids": [
+        "Q58635"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131438088",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131438088",
+      "status": "single_language_evidence",
+      "title": "Illti",
+      "year": 2025
+    },
+    "Q131447675": {
+      "language": "Punjabi",
+      "language_qids": [
+        "Q58635"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131447675",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131447675",
+      "status": "single_language_evidence",
+      "title": "Majhail",
+      "year": 2025
+    },
+    "Q131455085": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131455085",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131455085",
+      "status": "single_language_evidence",
+      "title": "Ghaati",
+      "year": 2025
+    },
+    "Q131548050": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131548050",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131548050",
+      "status": "single_language_evidence",
+      "title": "Sankranthiki Vasthunam",
+      "year": 2025
+    },
+    "Q131553188": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131553188",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131553188",
+      "status": "single_language_evidence",
+      "title": "Aghathiyaa",
+      "year": 2025
+    },
+    "Q131578114": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131578114",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131578114",
+      "status": "single_language_evidence",
+      "title": "Rekhachithram",
+      "year": 2025
+    },
+    "Q131583149": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131583149",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131583149",
+      "status": "single_language_evidence",
+      "title": "Bhaggyolokkhi",
+      "year": 2025
+    },
+    "Q131583972": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131583972",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131583972",
+      "status": "single_language_evidence",
+      "title": "Thandel",
+      "year": 2025
+    },
+    "Q131597024": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131597024",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131597024",
+      "status": "single_language_evidence",
+      "title": "Felubakshi",
+      "year": 2025
+    },
+    "Q131601583": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131601583",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131601583",
+      "status": "single_language_evidence",
+      "title": "Shotyi Boley Shotyi Kichhu Nei",
+      "year": 2025
+    },
+    "Q131687595": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131687595",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131687595",
+      "status": "single_language_evidence",
+      "title": "Turuper Tass",
+      "year": 2025
+    },
+    "Q131708542": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131708542",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131708542",
+      "status": "single_language_evidence",
+      "title": "Oporichito",
+      "year": 2025
+    },
+    "Q131716628": {
+      "language": "Marathi",
+      "language_qids": [
+        "Q1571"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131716628",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131716628",
+      "status": "single_language_evidence",
+      "title": "Cactus Pears",
+      "year": 2025
+    },
+    "Q131719343": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131719343",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131719343",
+      "status": "single_language_evidence",
+      "title": "Binodiini - Ekti Natir Upakhyan",
+      "year": 2025
+    },
+    "Q131855835": {
+      "language": null,
+      "language_qids": [
+        "Q33810",
+        "Q4850727"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131855835",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131855835",
+      "status": "ambiguous_multilingual_or_conflicting",
+      "title": "Balesoria",
+      "year": 2025
+    },
+    "Q131872892": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q131872892",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131872892",
+      "status": "missing_claim",
+      "title": "Shadowbox",
+      "year": 2025
+    },
+    "Q131940447": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q131940447",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q131940447",
+      "status": "single_language_evidence",
+      "title": "Brahma Anandam",
+      "year": 2025
+    },
+    "Q132063744": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132063744",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132063744",
+      "status": "single_language_evidence",
+      "title": "Coffee with a Killer",
+      "year": 2025
+    },
+    "Q132204434": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q132204434",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132204434",
+      "status": "missing_claim",
+      "title": "The Storyteller",
+      "year": 2025
+    },
+    "Q132240257": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132240257",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132240257",
+      "status": "single_language_evidence",
+      "title": "14 Days Girlfriend Intlo",
+      "year": 2025
+    },
+    "Q132240259": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132240259",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132240259",
+      "status": "single_language_evidence",
+      "title": "Kingdom",
+      "year": 2025
+    },
+    "Q132322773": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q132322773",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132322773",
+      "status": "missing_claim",
+      "title": "Bromance",
+      "year": 2025
+    },
+    "Q132355940": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132355940",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132355940",
+      "status": "single_language_evidence",
+      "title": "Crazxy",
+      "year": 2025
+    },
+    "Q132407629": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132407629",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132407629",
+      "status": "single_language_evidence",
+      "title": "Dhoom Dhaam",
+      "year": 2025
+    },
+    "Q132456715": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132456715",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132456715",
+      "status": "single_language_evidence",
+      "title": "Omorshongi",
+      "year": 2025
+    },
+    "Q132516742": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132516742",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132516742",
+      "status": "single_language_evidence",
+      "title": "Ei Raat Tomar Amaar",
+      "year": 2025
+    },
+    "Q132676485": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132676485",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132676485",
+      "status": "single_language_evidence",
+      "title": "Bhai: The Opening Part",
+      "year": 2025
+    },
+    "Q132735079": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132735079",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132735079",
+      "status": "single_language_evidence",
+      "title": "Babu Shona",
+      "year": 2025
+    },
+    "Q132748695": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132748695",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132748695",
+      "status": "single_language_evidence",
+      "title": "Dashoi June",
+      "year": 2025
+    },
+    "Q132750912": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132750912",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132750912",
+      "status": "single_language_evidence",
+      "title": "Karon Greece Amader Desh Na",
+      "year": 2025
+    },
+    "Q132752585": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132752585",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132752585",
+      "status": "single_language_evidence",
+      "title": "Mukhoshe Manushe Khela",
+      "year": 2025
+    },
+    "Q132774514": {
+      "language": "Gujarati",
+      "language_qids": [
+        "Q5137"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132774514",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132774514",
+      "status": "single_language_evidence",
+      "title": "All The Best Pandya",
+      "year": 2025
+    },
+    "Q132794955": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132794955",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132794955",
+      "status": "single_language_evidence",
+      "title": "Mirai (2025 film)",
+      "year": 2025
+    },
+    "Q132797538": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132797538",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132797538",
+      "status": "single_language_evidence",
+      "title": "The Diplomat",
+      "year": 2025
+    },
+    "Q132816513": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132816513",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132816513",
+      "status": "single_language_evidence",
+      "title": "Aarii",
+      "year": 2025
+    },
+    "Q132819724": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132819724",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132819724",
+      "status": "single_language_evidence",
+      "title": "Bad Girl",
+      "year": 2025
+    },
+    "Q132839147": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132839147",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132839147",
+      "status": "single_language_evidence",
+      "title": "DD Next Level",
+      "year": 2025
+    },
+    "Q132881977": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132881977",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132881977",
+      "status": "single_language_evidence",
+      "title": "Jigel (film)",
+      "year": 2025
+    },
+    "Q132968191": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132968191",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132968191",
+      "status": "single_language_evidence",
+      "title": "Guard - Revenge For Love",
+      "year": 2025
+    },
+    "Q132968202": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q132968202",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q132968202",
+      "status": "single_language_evidence",
+      "title": "Piranthanaal Vazhthukal",
+      "year": 2025
+    },
+    "Q133062777": {
+      "language": "Kannada",
+      "language_qids": [
+        "Q33673"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133062777",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133062777",
+      "status": "single_language_evidence",
+      "title": "Billa Ranga Baasha",
+      "year": 2025
+    },
+    "Q133255160": {
+      "language": "Kannada",
+      "language_qids": [
+        "Q33673"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133255160",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133255160",
+      "status": "single_language_evidence",
+      "title": "Apaayavide Eccharike",
+      "year": 2025
+    },
+    "Q133268738": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133268738",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133268738",
+      "status": "single_language_evidence",
+      "title": "Trauma (2025 film)",
+      "year": 2025
+    },
+    "Q133286527": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133286527",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133286527",
+      "status": "single_language_evidence",
+      "title": "Maadan Kodai Vizha",
+      "year": 2025
+    },
+    "Q133286531": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133286531",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133286531",
+      "status": "single_language_evidence",
+      "title": "Konjam Kadhal Konjam Modhal",
+      "year": 2025
+    },
+    "Q133397150": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133397150",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133397150",
+      "status": "single_language_evidence",
+      "title": "Leech",
+      "year": 2025
+    },
+    "Q133449011": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133449011",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133449011",
+      "status": "single_language_evidence",
+      "title": "Dexter",
+      "year": 2025
+    },
+    "Q133457587": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133457587",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133457587",
+      "status": "single_language_evidence",
+      "title": "Balaram Kando",
+      "year": 2025
+    },
+    "Q133464742": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133464742",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133464742",
+      "status": "single_language_evidence",
+      "title": "Pei Kottu",
+      "year": 2025
+    },
+    "Q133567039": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133567039",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133567039",
+      "status": "single_language_evidence",
+      "title": "1000 Waala",
+      "year": 2025
+    },
+    "Q133567040": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133567040",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133567040",
+      "status": "single_language_evidence",
+      "title": "W/O Anirvesh",
+      "year": 2025
+    },
+    "Q133571443": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133571443",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133571443",
+      "status": "single_language_evidence",
+      "title": "Ajey: The Untold Story of a Yogi",
+      "year": 2025
+    },
+    "Q133573206": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133573206",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133573206",
+      "status": "single_language_evidence",
+      "title": "Pelli Kani Prasad",
+      "year": 2025
+    },
+    "Q133573212": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133573212",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133573212",
+      "status": "single_language_evidence",
+      "title": "Tuk Tuk",
+      "year": 2025
+    },
+    "Q133678463": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133678463",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133678463",
+      "status": "single_language_evidence",
+      "title": "Killbill Society",
+      "year": 2025
+    },
+    "Q133779825": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133779825",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133779825",
+      "status": "single_language_evidence",
+      "title": "Sarangapani Jathakam",
+      "year": 2025
+    },
+    "Q133808481": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133808481",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133808481",
+      "status": "single_language_evidence",
+      "title": "Kesari Chapter 2",
+      "year": 2025
+    },
+    "Q133809678": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133809678",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133809678",
+      "status": "single_language_evidence",
+      "title": "Maalik",
+      "year": 2025
+    },
+    "Q133809686": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133809686",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133809686",
+      "status": "single_language_evidence",
+      "title": "Anaganaga Australia Lo",
+      "year": 2025
+    },
+    "Q133815568": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133815568",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133815568",
+      "status": "single_language_evidence",
+      "title": "The Bengal Files",
+      "year": 2025
+    },
+    "Q133816459": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q133816459",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133816459",
+      "status": "missing_claim",
+      "title": "Phule",
+      "year": 2025
+    },
+    "Q133816460": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133816460",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133816460",
+      "status": "single_language_evidence",
+      "title": "Tourist Family",
+      "year": 2025
+    },
+    "Q133820357": {
+      "language": "Gujarati",
+      "language_qids": [
+        "Q5137"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133820357",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133820357",
+      "status": "single_language_evidence",
+      "title": "Mithada Maheman",
+      "year": 2025
+    },
+    "Q133833412": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133833412",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133833412",
+      "status": "single_language_evidence",
+      "title": "28 Degree Celsius",
+      "year": 2025
+    },
+    "Q133842835": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133842835",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133842835",
+      "status": "single_language_evidence",
+      "title": "Kaalamega Karigindhi",
+      "year": 2025
+    },
+    "Q133847559": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133847559",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133847559",
+      "status": "single_language_evidence",
+      "title": "Rimjhim: Woh Laut Aayi",
+      "year": 2025
+    },
+    "Q133885813": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133885813",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133885813",
+      "status": "single_language_evidence",
+      "title": "Maaman",
+      "year": 2025
+    },
+    "Q133890495": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133890495",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133890495",
+      "status": "single_language_evidence",
+      "title": "Ground Zero",
+      "year": 2025
+    },
+    "Q133895449": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133895449",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133895449",
+      "status": "single_language_evidence",
+      "title": "Arjun S/O Vyjayanthi",
+      "year": 2025
+    },
+    "Q133934123": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133934123",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133934123",
+      "status": "single_language_evidence",
+      "title": "Jagamerigina Satyam",
+      "year": 2025
+    },
+    "Q133934131": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q133934131",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q133934131",
+      "status": "single_language_evidence",
+      "title": "Dear Uma",
+      "year": 2025
+    },
+    "Q134173815": {
+      "language": "Punjabi",
+      "language_qids": [
+        "Q58635"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134173815",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134173815",
+      "status": "single_language_evidence",
+      "title": "Gangland: The City of Crime",
+      "year": 2025
+    },
+    "Q134238365": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134238365",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134238365",
+      "status": "single_language_evidence",
+      "title": "Aamar Boss",
+      "year": 2025
+    },
+    "Q134238384": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134238384",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134238384",
+      "status": "single_language_evidence",
+      "title": "Lovely",
+      "year": 2025
+    },
+    "Q134284628": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134284628",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134284628",
+      "status": "single_language_evidence",
+      "title": "Puratawn",
+      "year": 2025
+    },
+    "Q134285376": {
+      "language": "Punjabi",
+      "language_qids": [
+        "Q58635"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134285376",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134285376",
+      "status": "single_language_evidence",
+      "title": "Guru Nanak Jahaz",
+      "year": 2025
+    },
+    "Q134289397": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134289397",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134289397",
+      "status": "single_language_evidence",
+      "title": "ALCC",
+      "year": 2025
+    },
+    "Q134300317": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134300317",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134300317",
+      "status": "single_language_evidence",
+      "title": "Dhrubor Aschorjo Jibon",
+      "year": 2025
+    },
+    "Q134300901": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134300901",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134300901",
+      "status": "single_language_evidence",
+      "title": "Jodi Emon Hoto",
+      "year": 2025
+    },
+    "Q134301135": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134301135",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134301135",
+      "status": "single_language_evidence",
+      "title": "Grihostho",
+      "year": 2025
+    },
+    "Q134301330": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134301330",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134301330",
+      "status": "single_language_evidence",
+      "title": "Chhaad: The Terrace",
+      "year": 2025
+    },
+    "Q134301463": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134301463",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134301463",
+      "status": "single_language_evidence",
+      "title": "Girgiti",
+      "year": 2025
+    },
+    "Q134301585": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134301585",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134301585",
+      "status": "single_language_evidence",
+      "title": "Nana Hee",
+      "year": 2025
+    },
+    "Q134303872": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134303872",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134303872",
+      "status": "single_language_evidence",
+      "title": "Shreeman VS Shreemati",
+      "year": 2025
+    },
+    "Q134308970": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134308970",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134308970",
+      "status": "single_language_evidence",
+      "title": "Chaurya Paatham (2025 film)",
+      "year": 2025
+    },
+    "Q134378758": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134378758",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134378758",
+      "status": "single_language_evidence",
+      "title": "Param Sundari",
+      "year": 2025
+    },
+    "Q134389880": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134389880",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134389880",
+      "status": "single_language_evidence",
+      "title": "Single (film)",
+      "year": 2025
+    },
+    "Q134416710": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134416710",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134416710",
+      "status": "single_language_evidence",
+      "title": "Subham",
+      "year": 2025
+    },
+    "Q134426278": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q134426278",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134426278",
+      "status": "missing_claim",
+      "title": "Lopaliki Ra Chepta",
+      "year": 2025
+    },
+    "Q134434990": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134434990",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134434990",
+      "status": "single_language_evidence",
+      "title": "His Story of Itihaas",
+      "year": 2025
+    },
+    "Q134435700": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134435700",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134435700",
+      "status": "single_language_evidence",
+      "title": "Freedom",
+      "year": 2025
+    },
+    "Q134457175": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134457175",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134457175",
+      "status": "single_language_evidence",
+      "title": "Jora Kaiya Thattunga",
+      "year": 2025
+    },
+    "Q134469069": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134469069",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134469069",
+      "status": "single_language_evidence",
+      "title": "En Kadhale",
+      "year": 2025
+    },
+    "Q134471787": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134471787",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134471787",
+      "status": "single_language_evidence",
+      "title": "The Eken: Benaras e Bibhishika",
+      "year": 2025
+    },
+    "Q134475956": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134475956",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134475956",
+      "status": "single_language_evidence",
+      "title": "Vembu",
+      "year": 2025
+    },
+    "Q134475957": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134475957",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134475957",
+      "status": "single_language_evidence",
+      "title": "Anaganaga",
+      "year": 2025
+    },
+    "Q134479425": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134479425",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134479425",
+      "status": "single_language_evidence",
+      "title": "23 Iravai Moodu",
+      "year": 2025
+    },
+    "Q134480206": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134480206",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134480206",
+      "status": "single_language_evidence",
+      "title": "United Kingdom Of Kerala",
+      "year": 2025
+    },
+    "Q134486853": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134486853",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134486853",
+      "status": "single_language_evidence",
+      "title": "Homebound",
+      "year": 2025
+    },
+    "Q134510564": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134510564",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134510564",
+      "status": "single_language_evidence",
+      "title": "Hangama.Com",
+      "year": 2025
+    },
+    "Q134511477": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134511477",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134511477",
+      "status": "single_language_evidence",
+      "title": "Bramhaarjun",
+      "year": 2025
+    },
+    "Q134511478": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q134511478",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134511478",
+      "status": "missing_claim",
+      "title": "Aabhyanthara Kuttavaali",
+      "year": 2025
+    },
+    "Q134520410": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q134520410",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134520410",
+      "status": "missing_claim",
+      "title": "3BHK",
+      "year": 2025
+    },
+    "Q134520415": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q134520415",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134520415",
+      "status": "missing_claim",
+      "title": "Diés Iraé",
+      "year": 2025
+    },
+    "Q134540624": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134540624",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134540624",
+      "status": "single_language_evidence",
+      "title": "Vrusshabha",
+      "year": 2025
+    },
+    "Q134544799": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134544799",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134544799",
+      "status": "single_language_evidence",
+      "title": "Sonar Kellay Jawker Dhan",
+      "year": 2025
+    },
+    "Q134547832": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134547832",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134547832",
+      "status": "single_language_evidence",
+      "title": "Vaibhavam",
+      "year": 2025
+    },
+    "Q134560205": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134560205",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134560205",
+      "status": "single_language_evidence",
+      "title": "Onko Ki Kothin",
+      "year": 2025
+    },
+    "Q134562013": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134562013",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134562013",
+      "status": "single_language_evidence",
+      "title": "Azadi",
+      "year": 2025
+    },
+    "Q134564114": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134564114",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134564114",
+      "status": "single_language_evidence",
+      "title": "Chandrabindoo",
+      "year": 2025
+    },
+    "Q134571186": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134571186",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134571186",
+      "status": "single_language_evidence",
+      "title": "Kalamkaval",
+      "year": 2025
+    },
+    "Q134577882": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134577882",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134577882",
+      "status": "single_language_evidence",
+      "title": "Mr & Mrs Bachelor",
+      "year": 2025
+    },
+    "Q134583229": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134583229",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134583229",
+      "status": "single_language_evidence",
+      "title": "Rajaputhiran",
+      "year": 2025
+    },
+    "Q134597336": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134597336",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134597336",
+      "status": "single_language_evidence",
+      "title": "Madras Matinee",
+      "year": 2025
+    },
+    "Q134601073": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134601073",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134601073",
+      "status": "single_language_evidence",
+      "title": "Maa",
+      "year": 2025
+    },
+    "Q134606231": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q134606231",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134606231",
+      "status": "missing_claim",
+      "title": "Bhairavam",
+      "year": 2025
+    },
+    "Q134609600": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134609600",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134609600",
+      "status": "single_language_evidence",
+      "title": "Janaki v/s State of Kerala",
+      "year": 2025
+    },
+    "Q134609602": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134609602",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134609602",
+      "status": "single_language_evidence",
+      "title": "The Hunt",
+      "year": 2025
+    },
+    "Q134619482": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134619482",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134619482",
+      "status": "single_language_evidence",
+      "title": "Alakshye Ritwik",
+      "year": 2025
+    },
+    "Q134620440": {
+      "language": "Assamese",
+      "language_qids": [
+        "Q29401"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134620440",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134620440",
+      "status": "single_language_evidence",
+      "title": "Bhaimon Da",
+      "year": 2025
+    },
+    "Q134695784": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134695784",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134695784",
+      "status": "single_language_evidence",
+      "title": "Torsha Ekti Nodir Naam",
+      "year": 2025
+    },
+    "Q134699793": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134699793",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134699793",
+      "status": "single_language_evidence",
+      "title": "Ananta",
+      "year": 2025
+    },
+    "Q134701791": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134701791",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134701791",
+      "status": "single_language_evidence",
+      "title": "Protikhha",
+      "year": 2025
+    },
+    "Q134704468": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134704468",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134704468",
+      "status": "single_language_evidence",
+      "title": "Peranbum Perungobamum",
+      "year": 2025
+    },
+    "Q134704473": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134704473",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134704473",
+      "status": "single_language_evidence",
+      "title": "Sri Sri Sri Raja Vaaru",
+      "year": 2025
+    },
+    "Q134712003": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134712003",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134712003",
+      "status": "single_language_evidence",
+      "title": "Sunetra Sundaram",
+      "year": 2025
+    },
+    "Q134718147": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134718147",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134718147",
+      "status": "single_language_evidence",
+      "title": "DNA",
+      "year": 2025
+    },
+    "Q134719509": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134719509",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134719509",
+      "status": "single_language_evidence",
+      "title": "Bancharamer Mess Bari",
+      "year": 2025
+    },
+    "Q134722779": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134722779",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134722779",
+      "status": "single_language_evidence",
+      "title": "Batshorik",
+      "year": 2025
+    },
+    "Q134723053": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134723053",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134723053",
+      "status": "single_language_evidence",
+      "title": "Raas",
+      "year": 2025
+    },
+    "Q134723517": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134723517",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134723517",
+      "status": "single_language_evidence",
+      "title": "Chabiwala",
+      "year": 2025
+    },
+    "Q134723530": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q134723530",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134723530",
+      "status": "missing_claim",
+      "title": "Written & Directed by God",
+      "year": 2025
+    },
+    "Q134731125": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134731125",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134731125",
+      "status": "single_language_evidence",
+      "title": "Annapurna",
+      "year": 2025
+    },
+    "Q134739812": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134739812",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134739812",
+      "status": "single_language_evidence",
+      "title": "Check in Cheque Out",
+      "year": 2025
+    },
+    "Q134742280": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134742280",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134742280",
+      "status": "single_language_evidence",
+      "title": "Desingu Raja 2",
+      "year": 2025
+    },
+    "Q134742282": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134742282",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134742282",
+      "status": "single_language_evidence",
+      "title": "Paranthu Po",
+      "year": 2025
+    },
+    "Q134756421": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134756421",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134756421",
+      "status": "single_language_evidence",
+      "title": "Durgapur Junction",
+      "year": 2025
+    },
+    "Q134884229": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q134884229",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134884229",
+      "status": "missing_claim",
+      "title": "Love Marriage",
+      "year": 2025
+    },
+    "Q134907664": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134907664",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134907664",
+      "status": "single_language_evidence",
+      "title": "Bhalobasa.Com",
+      "year": 2025
+    },
+    "Q134909435": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134909435",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134909435",
+      "status": "single_language_evidence",
+      "title": "Grihapravesh",
+      "year": 2025
+    },
+    "Q134927984": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134927984",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134927984",
+      "status": "single_language_evidence",
+      "title": "Aapish",
+      "year": 2025
+    },
+    "Q134966565": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134966565",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134966565",
+      "status": "single_language_evidence",
+      "title": "Bou Buttu Bhuta",
+      "year": 2025
+    },
+    "Q134970050": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134970050",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134970050",
+      "status": "single_language_evidence",
+      "title": "Kole Bor",
+      "year": 2025
+    },
+    "Q134972722": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134972722",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134972722",
+      "status": "single_language_evidence",
+      "title": "Oho Enthan Baby",
+      "year": 2025
+    },
+    "Q134972728": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q134972728",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q134972728",
+      "status": "single_language_evidence",
+      "title": "Lokah Chapter 1: Chandra",
+      "year": 2025
+    },
+    "Q135005341": {
+      "language": "Punjabi",
+      "language_qids": [
+        "Q58635"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135005341",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135005341",
+      "status": "single_language_evidence",
+      "title": "Pind Peya Saara Jombieland Baneya",
+      "year": 2025
+    },
+    "Q135025215": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q135025215",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135025215",
+      "status": "missing_claim",
+      "title": "Sardaar Ji 3",
+      "year": 2025
+    },
+    "Q135092610": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135092610",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135092610",
+      "status": "single_language_evidence",
+      "title": "Sadanira",
+      "year": 2025
+    },
+    "Q135108166": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135108166",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135108166",
+      "status": "single_language_evidence",
+      "title": "'Bhuto' Purbo",
+      "year": 2025
+    },
+    "Q135113079": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135113079",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135113079",
+      "status": "single_language_evidence",
+      "title": "Thirukkural",
+      "year": 2025
+    },
+    "Q135114323": {
+      "language": "Assamese",
+      "language_qids": [
+        "Q29401"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135114323",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135114323",
+      "status": "single_language_evidence",
+      "title": "Rudra",
+      "year": 2025
+    },
+    "Q135189977": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135189977",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135189977",
+      "status": "single_language_evidence",
+      "title": "Madam Sengupta",
+      "year": 2025
+    },
+    "Q135193179": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q135193179",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135193179",
+      "status": "missing_claim",
+      "title": "Udaipur Files",
+      "year": 2025
+    },
+    "Q135196789": {
+      "language": "Marathi",
+      "language_qids": [
+        "Q1571"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135196789",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135196789",
+      "status": "single_language_evidence",
+      "title": "Dashavatar",
+      "year": 2025
+    },
+    "Q135220007": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135220007",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135220007",
+      "status": "single_language_evidence",
+      "title": "Maareesan",
+      "year": 2025
+    },
+    "Q135220009": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135220009",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135220009",
+      "status": "single_language_evidence",
+      "title": "Maayakoothu",
+      "year": 2025
+    },
+    "Q135230927": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135230927",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135230927",
+      "status": "single_language_evidence",
+      "title": "Dhurandhar",
+      "year": 2025
+    },
+    "Q135231217": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135231217",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135231217",
+      "status": "single_language_evidence",
+      "title": "Virgin Boys",
+      "year": 2025
+    },
+    "Q135257523": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135257523",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135257523",
+      "status": "single_language_evidence",
+      "title": "Ugraaa",
+      "year": 2025
+    },
+    "Q135285259": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135285259",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135285259",
+      "status": "single_language_evidence",
+      "title": "Thammudu",
+      "year": 2025
+    },
+    "Q135293772": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135293772",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135293772",
+      "status": "single_language_evidence",
+      "title": "8 Vasanthalu",
+      "year": 2025
+    },
+    "Q135319573": {
+      "language": null,
+      "language_qids": [
+        "Q1568",
+        "Q33673",
+        "Q5885",
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135319573",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135319573",
+      "status": "ambiguous_multilingual_or_conflicting",
+      "title": "Mahavatar Narsimha",
+      "year": 2025
+    },
+    "Q135321340": {
+      "language": "Kannada",
+      "language_qids": [
+        "Q33673"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135321340",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135321340",
+      "status": "single_language_evidence",
+      "title": "Hebbuli Cut",
+      "year": 2025
+    },
+    "Q135321343": {
+      "language": "Kannada",
+      "language_qids": [
+        "Q33673"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135321343",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135321343",
+      "status": "single_language_evidence",
+      "title": "Puppy",
+      "year": 2025
+    },
+    "Q135321361": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135321361",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135321361",
+      "status": "single_language_evidence",
+      "title": "Oh Bhama Ayyo Rama",
+      "year": 2025
+    },
+    "Q135321377": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q135321377",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135321377",
+      "status": "missing_claim",
+      "title": "Uppu Kappurambu",
+      "year": 2025
+    },
+    "Q135333699": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135333699",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135333699",
+      "status": "single_language_evidence",
+      "title": "K-Ramp",
+      "year": 2025
+    },
+    "Q135333704": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q135333704",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135333704",
+      "status": "missing_claim",
+      "title": "SYG - Sambarala Yeti Gattu",
+      "year": 2025
+    },
+    "Q135333759": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135333759",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135333759",
+      "status": "single_language_evidence",
+      "title": "Kothapallilo Okappudu",
+      "year": 2025
+    },
+    "Q135333846": {
+      "language": "Kannada",
+      "language_qids": [
+        "Q33673"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135333846",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135333846",
+      "status": "single_language_evidence",
+      "title": "Junior (2025 film)",
+      "year": 2025
+    },
+    "Q135336634": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135336634",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135336634",
+      "status": "single_language_evidence",
+      "title": "Vadakkan",
+      "year": 2025
+    },
+    "Q135336675": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135336675",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135336675",
+      "status": "single_language_evidence",
+      "title": "Andhra King Taluka",
+      "year": 2025
+    },
+    "Q135393743": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135393743",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135393743",
+      "status": "single_language_evidence",
+      "title": "Saiyaara",
+      "year": 2025
+    },
+    "Q135398930": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135398930",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135398930",
+      "status": "single_language_evidence",
+      "title": "Gevi",
+      "year": 2025
+    },
+    "Q135399423": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135399423",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135399423",
+      "status": "single_language_evidence",
+      "title": "The Academy of Fine Arts",
+      "year": 2025
+    },
+    "Q135404714": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135404714",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135404714",
+      "status": "single_language_evidence",
+      "title": "Trending",
+      "year": 2025
+    },
+    "Q135418374": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q135418374",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135418374",
+      "status": "missing_claim",
+      "title": "Raveendra Nee Evide?",
+      "year": 2025
+    },
+    "Q135434696": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135434696",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135434696",
+      "status": "single_language_evidence",
+      "title": "Blind Spot (2025 film)",
+      "year": 2025
+    },
+    "Q135438436": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q135438436",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135438436",
+      "status": "missing_claim",
+      "title": "The 100 (film)",
+      "year": 2025
+    },
+    "Q135443295": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135443295",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135443295",
+      "status": "single_language_evidence",
+      "title": "Sarzameen",
+      "year": 2025
+    },
+    "Q135454894": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135454894",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135454894",
+      "status": "single_language_evidence",
+      "title": "Raktabeej 2",
+      "year": 2025
+    },
+    "Q135456682": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135456682",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135456682",
+      "status": "single_language_evidence",
+      "title": "Goodbye Mountain",
+      "year": 2025
+    },
+    "Q135466587": {
+      "language": "English",
+      "language_qids": [
+        "Q1860"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135466587",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135466587",
+      "status": "single_language_evidence",
+      "title": "Mother",
+      "year": 2025
+    },
+    "Q135471498": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135471498",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135471498",
+      "status": "single_language_evidence",
+      "title": "Dear Maa",
+      "year": 2025
+    },
+    "Q135537955": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135537955",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135537955",
+      "status": "single_language_evidence",
+      "title": "Nishaanchi",
+      "year": 2025
+    },
+    "Q135618160": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135618160",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135618160",
+      "status": "single_language_evidence",
+      "title": "Mehfil",
+      "year": 2025
+    },
+    "Q135649597": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135649597",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135649597",
+      "status": "single_language_evidence",
+      "title": "Odum Kuthira Chaadum Kuthira",
+      "year": 2025
+    },
+    "Q135654173": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135654173",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135654173",
+      "status": "single_language_evidence",
+      "title": "Thank You Dear",
+      "year": 2025
+    },
+    "Q135672318": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135672318",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135672318",
+      "status": "single_language_evidence",
+      "title": "Sahasam",
+      "year": 2025
+    },
+    "Q135677741": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135677741",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135677741",
+      "status": "single_language_evidence",
+      "title": "Arabia Kadali",
+      "year": 2025
+    },
+    "Q135678446": {
+      "language": null,
+      "language_qids": [
+        "Q1568",
+        "Q1571",
+        "Q1860"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135678446",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135678446",
+      "status": "ambiguous_multilingual_or_conflicting",
+      "title": "Monkey in a Cage",
+      "year": 2025
+    },
+    "Q135685361": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135685361",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135685361",
+      "status": "single_language_evidence",
+      "title": "Bahurup",
+      "year": 2025
+    },
+    "Q135923508": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135923508",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135923508",
+      "status": "single_language_evidence",
+      "title": "Danter Lorai",
+      "year": 2025
+    },
+    "Q135927381": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135927381",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135927381",
+      "status": "single_language_evidence",
+      "title": "Ek Deewane Ki Deewaniyat",
+      "year": 2025
+    },
+    "Q135943665": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q135943665",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q135943665",
+      "status": "single_language_evidence",
+      "title": "Love in Vietnam",
+      "year": 2025
+    },
+    "Q136087093": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136087093",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136087093",
+      "status": "single_language_evidence",
+      "title": "Bela",
+      "year": 2025
+    },
+    "Q136094359": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136094359",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136094359",
+      "status": "single_language_evidence",
+      "title": "Misiri",
+      "year": 2025
+    },
+    "Q136140368": {
+      "language": "Gujarati",
+      "language_qids": [
+        "Q5137"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136140368",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136140368",
+      "status": "single_language_evidence",
+      "title": "Bachu Ni Benpani",
+      "year": 2025
+    },
+    "Q136146013": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136146013",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136146013",
+      "status": "single_language_evidence",
+      "title": "Saralakkha Holmes",
+      "year": 2025
+    },
+    "Q136190575": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136190575",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136190575",
+      "status": "single_language_evidence",
+      "title": "Jagala",
+      "year": 2025
+    },
+    "Q136206155": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136206155",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136206155",
+      "status": "single_language_evidence",
+      "title": "Jhor",
+      "year": 2025
+    },
+    "Q136226369": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q136226369",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136226369",
+      "status": "missing_claim",
+      "title": "veera vanakkam",
+      "year": 2025
+    },
+    "Q136300813": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136300813",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136300813",
+      "status": "single_language_evidence",
+      "title": "Kanya",
+      "year": 2025
+    },
+    "Q136339481": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136339481",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136339481",
+      "status": "single_language_evidence",
+      "title": "Indradhanu",
+      "year": 2025
+    },
+    "Q136352637": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136352637",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136352637",
+      "status": "single_language_evidence",
+      "title": "Kishkindhapuri",
+      "year": 2025
+    },
+    "Q136370164": {
+      "language": null,
+      "language_qids": [
+        "Q1568",
+        "Q1860",
+        "Q33823"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136370164",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136370164",
+      "status": "ambiguous_multilingual_or_conflicting",
+      "title": "Shape of Momo",
+      "year": 2025
+    },
+    "Q136375929": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136375929",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136375929",
+      "status": "single_language_evidence",
+      "title": "Kalaratri",
+      "year": 2025
+    },
+    "Q136385978": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136385978",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136385978",
+      "status": "single_language_evidence",
+      "title": "The Taj Story",
+      "year": 2025
+    },
+    "Q136408439": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q136408439",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136408439",
+      "status": "missing_claim",
+      "title": "Tere Ishk Mein",
+      "year": 2025
+    },
+    "Q136439217": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136439217",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136439217",
+      "status": "single_language_evidence",
+      "title": "Joto Kando Kolkatatei",
+      "year": 2025
+    },
+    "Q136496952": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136496952",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136496952",
+      "status": "single_language_evidence",
+      "title": "Charidham – A Journey Within",
+      "year": 2025
+    },
+    "Q136514093": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136514093",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136514093",
+      "status": "single_language_evidence",
+      "title": "Akhanda 2",
+      "year": 2025
+    },
+    "Q136523532": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136523532",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136523532",
+      "status": "single_language_evidence",
+      "title": "Kolahalam",
+      "year": 2025
+    },
+    "Q136547119": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136547119",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136547119",
+      "status": "single_language_evidence",
+      "title": "Eko",
+      "year": 2025
+    },
+    "Q136601804": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q136601804",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136601804",
+      "status": "missing_claim",
+      "title": "Haq",
+      "year": 2025
+    },
+    "Q136656938": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136656938",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136656938",
+      "status": "single_language_evidence",
+      "title": "Single Salma",
+      "year": 2025
+    },
+    "Q136681363": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136681363",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136681363",
+      "status": "single_language_evidence",
+      "title": "Baramulla",
+      "year": 2025
+    },
+    "Q136703755": {
+      "language": null,
+      "language_qids": [],
+      "officially_verified": false,
+      "property": null,
+      "qid": "Q136703755",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136703755",
+      "status": "missing_claim",
+      "title": "Mission Santa: Yoyo to the rescue",
+      "year": 2025
+    },
+    "Q136757696": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136757696",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136757696",
+      "status": "single_language_evidence",
+      "title": "Gopi Galla Goa Trip",
+      "year": 2025
+    },
+    "Q136765311": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136765311",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136765311",
+      "status": "single_language_evidence",
+      "title": "Ranna Baati",
+      "year": 2025
+    },
+    "Q136765333": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136765333",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136765333",
+      "status": "single_language_evidence",
+      "title": "The Girlfriend",
+      "year": 2025
+    },
+    "Q136800689": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136800689",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136800689",
+      "status": "single_language_evidence",
+      "title": "Sharthopor",
+      "year": 2025
+    },
+    "Q136908272": {
+      "language": "Malayalam",
+      "language_qids": [
+        "Q36236"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136908272",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136908272",
+      "status": "single_language_evidence",
+      "title": "Sarvam Maya",
+      "year": 2025
+    },
+    "Q136954723": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136954723",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136954723",
+      "status": "single_language_evidence",
+      "title": "Rappa Roy & Full Stop Dot Com",
+      "year": 2025
+    },
+    "Q136992584": {
+      "language": "Marathi",
+      "language_qids": [
+        "Q1571"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q136992584",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q136992584",
+      "status": "single_language_evidence",
+      "title": "Gondhal",
+      "year": 2025
+    },
+    "Q137205428": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q137205428",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q137205428",
+      "status": "single_language_evidence",
+      "title": "Lokkhikantopur Local",
+      "year": 2025
+    },
+    "Q137265415": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q137265415",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q137265415",
+      "status": "single_language_evidence",
+      "title": "Lawho Gouranger Naam Re",
+      "year": 2025
+    },
+    "Q137289318": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q137289318",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q137289318",
+      "status": "single_language_evidence",
+      "title": "Danob",
+      "year": 2025
+    },
+    "Q137362603": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q137362603",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q137362603",
+      "status": "single_language_evidence",
+      "title": "18 Heartbeats: Recording Live",
+      "year": 2025
+    },
+    "Q137368489": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q137368489",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q137368489",
+      "status": "single_language_evidence",
+      "title": "Mamta Child Factory",
+      "year": 2025
+    },
+    "Q137394697": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q137394697",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q137394697",
+      "status": "single_language_evidence",
+      "title": "Mowgli",
+      "year": 2025
+    },
+    "Q137435398": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q137435398",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q137435398",
+      "status": "single_language_evidence",
+      "title": "Haati Haati Paa Paa",
+      "year": 2025
+    },
+    "Q137459081": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q137459081",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q137459081",
+      "status": "single_language_evidence",
+      "title": "Projapoti 2",
+      "year": 2025
+    },
+    "Q137536476": {
+      "language": "Bengali",
+      "language_qids": [
+        "Q9610"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q137536476",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q137536476",
+      "status": "single_language_evidence",
+      "title": "Deri Hoye Geche",
+      "year": 2025
+    },
+    "Q137554596": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q137554596",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q137554596",
+      "status": "single_language_evidence",
+      "title": "Early Days",
+      "year": 2025
+    },
+    "Q137847685": {
+      "language": "Telugu",
+      "language_qids": [
+        "Q8097"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q137847685",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q137847685",
+      "status": "single_language_evidence",
+      "title": "Drive (2025 film)",
+      "year": 2025
+    },
+    "Q138268783": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P407",
+      "qid": "Q138268783",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q138268783",
+      "status": "single_language_evidence",
+      "title": "Rakshabandhan",
+      "year": 2025
+    },
+    "Q138546644": {
+      "language": "Hindi",
+      "language_qids": [
+        "Q1568"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q138546644",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q138546644",
+      "status": "single_language_evidence",
+      "title": "The Great Sultana",
+      "year": 2025
+    },
+    "Q139892117": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q139892117",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q139892117",
+      "status": "single_language_evidence",
+      "title": "Bandhu Nuhe Tu Badhu",
+      "year": 2025
+    },
+    "Q139892150": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q139892150",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q139892150",
+      "status": "single_language_evidence",
+      "title": "Ladhei",
+      "year": 2025
+    },
+    "Q139944821": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q139944821",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q139944821",
+      "status": "single_language_evidence",
+      "title": "Mahakal",
+      "year": 2025
+    },
+    "Q139964660": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q139964660",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q139964660",
+      "status": "single_language_evidence",
+      "title": "Motorcycle",
+      "year": 2025
+    },
+    "Q139976066": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q139976066",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q139976066",
+      "status": "single_language_evidence",
+      "title": "Ei Bodhe Prema",
+      "year": 2025
+    },
+    "Q139987983": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q139987983",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q139987983",
+      "status": "single_language_evidence",
+      "title": "Saha Hebe Mote Maa Mangala",
+      "year": 2025
+    },
+    "Q139997199": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q139997199",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q139997199",
+      "status": "single_language_evidence",
+      "title": "Miss Call Friend",
+      "year": 2025
+    },
+    "Q140015965": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140015965",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140015965",
+      "status": "single_language_evidence",
+      "title": "Nanda Masternka Chatasali",
+      "year": 2025
+    },
+    "Q140033476": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140033476",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140033476",
+      "status": "single_language_evidence",
+      "title": "Bohu 420",
+      "year": 2025
+    },
+    "Q140045707": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140045707",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140045707",
+      "status": "single_language_evidence",
+      "title": "Namaste Kamala Mago 3",
+      "year": 2025
+    },
+    "Q140061720": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140061720",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140061720",
+      "status": "single_language_evidence",
+      "title": "Darpana",
+      "year": 2025
+    },
+    "Q140073102": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140073102",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140073102",
+      "status": "single_language_evidence",
+      "title": "Ganga Jamuna Saraswati",
+      "year": 2025
+    },
+    "Q140078248": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140078248",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140078248",
+      "status": "single_language_evidence",
+      "title": "Sir",
+      "year": 2025
+    },
+    "Q140102315": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140102315",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140102315",
+      "status": "single_language_evidence",
+      "title": "Shambhu",
+      "year": 2025
+    },
+    "Q140129490": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140129490",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140129490",
+      "status": "single_language_evidence",
+      "title": "Vaastav",
+      "year": 2025
+    },
+    "Q140142445": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140142445",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140142445",
+      "status": "single_language_evidence",
+      "title": "Udhara Karibu Satapurusha",
+      "year": 2025
+    },
+    "Q140164275": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140164275",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140164275",
+      "status": "single_language_evidence",
+      "title": "Kabita Banita Lata 2",
+      "year": 2025
+    },
+    "Q140175609": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140175609",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140175609",
+      "status": "single_language_evidence",
+      "title": "Tora Mora Prema",
+      "year": 2025
+    },
+    "Q140186203": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140186203",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140186203",
+      "status": "single_language_evidence",
+      "title": "Challenge",
+      "year": 2025
+    },
+    "Q140266985": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140266985",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140266985",
+      "status": "single_language_evidence",
+      "title": "Maa Mora Sahabharasa",
+      "year": 2025
+    },
+    "Q140285161": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140285161",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140285161",
+      "status": "single_language_evidence",
+      "title": "Sata Bhainka Mangala",
+      "year": 2025
+    },
+    "Q140290560": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140290560",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140290560",
+      "status": "single_language_evidence",
+      "title": "Lahari",
+      "year": 2025
+    },
+    "Q140302325": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140302325",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140302325",
+      "status": "single_language_evidence",
+      "title": "Bighna Binasibe Binayaka",
+      "year": 2025
+    },
+    "Q140308631": {
+      "language": null,
+      "language_qids": [
+        "Q6433240"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140308631",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140308631",
+      "status": "unrecognized_language",
+      "title": "KEREK",
+      "year": 2025
+    },
+    "Q140315309": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140315309",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140315309",
+      "status": "single_language_evidence",
+      "title": "Delivery Boy 2",
+      "year": 2025
+    },
+    "Q140323541": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140323541",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140323541",
+      "status": "single_language_evidence",
+      "title": "Aliali Rajajema",
+      "year": 2025
+    },
+    "Q140341771": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140341771",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140341771",
+      "status": "single_language_evidence",
+      "title": "Mo Suna Bhaunii",
+      "year": 2025
+    },
+    "Q140356384": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140356384",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140356384",
+      "status": "single_language_evidence",
+      "title": "Parikaribe Bholashankar 4",
+      "year": 2025
+    },
+    "Q140363462": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140363462",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140363462",
+      "status": "single_language_evidence",
+      "title": "Omm Namah Shivaya Bhaktire Sakti",
+      "year": 2025
+    },
+    "Q140379971": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140379971",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140379971",
+      "status": "single_language_evidence",
+      "title": "Chhi Re Nani",
+      "year": 2025
+    },
+    "Q140406059": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140406059",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140406059",
+      "status": "single_language_evidence",
+      "title": "Wife Nuhan Se Wifi",
+      "year": 2025
+    },
+    "Q140421204": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140421204",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140421204",
+      "status": "single_language_evidence",
+      "title": "I Am Kalia",
+      "year": 2025
+    },
+    "Q140428675": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140428675",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140428675",
+      "status": "single_language_evidence",
+      "title": "Shri Jagannath Nka Nabakalebara",
+      "year": 2025
+    },
+    "Q140441081": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140441081",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140441081",
+      "status": "single_language_evidence",
+      "title": "Mo Bhai Jaga",
+      "year": 2025
+    },
+    "Q140449998": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140449998",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140449998",
+      "status": "single_language_evidence",
+      "title": "Parbatipurara Pabanasuta",
+      "year": 2025
+    },
+    "Q140458229": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140458229",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140458229",
+      "status": "single_language_evidence",
+      "title": "Jwain Puara Jibana Bima",
+      "year": 2025
+    },
+    "Q140466058": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140466058",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140466058",
+      "status": "single_language_evidence",
+      "title": "1st Love",
+      "year": 2025
+    },
+    "Q140472443": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140472443",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140472443",
+      "status": "single_language_evidence",
+      "title": "Bhabantara",
+      "year": 2025
+    },
+    "Q140483800": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140483800",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140483800",
+      "status": "single_language_evidence",
+      "title": "Satyabanara Swarga Jatra",
+      "year": 2025
+    },
+    "Q140508710": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140508710",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140508710",
+      "status": "single_language_evidence",
+      "title": "Tume Nathile",
+      "year": 2025
+    },
+    "Q140521926": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140521926",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140521926",
+      "status": "single_language_evidence",
+      "title": "Sautuni No. 1",
+      "year": 2025
+    },
+    "Q140535823": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140535823",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140535823",
+      "status": "single_language_evidence",
+      "title": "Sunanaki Bohu",
+      "year": 2025
+    },
+    "Q140558739": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140558739",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140558739",
+      "status": "single_language_evidence",
+      "title": "Racket",
+      "year": 2025
+    },
+    "Q140564251": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140564251",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140564251",
+      "status": "single_language_evidence",
+      "title": "1999 – Eka Sangupta Kahani",
+      "year": 2025
+    },
+    "Q140577405": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140577405",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140577405",
+      "status": "single_language_evidence",
+      "title": "Dustbin",
+      "year": 2025
+    },
+    "Q140594091": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140594091",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140594091",
+      "status": "single_language_evidence",
+      "title": "Pade Akasha",
+      "year": 2025
+    },
+    "Q140607693": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140607693",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140607693",
+      "status": "single_language_evidence",
+      "title": "Ajira Rebati",
+      "year": 2025
+    },
+    "Q140621282": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140621282",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140621282",
+      "status": "single_language_evidence",
+      "title": "Swayambara",
+      "year": 2025
+    },
+    "Q140634519": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140634519",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140634519",
+      "status": "single_language_evidence",
+      "title": "Ajab Ae Prema Kahani",
+      "year": 2025
+    },
+    "Q140644991": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140644991",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140644991",
+      "status": "single_language_evidence",
+      "title": "Simili",
+      "year": 2025
+    },
+    "Q140667863": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140667863",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140667863",
+      "status": "single_language_evidence",
+      "title": "Ghamaghot",
+      "year": 2025
+    },
+    "Q140676781": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140676781",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140676781",
+      "status": "single_language_evidence",
+      "title": "Sasu Nuhe Se Sunami Jhada",
+      "year": 2025
+    },
+    "Q140685547": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140685547",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140685547",
+      "status": "single_language_evidence",
+      "title": "Mo Mummy Papanka Bahaghara 2",
+      "year": 2025
+    },
+    "Q140695958": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140695958",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140695958",
+      "status": "single_language_evidence",
+      "title": "Valentine – The Memorable Day",
+      "year": 2025
+    },
+    "Q140702158": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140702158",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140702158",
+      "status": "single_language_evidence",
+      "title": "Baji Lagichi Mo Sankha Sindura",
+      "year": 2025
+    },
+    "Q140738931": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140738931",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140738931",
+      "status": "single_language_evidence",
+      "title": "Besahara",
+      "year": 2025
+    },
+    "Q140775025": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140775025",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140775025",
+      "status": "single_language_evidence",
+      "title": "Sanatani – Karma Hi Dharma",
+      "year": 2025
+    },
+    "Q140782878": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140782878",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140782878",
+      "status": "single_language_evidence",
+      "title": "Kabadi",
+      "year": 2025
+    },
+    "Q140798373": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140798373",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140798373",
+      "status": "single_language_evidence",
+      "title": "Angel",
+      "year": 2025
+    },
+    "Q140814410": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140814410",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140814410",
+      "status": "single_language_evidence",
+      "title": "Bhai – The Opening Part",
+      "year": 2025
+    },
+    "Q140836475": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140836475",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140836475",
+      "status": "single_language_evidence",
+      "title": "Adrushya",
+      "year": 2025
+    },
+    "Q140859627": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140859627",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140859627",
+      "status": "single_language_evidence",
+      "title": "Rangashoor",
+      "year": 2025
+    },
+    "Q140893020": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140893020",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140893020",
+      "status": "single_language_evidence",
+      "title": "Baida",
+      "year": 2025
+    },
+    "Q140918783": {
+      "language": "Odia",
+      "language_qids": [
+        "Q33810"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q140918783",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q140918783",
+      "status": "single_language_evidence",
+      "title": "Wife",
+      "year": 2025
+    },
+    "Q141107194": {
+      "language": "Kannada",
+      "language_qids": [
+        "Q33673"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q141107194",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q141107194",
+      "status": "single_language_evidence",
+      "title": "Bhagiratha 2025 movie",
+      "year": 2025
+    },
+    "Q141413707": {
+      "language": "Kashmiri",
+      "language_qids": [
+        "Q33552"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q141413707",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q141413707",
+      "status": "single_language_evidence",
+      "title": "Batt Koch",
+      "year": 2025
+    },
+    "Q85847437": {
+      "language": "Tamil",
+      "language_qids": [
+        "Q5885"
+      ],
+      "officially_verified": false,
+      "property": "P364",
+      "qid": "Q85847437",
+      "source_only": true,
+      "source_url": "https://www.wikidata.org/wiki/Q85847437",
+      "status": "single_language_evidence",
+      "title": "Sumo",
+      "year": 2025
+    }
+  },
+  "schema": "india-film-language-evidence-v1"
+}
