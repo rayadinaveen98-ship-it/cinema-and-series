@@ -28,3 +28,5 @@
 @media(max-width:700px){.catalogue-pagination{flex-direction:column;gap:12px;padding:24px 0 48px}.catalogue-pagination button{width:min(100%,320px)}}
 
 .catalogue-error-message{max-width:420px;margin:0;color:#f4b6ae;font-size:12px;line-height:1.5;text-align:center}
+
+.catalogue-stale-warning{padding:14px 0;color:#c9a976;font-size:12px;line-height:1.6}
