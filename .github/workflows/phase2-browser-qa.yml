@@ -1,0 +1,39 @@
+name: Phase 2 browser QA (mocked APIs)
+
+on:
+  push:
+    branches:
+      - "feature/phase2-pr-b-accessibility-20261018"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install UI dependencies and Playwright
+        run: |
+          npm install --no-audit --no-fund
+          npm install --no-save --no-audit --no-fund @playwright/test@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Compile web application
+        run: npm run build
+      - name: Test actual Chromium interactions against mocked catalogue API
+        run: npx playwright test
+      - name: Keep screenshots, traces and HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cinema-series-phase2-browser-qa
+          path: |
+            artifacts/browser-results/
+            artifacts/browser-report/
+          retention-days: 14
+          if-no-files-found: ignore
