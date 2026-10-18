@@ -1,5 +1,7 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, NavLink, Route, Routes } from "react-router";
+import { appendUniquePage, cataloguePageSearch, readCataloguePage } from "./catalogue-pages";
+import { nextDialogTabTarget } from "./dialog-tab-navigation";
 
 type Movie = {
   id: string;
@@ -89,11 +91,30 @@ function addDaysKey(value: string, days: number) {
 }
 
 function useCounts() {
-  const [counts, setCounts] = useState<CatalogueCounts>({ movies: 0, series: 0, total: 0 });
+  const [counts, setCounts] = useState<CatalogueCounts | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [retryIndex, setRetryIndex] = useState(0);
   useEffect(() => {
-    fetch("/api/catalogue-stats").then((response) => response.ok ? response.json() as Promise<CatalogueCounts> : Promise.reject()).then(setCounts).catch(() => undefined);
-  }, []);
-  return counts;
+    const controller = new AbortController();
+    setLoading(true);
+    setError(null);
+    fetch("/api/catalogue-stats", { signal: controller.signal })
+      .then((result) => readCataloguePage<CatalogueCounts>(result))
+      .then((next) => {
+        if (controller.signal.aborted) return;
+        if (![next.movies, next.series, next.total].every((value) => Number.isFinite(value) && value >= 0)) {
+          throw new Error("Catalogue counts are unavailable. Please retry.");
+        }
+        setCounts(next);
+      })
+      .catch((cause: unknown) => {
+        if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Catalogue counts are unavailable.");
+      })
+      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    return () => controller.abort();
+  }, [retryIndex]);
+  return { counts, loading, error, retry: () => setRetryIndex((index) => index + 1) };
 }
 
 // Avoid a new expensive D1 catalogue query for every keystroke in search.
@@ -106,57 +127,15 @@ function useDebouncedValue(value: string, delayMs = 400) {
   return settled;
 }
 
+// Compact rails share the abort-safe, error-aware catalogue reader.
 function useMovies(query: Record<string, string>, limit = 60) {
-  const [payload, setPayload] = useState<MovieResponse>({ movies: [] });
-  const [loading, setLoading] = useState(true);
-  const queryKey = JSON.stringify(query);
-  useEffect(() => {
-    const controller = new AbortController();
-    const params = new URLSearchParams({ limit: String(limit), offset: "0", artwork: "1", ...query });
-    setLoading(true);
-    fetch(`/api/movies?${params}`, { signal: controller.signal })
-      .then((response) => { if (!response.ok) throw new Error("movies unavailable"); return response.json() as Promise<MovieResponse>; })
-      .then(setPayload).catch(() => undefined).finally(() => setLoading(false));
-    return () => controller.abort();
-  }, [queryKey, limit]);
-  return { payload, loading };
+  return usePagedMovies(query, limit);
 }
-
 function useSeries(query: Record<string, string>, limit = 60) {
-  const [payload, setPayload] = useState<SeriesResponse>({ series: [] });
-  const [loading, setLoading] = useState(true);
-  const queryKey = JSON.stringify(query);
-  useEffect(() => {
-    const controller = new AbortController();
-    const params = new URLSearchParams({ limit: String(limit), offset: "0", artwork: "1", ...query });
-    setLoading(true);
-    fetch(`/api/series?${params}`, { signal: controller.signal })
-      .then((response) => { if (!response.ok) throw new Error("series unavailable"); return response.json() as Promise<SeriesResponse>; })
-      .then(setPayload).catch(() => undefined).finally(() => setLoading(false));
-    return () => controller.abort();
-  }, [queryKey, limit]);
-  return { payload, loading };
+  return usePagedSeries(query, limit);
 }
-
 
 type PageRequestState = { key: string; page: number; loading: boolean; error: boolean; message?: string };
-
-async function readCataloguePage<T>(result: Response): Promise<T> {
-  if (!result.ok) {
-    if (result.status === 503) {
-      const details = await result.json().catch(() => null) as { error?: string } | null;
-      if (details?.error === "catalogue_daily_read_limit") {
-        throw new Error("The catalogue has reached its daily database limit. Please try again after 5:30 AM IST.");
-      }
-    }
-    throw new Error("Catalogue could not load. Check your connection and try again.");
-  }
-  const data = await result.json() as T;
-  if (result.headers.get("X-Catalogue-Cache") === "stale-on-quota" && data && typeof data === "object") {
-    return { ...data, staleDuringQuota: true } as T;
-  }
-  return data;
-}
 
 // A browse page retains previously loaded cards, but never mixes items from
 // two different search/filter queries. All requests remain bounded to 60 rows.
@@ -170,7 +149,7 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit), artwork: "1", ...query });
+    const params = cataloguePageSearch(query, limit, page);
     setRequest({ key: queryKey, page, loading: true, error: false });
     fetch(`/api/movies?${params}`, { signal: controller.signal })
       .then((result) => readCataloguePage<MovieResponse>(result))
@@ -180,7 +159,7 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
           key: queryKey,
           payload: page === 0 ? next : {
             ...next,
-            movies: [...(previous.key === queryKey ? previous.payload.movies : []), ...next.movies],
+            movies: appendUniquePage(previous.key === queryKey ? previous.payload.movies : [], next.movies, page),
             staleDuringQuota: Boolean(next.staleDuringQuota || (previous.key === queryKey && previous.payload.staleDuringQuota)),
           },
         }));
@@ -215,7 +194,7 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
 
   useEffect(() => {
     const controller = new AbortController();
-    const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit), artwork: "1", ...query });
+    const params = cataloguePageSearch(query, limit, page);
     setRequest({ key: queryKey, page, loading: true, error: false });
     fetch(`/api/series?${params}`, { signal: controller.signal })
       .then((result) => readCataloguePage<SeriesResponse>(result))
@@ -225,7 +204,7 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
           key: queryKey,
           payload: page === 0 ? next : {
             ...next,
-            series: [...(previous.key === queryKey ? previous.payload.series : []), ...next.series],
+            series: appendUniquePage(previous.key === queryKey ? previous.payload.series : [], next.series, page),
             staleDuringQuota: Boolean(next.staleDuringQuota || (previous.key === queryKey && previous.payload.staleDuringQuota)),
           },
         }));
@@ -250,15 +229,62 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
   return { payload, loading, error, errorMessage, loadMore, retry: () => setRetryIndex((index) => index + 1) };
 }
 
-function useModalLock(active: boolean, onClose: () => void) {
+/** Shared focus management for accessible movie and series detail dialogs. */
+function useModalLock(onClose: () => void) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+  // Stable keyboard listeners must call the most recent onClose without
+  // restoring focus every time the parent passes a new callback identity.
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
-    if (!active) return;
-    const previous = document.body.style.overflow;
+    const dialog = dialogRef.current;
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const previousOverflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") onClose(); };
-    window.addEventListener("keydown", onKey);
-    return () => { document.body.style.overflow = previous; window.removeEventListener("keydown", onKey); };
-  }, [active, onClose]);
+    const initialFocus = dialog?.querySelector<HTMLElement>("[data-modal-initial-focus]");
+    (initialFocus ?? dialog)?.focus();
+
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== "Tab" || !dialog) return;
+      const focusable = Array.from(dialog.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )).filter((element) => element.getClientRects().length > 0 && element.getAttribute("aria-hidden") !== "true");
+      if (!focusable.length) {
+        event.preventDefault();
+        dialog.focus();
+        return;
+      }
+      const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+      const targetIndex = nextDialogTabTarget(currentIndex, focusable.length, event.shiftKey);
+      if (targetIndex === null) return;
+      event.preventDefault();
+      if (targetIndex === -1) dialog.focus();
+      else focusable[targetIndex].focus();
+    };
+    const onFocus = (event: FocusEvent) => {
+      if (dialog && event.target instanceof Node && !dialog.contains(event.target)) {
+        (initialFocus ?? dialog).focus();
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    document.addEventListener("focusin", onFocus);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", onKey);
+      document.removeEventListener("focusin", onFocus);
+      // The activating card stays mounted behind the sheet.
+      if (previousFocus?.isConnected) previousFocus.focus();
+    };
+  }, []);
+
+  return dialogRef;
 }
 
 function TopNav() {
@@ -326,15 +352,20 @@ function Row({ title, action, children }: { title: string; action?: ReactNode; c
   return <section className="content-row"><div className="row-title"><h2>{title}</h2>{action}</div><div className="horizontal-rail">{children}</div></section>;
 }
 
+function RailError({ message, retry }: { message?: string; retry: () => void }) {
+  return <div className="rail-error" role="alert"><p>{message || "Couldn't load this section. Please retry."}</p><button type="button" onClick={retry}>Retry</button></div>;
+}
+
 function MovieDetail({ movie, onClose }: { movie: Movie; onClose: () => void }) {
-  useModalLock(true, onClose);
+  const dialogRef = useModalLock(onClose);
+  const titleId = useId();
   return (
     <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <article className={`detail-sheet tone-${toneIndex(movie.title)}`} role="dialog" aria-modal="true">
-        <button className="modal-close" onClick={onClose}>×</button>
+      <article ref={dialogRef} tabIndex={-1} className={`detail-sheet tone-${toneIndex(movie.title)}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <button type="button" className="modal-close" data-modal-initial-focus aria-label="Close movie details" onClick={onClose}>×</button>
         <div className="detail-hero">
           <PosterArtwork key={movie.backdropUrl || movie.posterUrl || movie.id} url={movie.backdropUrl || movie.posterUrl} title={movie.title} hero />
-          <div><p>MOVIE</p><h2>{movie.title}</h2><small>{formatDate(movie.releaseDate)} · {movie.language} · {countryLabel(movie.countryCode)}</small></div>
+          <div><p>MOVIE</p><h2 id={titleId}>{movie.title}</h2><small>{formatDate(movie.releaseDate)} · {movie.language} · {countryLabel(movie.countryCode)}</small></div>
         </div>
         <div className="detail-content">
           <p>{movie.datePrecision === "year" || !movie.releaseDate ? `Release year sourced from ${movie.releaseSourceName || "the catalogue"}. The exact release date is not independently verified.` : movie.verificationStatus === "verified" ? `Release information is verified against ${movie.releaseSourceName || "a first-party source"}.` : "This title is in the catalogue while stronger first-party release evidence is still being collected."}</p>
@@ -347,14 +378,15 @@ function MovieDetail({ movie, onClose }: { movie: Movie; onClose: () => void }) 
 }
 
 function SeriesDetail({ item, onClose }: { item: SeriesTitle; onClose: () => void }) {
-  useModalLock(true, onClose);
+  const dialogRef = useModalLock(onClose);
+  const titleId = useId();
   return (
     <div className="modal-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}>
-      <article className={`detail-sheet tone-${toneIndex(item.title)}`} role="dialog" aria-modal="true">
-        <button className="modal-close" onClick={onClose}>×</button>
+      <article ref={dialogRef} tabIndex={-1} className={`detail-sheet tone-${toneIndex(item.title)}`} role="dialog" aria-modal="true" aria-labelledby={titleId}>
+        <button type="button" className="modal-close" data-modal-initial-focus aria-label="Close series details" onClick={onClose}>×</button>
         <div className="detail-hero">
           <PosterArtwork key={item.backdropUrl || item.posterUrl || item.id} url={item.backdropUrl || item.posterUrl} title={item.title} hero />
-          <div><p>{kindLabel(item.seriesKind).toUpperCase()}</p><h2>{item.title}</h2><small>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"} · {countryLabel(item.countryCode)}</small></div>
+          <div><p>{kindLabel(item.seriesKind).toUpperCase()}</p><h2 id={titleId}>{item.title}</h2><small>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"} · {countryLabel(item.countryCode)}</small></div>
         </div>
         <div className="detail-content">
           <p>Series information stays inside Cinema & Series. External references are sources, not the browsing experience.</p>
@@ -367,7 +399,7 @@ function SeriesDetail({ item, onClose }: { item: SeriesTitle; onClose: () => voi
 }
 
 function HomePage() {
-  const counts = useCounts();
+  const { counts, loading: countsLoading, error: countsError, retry: retryCounts } = useCounts();
   const upcoming = useMovies({ scope: "upcoming" }, 40);
   const series = useSeries({}, 18);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
@@ -380,13 +412,36 @@ function HomePage() {
       <section className={`home-hero tone-${toneIndex(hero?.title || "Cinema")}`}>
         {hero?.backdropUrl || hero?.posterUrl ? <img src={hero.backdropUrl || hero.posterUrl} alt="" referrerPolicy="no-referrer" /> : null}
         <div className="home-hero-shade" />
-        <div className="home-hero-copy"><p>FEATURED RELEASE</p><h1>{hero?.title || "Cinema & Series"}</h1><span>{hero ? `${formatDate(hero.releaseDate)} · ${hero.language}` : "Movies and series, one cinematic home."}</span><div className="hero-actions">{hero ? <button onClick={() => setSelectedMovie(hero)}>ⓘ More info</button> : null}<Link to="/movies">Browse movies</Link></div></div>
+        <div className="home-hero-copy"><p>FEATURED RELEASE</p><h1>{hero?.title || "Cinema & Series"}</h1><span>{hero ? `${formatDate(hero.releaseDate)} · ${hero.language}` : upcoming.loading ? "Checking for new releases…" : upcoming.error ? "Release information is temporarily unavailable." : "Movies and series, one cinematic home."}</span><div className="hero-actions">{hero ? <button onClick={() => setSelectedMovie(hero)}>ⓘ More info</button> : null}<Link to="/movies">Browse movies</Link></div></div>
       </section>
       <div className="home-content">
-        <Row title="Verified releases" action={<Link to="/upcoming">See all</Link>}>{verified.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelectedMovie} />)}</Row>
-        <Row title="Coming soon" action={<Link to="/upcoming">See all</Link>}>{coming.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelectedMovie} />)}</Row>
-        <Row title="Series to discover" action={<Link to="/series">Explore series</Link>}>{series.payload.series.slice(0, 14).map((item) => <SeriesCard key={item.id} item={item} onOpen={setSelectedSeries} />)}</Row>
-        <section className="home-library-callout"><div><p>EXPLORE THE LIBRARY</p><h2>{counts.total.toLocaleString("en-IN")} titles and growing</h2><span>{counts.movies.toLocaleString("en-IN")} movies · {counts.series.toLocaleString("en-IN")} series</span></div><div><Link to="/movies">Movies</Link><Link to="/series">Series</Link></div></section>
+        <Row title="Verified releases" action={<Link to="/upcoming">See all</Link>}>
+          {upcoming.loading && !verified.length ? <p className="rail-status" role="status">Loading verified releases…</p> : null}
+          {upcoming.error ? <RailError message={upcoming.errorMessage} retry={upcoming.retry} /> : null}
+          {!upcoming.loading && !upcoming.error && !verified.length ? <p className="rail-status">No verified upcoming releases found.</p> : null}
+          {verified.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelectedMovie} />)}
+        </Row>
+        <Row title="Coming soon" action={<Link to="/upcoming">See all</Link>}>
+          {upcoming.loading && !coming.length ? <p className="rail-status" role="status">Loading upcoming movies…</p> : null}
+          {upcoming.error ? <RailError message={upcoming.errorMessage} retry={upcoming.retry} /> : null}
+          {!upcoming.loading && !upcoming.error && !coming.length ? <p className="rail-status">No upcoming movies found.</p> : null}
+          {coming.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelectedMovie} />)}
+        </Row>
+        <Row title="Series to discover" action={<Link to="/series">Explore series</Link>}>
+          {series.loading && !series.payload.series.length ? <p className="rail-status" role="status">Loading series…</p> : null}
+          {series.error ? <RailError message={series.errorMessage} retry={series.retry} /> : null}
+          {!series.loading && !series.error && !series.payload.series.length ? <p className="rail-status">No series found.</p> : null}
+          {series.payload.series.slice(0, 14).map((item) => <SeriesCard key={item.id} item={item} onOpen={setSelectedSeries} />)}
+        </Row>
+        <section className="home-library-callout">
+          <div>
+            <p>EXPLORE THE LIBRARY</p>
+            <h2>{counts ? `${counts.total.toLocaleString("en-IN")} titles and growing` : "Explore the catalogue"}</h2>
+            <span>{counts ? `${counts.movies.toLocaleString("en-IN")} movies · ${counts.series.toLocaleString("en-IN")} series` : countsLoading ? "Loading catalogue totals…" : "Catalogue totals unavailable"}</span>
+            {countsError ? <RailError message={countsError} retry={retryCounts} /> : null}
+          </div>
+          <div><Link to="/movies">Movies</Link><Link to="/series">Series</Link></div>
+        </section>
       </div>
       {selectedMovie ? <MovieDetail movie={selectedMovie} onClose={() => setSelectedMovie(null)} /> : null}
       {selectedSeries ? <SeriesDetail item={selectedSeries} onClose={() => setSelectedSeries(null)} /> : null}
@@ -394,12 +449,14 @@ function HomePage() {
   );
 }
 
-function FilterButton({ open, count, onClick }: { open: boolean; count: number; onClick: () => void }) {
-  return <button className={`filter-button ${open ? "active" : ""}`} onClick={onClick}>☰ Filters{count ? <b>{count}</b> : null}</button>;
+function FilterButton({ open, count, controlsId, onClick }: { open: boolean; count: number; controlsId: string; onClick: () => void }) {
+  return <button type="button" className={`filter-button ${open ? "active" : ""}`} aria-expanded={open} aria-controls={controlsId} onClick={onClick}>☰ Filters{count ? <b aria-label={`${count} active filters`}>{count}</b> : null}</button>;
 }
 
 function MoviesPage() {
-  const counts = useCounts();
+  const { counts, loading: countsLoading, error: countsError, retry: retryCounts } = useCounts();
+  const searchId = useId();
+  const filterPanelId = useId();
   const [filters, setFilters] = useState<MovieFilters>({ q: "", year: "all", language: "all", country: "all" });
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState<Movie | null>(null);
@@ -410,11 +467,12 @@ function MoviesPage() {
   const facets = all.payload.facets;
   return (
     <main className="page library-page">
-      <section className="library-hero movie-library-hero"><div><p>MOVIES</p><h1>Movies</h1><span>Discover cinema by language, country and year.</span></div><b>{counts.movies.toLocaleString("en-IN")} titles</b></section>
-      <Row title="New & upcoming" action={<Link to="/upcoming">View upcoming</Link>}>{coming.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</Row>
+      <section className="library-hero movie-library-hero"><div><p>MOVIES</p><h1>Movies</h1><span>Discover cinema by language, country and year.</span></div><b>{counts ? `${counts.movies.toLocaleString("en-IN")} titles` : countsLoading ? "Loading totals…" : "Totals unavailable"}</b></section>
+      <Row title="New & upcoming" action={<Link to="/upcoming">View upcoming</Link>}>{coming.loading && !coming.payload.movies.length ? <p className="rail-status" role="status">Loading upcoming releases…</p> : null}{coming.error ? <RailError message={coming.errorMessage} retry={coming.retry} /> : null}{!coming.loading && !coming.error && !coming.payload.movies.length ? <p className="rail-status">No upcoming releases found.</p> : null}{coming.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</Row>
       <section className="catalogue-section">
-        <div className="catalogue-heading"><div><h2>Explore movies</h2><span>{all.payload.pagination?.total?.toLocaleString("en-IN") || counts.movies.toLocaleString("en-IN")} titles</span></div><div className="catalogue-tools"><input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Search movies" /><FilterButton open={filterOpen} count={activeFilterCount({ year: filters.year, language: filters.language, country: filters.country })} onClick={() => setFilterOpen((value) => !value)} /></div></div>
-        {filterOpen ? <div className="filter-panel"><label>Year<select value={filters.year} onChange={(event) => setFilters((current) => ({ ...current, year: event.target.value }))}><option value="all">All years</option>{facets?.years.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Language<select value={filters.language} onChange={(event) => setFilters((current) => ({ ...current, language: event.target.value }))}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Country<select value={filters.country} onChange={(event) => setFilters((current) => ({ ...current, country: event.target.value }))}><option value="all">All countries</option>{facets?.countries.map((item) => <option key={item.value} value={item.value}>{countryLabel(item.value)}</option>)}</select></label><button onClick={() => setFilters({ q: "", year: "all", language: "all", country: "all" })}>Reset</button></div> : null}
+        {countsError ? <RailError message={countsError} retry={retryCounts} /> : null}
+        <div className="catalogue-heading"><div><h2>Explore movies</h2><span>{(all.payload.pagination?.total ?? counts?.movies)?.toLocaleString("en-IN") ?? "—"} titles</span></div><div className="catalogue-tools"><label className="sr-only" htmlFor={searchId}>Search movies</label><input id={searchId} type="search" value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Search movies" /><FilterButton controlsId={filterPanelId} open={filterOpen} count={activeFilterCount({ year: filters.year, language: filters.language, country: filters.country })} onClick={() => setFilterOpen((value) => !value)} /></div></div>
+        <div className="filter-panel" id={filterPanelId} hidden={!filterOpen}><label>Year<select value={filters.year} onChange={(event) => setFilters((current) => ({ ...current, year: event.target.value }))}><option value="all">All years</option>{facets?.years.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Language<select value={filters.language} onChange={(event) => setFilters((current) => ({ ...current, language: event.target.value }))}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Country<select value={filters.country} onChange={(event) => setFilters((current) => ({ ...current, country: event.target.value }))}><option value="all">All countries</option>{facets?.countries.map((item) => <option key={item.value} value={item.value}>{countryLabel(item.value)}</option>)}</select></label><button onClick={() => setFilters({ q: "", year: "all", language: "all", country: "all" })}>Reset</button></div>
         {all.loading && !all.payload.movies.length ? <CardSkeletons /> : <div className="media-grid">{all.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</div>}
         {!all.loading && !all.error && !all.payload.movies.length ? <p className="catalogue-empty">No movies match these filters. Try another title, year, or language.</p> : null}
         {all.payload.staleDuringQuota ? <p className="catalogue-stale-warning" role="status">Showing a saved catalogue page while the database resets. Recently added or edited titles may appear later.</p> : null}
@@ -431,7 +489,9 @@ function MoviesPage() {
 }
 
 function SeriesPage() {
-  const counts = useCounts();
+  const { counts, loading: countsLoading, error: countsError, retry: retryCounts } = useCounts();
+  const searchId = useId();
+  const filterPanelId = useId();
   const [filters, setFilters] = useState<SeriesFilters>({ q: "", year: "all", language: "all", country: "all", kind: "all" });
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState<SeriesTitle | null>(null);
@@ -441,11 +501,12 @@ function SeriesPage() {
   const facets = all.payload.facets;
   return (
     <main className="page library-page series-library-page">
-      <section className="library-hero series-library-hero"><div><p>SERIES</p><h1>Series</h1><span>Shows from India and around the world, in their own dedicated library.</span></div><b>{counts.series.toLocaleString("en-IN")} titles</b></section>
+      <section className="library-hero series-library-hero"><div><p>SERIES</p><h1>Series</h1><span>Shows from India and around the world, in their own dedicated library.</span></div><b>{counts ? `${counts.series.toLocaleString("en-IN")} titles` : countsLoading ? "Loading totals…" : "Totals unavailable"}</b></section>
       <section className="spotlight-strip"><div><small>DISCOVER SERIES</small><h2>Find your next show</h2><p>Browse by language, country, debut year or format. Genre browsing will appear when genre metadata is available in the catalogue.</p></div></section>
       <section className="catalogue-section series-catalogue-section">
-        <div className="catalogue-heading"><div><h2>Explore series</h2><span>{all.payload.pagination?.total?.toLocaleString("en-IN") || counts.series.toLocaleString("en-IN")} titles</span></div><div className="catalogue-tools"><input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Search series" /><FilterButton open={filterOpen} count={activeFilterCount({ year: filters.year, language: filters.language, country: filters.country, kind: filters.kind })} onClick={() => setFilterOpen((value) => !value)} /></div></div>
-        {filterOpen ? <div className="filter-panel four"><label>Language<select value={filters.language} onChange={(event) => setFilters((current) => ({ ...current, language: event.target.value }))}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Country<select value={filters.country} onChange={(event) => setFilters((current) => ({ ...current, country: event.target.value }))}><option value="all">All countries</option>{facets?.countries.map((item) => <option key={item.value} value={item.value}>{countryLabel(item.value)}</option>)}</select></label><label>Year<select value={filters.year} onChange={(event) => setFilters((current) => ({ ...current, year: event.target.value }))}><option value="all">All years</option>{facets?.years.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Format<select value={filters.kind} onChange={(event) => setFilters((current) => ({ ...current, kind: event.target.value }))}><option value="all">All formats</option>{facets?.kinds.filter((item) => item.value !== "unknown").map((item) => <option key={item.value} value={item.value}>{kindLabel(item.value as SeriesKind)}</option>)}</select></label><button onClick={() => setFilters({ q: "", year: "all", language: "all", country: "all", kind: "all" })}>Reset</button></div> : null}
+        {countsError ? <RailError message={countsError} retry={retryCounts} /> : null}
+        <div className="catalogue-heading"><div><h2>Explore series</h2><span>{(all.payload.pagination?.total ?? counts?.series)?.toLocaleString("en-IN") ?? "—"} titles</span></div><div className="catalogue-tools"><label className="sr-only" htmlFor={searchId}>Search series</label><input id={searchId} type="search" value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Search series" /><FilterButton controlsId={filterPanelId} open={filterOpen} count={activeFilterCount({ year: filters.year, language: filters.language, country: filters.country, kind: filters.kind })} onClick={() => setFilterOpen((value) => !value)} /></div></div>
+        <div className="filter-panel four" id={filterPanelId} hidden={!filterOpen}><label>Language<select value={filters.language} onChange={(event) => setFilters((current) => ({ ...current, language: event.target.value }))}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Country<select value={filters.country} onChange={(event) => setFilters((current) => ({ ...current, country: event.target.value }))}><option value="all">All countries</option>{facets?.countries.map((item) => <option key={item.value} value={item.value}>{countryLabel(item.value)}</option>)}</select></label><label>Year<select value={filters.year} onChange={(event) => setFilters((current) => ({ ...current, year: event.target.value }))}><option value="all">All years</option>{facets?.years.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Format<select value={filters.kind} onChange={(event) => setFilters((current) => ({ ...current, kind: event.target.value }))}><option value="all">All formats</option>{facets?.kinds.filter((item) => item.value !== "unknown").map((item) => <option key={item.value} value={item.value}>{kindLabel(item.value as SeriesKind)}</option>)}</select></label><button onClick={() => setFilters({ q: "", year: "all", language: "all", country: "all", kind: "all" })}>Reset</button></div>
         {all.loading && !all.payload.series.length ? <CardSkeletons /> : <div className="media-grid">{all.payload.series.map((item) => <SeriesCard key={item.id} item={item} onOpen={setSelected} />)}</div>}
         {!all.loading && !all.error && !all.payload.series.length ? <p className="catalogue-empty">No series match these filters. Try another title, year, or language.</p> : null}
         {all.payload.staleDuringQuota ? <p className="catalogue-stale-warning" role="status">Showing a saved catalogue page while the database resets. Recently added or edited titles may appear later.</p> : null}
@@ -467,13 +528,34 @@ function UpcomingPage() {
   const [selected, setSelected] = useState<Movie | null>(null);
   const today = indiaDateKey();
   const query = useMemo(() => ({ scope: "upcoming", from: today, ...(window === "7d" ? { to: addDaysKey(today, 6) } : window === "30d" ? { to: addDaysKey(today, 29) } : {}), ...(language !== "all" ? { language } : {}) }), [window, language, today]);
-  const data = useMovies(query, 80);
+  // Query-key isolation and abort-safe pagination prevent stale results leaking
+  // between date windows or languages; the old 80-item hard limit is removed.
+  const data = usePagedMovies(query, 60);
   const facets = data.payload.facets;
+  const total = data.payload.pagination?.total;
+  const rows = data.payload.movies;
   return (
     <main className="page upcoming-page">
-      <section className="library-hero upcoming-hero"><div><p>UPCOMING</p><h1>Coming soon</h1><span>Upcoming theatrical releases and tracked release dates.</span></div><b>{data.payload.pagination?.total?.toLocaleString("en-IN") || "—"} titles</b></section>
-      <section className="upcoming-controls"><div className="segmented"><button className={window === "all" ? "active" : ""} onClick={() => setWindow("all")}>All upcoming</button><button className={window === "30d" ? "active" : ""} onClick={() => setWindow("30d")}>Next 30 days</button><button className={window === "7d" ? "active" : ""} onClick={() => setWindow("7d")}>Next 7 days</button></div><select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></section>
-      <section className="catalogue-section compact-top">{data.loading ? <CardSkeletons /> : <div className="media-grid">{data.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</div>}</section>
+      <section className="library-hero upcoming-hero"><div><p>UPCOMING</p><h1>Coming soon</h1><span>Upcoming theatrical releases and tracked release dates.</span></div><b>{total == null ? "— titles" : `${total.toLocaleString("en-IN")} titles`}</b></section>
+      <section className="upcoming-controls">
+        <div className="segmented" role="group" aria-label="Release window">
+          <button className={window === "all" ? "active" : ""} aria-pressed={window === "all"} onClick={() => setWindow("all")}>All upcoming</button>
+          <button className={window === "30d" ? "active" : ""} aria-pressed={window === "30d"} onClick={() => setWindow("30d")}>Next 30 days</button>
+          <button className={window === "7d" ? "active" : ""} aria-pressed={window === "7d"} onClick={() => setWindow("7d")}>Next 7 days</button>
+        </div>
+        <label className="upcoming-language-control">Language <select value={language} onChange={(event) => setLanguage(event.target.value)}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label>
+      </section>
+      <section className="catalogue-section compact-top">
+        {data.loading && !rows.length ? <CardSkeletons /> : <div className="media-grid">{rows.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</div>}
+        {!data.loading && !data.error && rows.length === 0 ? <p className="catalogue-empty">No upcoming releases match this date range and language. Try another filter.</p> : null}
+        {data.payload.staleDuringQuota ? <p className="catalogue-stale-warning" role="status">Showing a saved catalogue page while the database resets. New releases may appear later.</p> : null}
+        <div className="catalogue-pagination" aria-live="polite">
+          {rows.length ? <span>Showing {rows.length.toLocaleString("en-IN")} of {(total ?? rows.length).toLocaleString("en-IN")} upcoming movies</span> : null}
+          {data.error ? <p className="catalogue-error-message" role="alert">{data.errorMessage}</p> : null}
+          {data.error ? <button type="button" onClick={data.retry}>Couldn’t load releases. Retry</button> : null}
+          {data.payload.pagination?.hasMore ? <button type="button" onClick={data.loadMore} disabled={data.loading || data.error}>{data.loading ? "Loading more…" : "Load more releases"}</button> : null}
+        </div>
+      </section>
       {selected ? <MovieDetail movie={selected} onClose={() => setSelected(null)} /> : null}
     </main>
   );

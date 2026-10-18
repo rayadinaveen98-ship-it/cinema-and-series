@@ -30,3 +30,58 @@
 .catalogue-error-message{max-width:420px;margin:0;color:#f4b6ae;font-size:12px;line-height:1.5;text-align:center}
 
 .catalogue-stale-warning{padding:14px 0;color:#c9a976;font-size:12px;line-height:1.6}
+
+
+/* Phase 2 P0: visible request states rather than silent empty catalogue rails. */
+.rail-status,.rail-error{flex:0 0 min(410px,86vw);align-self:center;min-width:0;padding:18px 20px;border:1px solid var(--line);border-radius:8px;background:#151515;color:#c6c6c6;font-size:13px;line-height:1.5}
+.rail-status{margin:0}
+.rail-error{border-color:rgba(244,182,174,.38)}
+.rail-error p{margin:0 0 10px;color:#f4b6ae}
+.rail-error button{min-height:44px;padding:0 18px;border:1px solid #ededed;border-radius:5px;background:#ededed;color:#111;font-size:13px;font-weight:700;cursor:pointer}
+.rail-error button:hover{background:#fff}
+.home-library-callout .rail-error{margin-top:14px;max-width:440px}
+.upcoming-language-control{display:flex;align-items:center;gap:9px;color:#aaa;font-size:13px}
+.upcoming-language-control select{min-height:44px}
+.catalogue-pagination button{min-height:44px}
+@media(max-width:700px){.rail-status,.rail-error{flex-basis:min(330px,83vw)}.upcoming-language-control{align-items:stretch;flex-direction:column;gap:7px}}
+
+
+/* Phase 2 PR-B: keyboard accessibility, clear controls and readable small-screen metadata. */
+.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
+.filter-panel[hidden]{display:none!important}
+.cs-app :is(button,a,input,select):focus-visible{outline:3px solid #ffd36b;outline-offset:3px}
+.detail-sheet:focus{outline:none}
+.modal-close{width:44px;height:44px}
+.catalogue-tools input{min-height:44px;font-size:14px}
+.filter-button{min-height:44px;height:auto;font-size:13px;padding:9px 14px}
+.filter-button b{font-size:12px;min-width:20px;height:20px}
+.filter-panel label{font-size:12px;color:#bcbcbc;letter-spacing:.06em}
+.filter-panel select,.upcoming-controls select{height:44px;min-height:44px;font-size:13px}
+.filter-panel>button{min-height:44px;height:auto;padding:9px 13px;font-size:13px}
+.segmented button{min-height:44px;height:auto;padding:10px 14px;font-size:13px}
+.upcoming-language-control{font-size:13px}
+.row-title>a{font-size:13px}
+.catalogue-heading>div:first-child>span{font-size:13px;color:#aaa}
+.spotlight-strip small{font-size:11px}
+.spotlight-strip p{font-size:13px;color:#b4b4b4}
+.home-library-callout p{font-size:11px}
+.home-library-callout span{font-size:13px;color:#b9b9b9}
+.media-copy strong{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;text-overflow:ellipsis;white-space:normal;font-size:14px;line-height:1.35;overflow-wrap:anywhere}
+.media-copy span{color:#aaa;font-size:12px;line-height:1.4;overflow-wrap:anywhere}
+.quality-pill,.kind-pill{font-size:10px;padding:5px 7px}
+@media(max-width:920px){
+ .mobile-nav-v2{height:calc(72px + var(--safe))}
+ .mobile-nav-v2 a{min-height:60px}
+ .mobile-nav-v2 small{font-size:12px;line-height:1.15;font-weight:600}
+ .page{padding-bottom:calc(95px + var(--safe))}
+}
+@media(max-width:700px){
+ .catalogue-tools{align-items:stretch}
+ .catalogue-tools input{min-width:0}
+ .media-copy strong{font-size:13px;line-height:1.38}
+ .media-copy span{font-size:11px}
+ .home-hero-copy>span{font-size:13px}
+ .library-hero span{font-size:13px}
+ .upcoming-language-control{width:100%}
+ .upcoming-language-control select{width:100%}
+}

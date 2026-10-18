@@ -1,0 +1,138 @@
+import { test, expect } from '@playwright/test';
+
+const films = Array.from({ length: 137 }, (_, i) => ({
+  id: `movie-${i + 1}`,
+  title: `Release ${String(i + 1).padStart(3, '0')}`,
+  language: 'Telugu',
+  countryCode: 'IN',
+  releaseDate: '2027-01-12',
+  releaseYear: 2027,
+  datePrecision: 'year',
+  verificationStatus: 'verified',
+  releaseSourceName: 'Wikidata',
+  releaseSource: 'wikidata',
+  releaseSourceUrl: 'https://www.wikidata.org/wiki/Q1',
+}));
+const series = [{
+  id: 'series-1', title: 'Example Series', language: 'Telugu', countryCode: 'IN',
+  seriesKind: 'web_series', firstAirYear: 2026, lifecycleStatus: 'ongoing',
+  verificationStatus: 'supported', sourceUrl: 'https://www.wikidata.org/wiki/Q1',
+}];
+const jsonHeaders = { 'content-type': 'application/json' };
+
+async function mockApi(page, options = {}) {
+  await page.route('**/api/catalogue-stats', async (route) => {
+    if (options.countsFail) return route.fulfill({ status: 503, headers: jsonHeaders, body: JSON.stringify({ error: 'catalogue_daily_read_limit' }) });
+    return route.fulfill({ status: 200, headers: jsonHeaders, body: JSON.stringify({ movies: 137, series: 1, total: 138 }) });
+  });
+  await page.route('**/api/movies?**', async (route) => {
+    if (options.moviesFail) return route.fulfill({ status: 503, headers: jsonHeaders, body: JSON.stringify({ error: 'catalogue_daily_read_limit' }) });
+    const u = new URL(route.request().url());
+    const offset = Number(u.searchParams.get('offset') || 0);
+    const limit = Number(u.searchParams.get('limit') || 60);
+    const language = u.searchParams.get('language') || 'all';
+    const q = u.searchParams.get('q') || '';
+    const selected = films.filter(f => (language === 'all' || language.toLowerCase() === 'telugu' || language.toLowerCase() === 'te') && (!q || f.title.toLowerCase().includes(q.toLowerCase())));
+    const items = selected.slice(offset, offset + limit);
+    const payload = {
+      movies: items,
+      pagination: { limit, offset, total: selected.length, hasMore: offset + limit < selected.length },
+      facets: { years: [{ value: '2027', count: 137 }], languages: [{ value: 'Telugu', count: 137 }], countries: [{ value: 'IN', count: 137 }] },
+      stats: { total: 137, verified: 137, supported: 0, unconfirmed: 0, activeSources: 21 },
+    };
+    return route.fulfill({ status: 200, headers: jsonHeaders, body: JSON.stringify(payload) });
+  });
+  await page.route('**/api/series?**', async (route) => {
+    const u = new URL(route.request().url());
+    const limit = Number(u.searchParams.get('limit') || 60);
+    const offset = Number(u.searchParams.get('offset') || 0);
+    const payload = {
+      series: series.slice(offset, offset + limit),
+      pagination: { limit, offset, total: series.length, hasMore: false },
+      facets: { years: [{ value: '2026', count: 1 }], languages: [{ value: 'Telugu', count: 1 }], countries: [{ value: 'IN', count: 1 }], kinds: [{ value: 'web_series', count: 1 }] },
+    };
+    return route.fulfill({ status: 200, headers: jsonHeaders, body: JSON.stringify(payload) });
+  });
+}
+
+test('Home has truthful counts and three usable content rails', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/#/');
+  await expect(page.getByRole('heading', { name: 'Release 001' })).toBeVisible();
+  await expect(page.getByText('138 titles and growing')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Series to discover' })).toBeVisible();
+  await page.screenshot({ path: `artifacts/browser-results/home-${test.info().project.name}.png`, fullPage: true });
+});
+
+test('Quota outage is shown as retry, not zero-title catalogue', async ({ page }) => {
+  await mockApi(page, { moviesFail: true, countsFail: true });
+  await page.goto('/#/');
+  await expect(page.getByText('Catalogue totals unavailable')).toBeVisible();
+  await expect(page.getByText('0 titles and growing')).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Retry' }).first()).toBeVisible();
+});
+
+test('Upcoming paginates past 80 results and resets when filter changes', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/#/upcoming');
+  await expect(page.getByText('Showing 60 of 137 upcoming movies')).toBeVisible();
+  await page.getByRole('button', { name: 'Load more releases' }).click();
+  await expect(page.getByText('Showing 120 of 137 upcoming movies')).toBeVisible();
+  await page.getByRole('button', { name: 'Load more releases' }).click();
+  await expect(page.getByText('Showing 137 of 137 upcoming movies')).toBeVisible();
+  await page.getByLabel('Language').selectOption('Telugu');
+  await expect(page.getByText('Showing 60 of 137 upcoming movies')).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Release 137' })).toHaveCount(0);
+  await page.screenshot({ path: `artifacts/browser-results/upcoming-${test.info().project.name}.png`, fullPage: true });
+});
+
+test('Movie details trap focus and restore focus to opener on Escape', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/#/movies');
+  const card = page.getByRole('button', { name: /Release 001/ }).first();
+  await card.click();
+  const dialog = page.getByRole('dialog', { name: 'Release 001' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole('button', { name: 'Close movie details' })).toBeFocused();
+  await page.keyboard.press('Shift+Tab');
+  await expect(dialog.getByRole('link', { name: /Wikidata film record/ })).toBeFocused();
+  await page.keyboard.press('Tab');
+  await expect(dialog.getByRole('button', { name: 'Close movie details' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(card).toBeFocused();
+});
+
+test('Series details and disclosures remain keyboard accessible', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/#/series');
+  await page.getByRole('button', { name: /Example Series/ }).first().click();
+  const dialog = page.getByRole('dialog', { name: 'Example Series' });
+  await expect(dialog.getByRole('button', { name: 'Close series details' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await page.getByRole('button', { name: /Filters/ }).click();
+  await expect(page.getByRole('button', { name: /Filters/ })).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.getByRole('combobox', { name: 'Format' })).toBeVisible();
+  await page.getByRole('button', { name: /Filters/ }).click();
+  await expect(page.getByRole('combobox', { name: 'Format' })).toBeHidden();
+});
+
+test('Responsive navigation and focusable controls stay within the viewport', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/#/movies');
+  await expect(page.getByRole('searchbox', { name: 'Search movies' })).toBeVisible();
+  const isMobile = page.viewportSize().width <= 920;
+  const nav = isMobile
+    ? page.getByRole('navigation', { name: 'Mobile navigation' })
+    : page.getByRole('navigation', { name: 'Primary navigation' });
+  await expect(nav).toBeVisible();
+  const dimensions = await page.evaluate((mobile) => ({
+    scroll: document.documentElement.scrollWidth,
+    viewport: document.documentElement.clientWidth,
+    labelSize: parseFloat(getComputedStyle(document.querySelector(mobile ? '.mobile-nav-v2 small' : '.primary-links a')).fontSize),
+  }), isMobile);
+  expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.viewport + 1);
+  expect(dimensions.labelSize).toBeGreaterThanOrEqual(isMobile ? 12 : 13);
+  await page.screenshot({ path: `artifacts/browser-results/movies-${test.info().project.name}.png`, fullPage: true });
+});
