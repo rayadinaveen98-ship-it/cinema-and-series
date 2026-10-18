@@ -118,17 +118,21 @@ test('Series details and disclosures remain keyboard accessible', async ({ page 
   await expect(page.getByRole('combobox', { name: 'Format' })).toBeHidden();
 });
 
-test('Mobile navigation and focusable controls stay within the viewport', async ({ page }) => {
+test('Responsive navigation and focusable controls stay within the viewport', async ({ page }) => {
   await mockApi(page);
   await page.goto('/#/movies');
   await expect(page.getByRole('searchbox', { name: 'Search movies' })).toBeVisible();
-  await expect(page.getByRole('navigation', { name: 'Mobile navigation' })).toBeVisible();
-  const dimensions = await page.evaluate(() => ({
+  const isMobile = page.viewportSize().width <= 920;
+  const nav = isMobile
+    ? page.getByRole('navigation', { name: 'Mobile navigation' })
+    : page.getByRole('navigation', { name: 'Primary navigation' });
+  await expect(nav).toBeVisible();
+  const dimensions = await page.evaluate((mobile) => ({
     scroll: document.documentElement.scrollWidth,
     viewport: document.documentElement.clientWidth,
-    labelSize: parseFloat(getComputedStyle(document.querySelector('.mobile-nav-v2 small')).fontSize),
-  }));
+    labelSize: parseFloat(getComputedStyle(document.querySelector(mobile ? '.mobile-nav-v2 small' : '.primary-links a')).fontSize),
+  }), isMobile);
   expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.viewport + 1);
-  expect(dimensions.labelSize).toBeGreaterThanOrEqual(12);
+  expect(dimensions.labelSize).toBeGreaterThanOrEqual(isMobile ? 12 : 13);
   await page.screenshot({ path: `artifacts/browser-results/movies-${test.info().project.name}.png`, fullPage: true });
 });
