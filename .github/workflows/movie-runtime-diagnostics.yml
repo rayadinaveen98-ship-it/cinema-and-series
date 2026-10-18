@@ -1,0 +1,76 @@
+name: Diagnose Public Catalogue Runtime — Read Only
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/movie-runtime-diagnostics.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      BASE_URL: https://cinema-and-series.rayadinaveen98.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npm install --no-audit --no-fund
+      - name: Capture only runtime errors while probing public GET endpoints
+        shell: bash
+        run: |
+          set -uo pipefail
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          # Tail diagnostic is read-only; nothing deploys or modifies D1.
+          timeout 40s npx wrangler tail cinema-and-series --format=json \
+            > "$RUNNER_TEMP/worker-tail.log" 2>&1 &
+          TAIL_PID=$!
+          sleep 8
+          for path in '/api/health' '/api/catalogue-stats' \
+            '/api/movies?scope=all&limit=1&offset=0' \
+            '/api/series?limit=1&offset=0'; do
+            code=$(curl --silent --show-error --max-time 15 -o /dev/null -w '%{http_code}' "$BASE_URL$path" || true)
+            echo "DIAGNOSTIC_HTTP path=$path status=$code"
+          done
+          sleep 6
+          kill "$TAIL_PID" >/dev/null 2>&1 || true
+          wait "$TAIL_PID" >/dev/null 2>&1 || true
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          log=Path(os.environ["RUNNER_TEMP"])/"worker-tail.log"
+          for line in log.read_text(errors="replace").splitlines():
+              try:
+                  event=json.loads(line)
+              except (ValueError, TypeError):
+                  if any(key in line.lower() for key in ("error","failed","denied")):
+                      print("TAIL_SETUP=" + line[:400])
+                  continue
+              req=(event.get("event") or {}).get("request") or {}
+              path=req.get("url") or ""
+              if "/api/" not in path:
+                  continue
+              exceptions=event.get("exceptions") or []
+              if exceptions:
+                  for exc in exceptions:
+                      print("WORKER_EXCEPTION=" + json.dumps({
+                          "path": path.split("?")[0].split("/")[-1],
+                          "name": exc.get("name"),
+                          "message": str(exc.get("message") or "")[:850],
+                      }, sort_keys=True))
+              else:
+                  print("WORKER_EVENT=" + json.dumps({
+                      "path": path.split("?")[0].split("/")[-1],
+                      "outcome":event.get("outcome"),
+                  }, sort_keys=True))
+          PY
