@@ -137,7 +137,20 @@ function useSeries(query: Record<string, string>, limit = 60) {
 }
 
 
-type PageRequestState = { key: string; page: number; loading: boolean; error: boolean };
+type PageRequestState = { key: string; page: number; loading: boolean; error: boolean; message?: string };
+
+async function readCataloguePage<T>(result: Response): Promise<T> {
+  if (!result.ok) {
+    if (result.status === 503) {
+      const details = await result.json().catch(() => null) as { error?: string } | null;
+      if (details?.error === "catalogue_daily_read_limit") {
+        throw new Error("The catalogue has reached its daily database limit. Please try again after 5:30 AM IST.");
+      }
+    }
+    throw new Error("Catalogue could not load. Check your connection and try again.");
+  }
+  return result.json() as Promise<T>;
+}
 
 // A browse page retains previously loaded cards, but never mixes items from
 // two different search/filter queries. All requests remain bounded to 60 rows.
@@ -154,7 +167,7 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
     const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit), artwork: "1", ...query });
     setRequest({ key: queryKey, page, loading: true, error: false });
     fetch(`/api/movies?${params}`, { signal: controller.signal })
-      .then((result) => { if (!result.ok) throw new Error("movies unavailable"); return result.json() as Promise<MovieResponse>; })
+      .then((result) => readCataloguePage<MovieResponse>(result))
       .then((next) => {
         if (controller.signal.aborted) return;
         setResponse((previous) => ({
@@ -166,8 +179,11 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
         }));
         setRequest({ key: queryKey, page, loading: false, error: false });
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setRequest({ key: queryKey, page, loading: false, error: true });
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setRequest({
+          key: queryKey, page, loading: false, error: true,
+          message: error instanceof Error ? error.message : "Catalogue could not load. Please retry.",
+        });
       });
     return () => controller.abort();
   }, [queryKey, page, limit, retryIndex]);
@@ -175,10 +191,11 @@ function usePagedMovies(query: Record<string, string>, limit = 60) {
   const payload: MovieResponse = response.key === queryKey ? response.payload : { movies: [] };
   const loading = request.key !== queryKey || request.page !== page || request.loading;
   const error = request.key === queryKey && request.page === page && request.error;
+  const errorMessage = error ? request.message : undefined;
   const loadMore = () => {
     if (!loading && !error && payload.pagination?.hasMore) setCursor({ key: queryKey, page: page + 1 });
   };
-  return { payload, loading, error, loadMore, retry: () => setRetryIndex((index) => index + 1) };
+  return { payload, loading, error, errorMessage, loadMore, retry: () => setRetryIndex((index) => index + 1) };
 }
 
 function usePagedSeries(query: Record<string, string>, limit = 60) {
@@ -194,7 +211,7 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
     const params = new URLSearchParams({ limit: String(limit), offset: String(page * limit), artwork: "1", ...query });
     setRequest({ key: queryKey, page, loading: true, error: false });
     fetch(`/api/series?${params}`, { signal: controller.signal })
-      .then((result) => { if (!result.ok) throw new Error("series unavailable"); return result.json() as Promise<SeriesResponse>; })
+      .then((result) => readCataloguePage<SeriesResponse>(result))
       .then((next) => {
         if (controller.signal.aborted) return;
         setResponse((previous) => ({
@@ -206,8 +223,11 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
         }));
         setRequest({ key: queryKey, page, loading: false, error: false });
       })
-      .catch(() => {
-        if (!controller.signal.aborted) setRequest({ key: queryKey, page, loading: false, error: true });
+      .catch((error: unknown) => {
+        if (!controller.signal.aborted) setRequest({
+          key: queryKey, page, loading: false, error: true,
+          message: error instanceof Error ? error.message : "Catalogue could not load. Please retry.",
+        });
       });
     return () => controller.abort();
   }, [queryKey, page, limit, retryIndex]);
@@ -215,10 +235,11 @@ function usePagedSeries(query: Record<string, string>, limit = 60) {
   const payload: SeriesResponse = response.key === queryKey ? response.payload : { series: [] };
   const loading = request.key !== queryKey || request.page !== page || request.loading;
   const error = request.key === queryKey && request.page === page && request.error;
+  const errorMessage = error ? request.message : undefined;
   const loadMore = () => {
     if (!loading && !error && payload.pagination?.hasMore) setCursor({ key: queryKey, page: page + 1 });
   };
-  return { payload, loading, error, loadMore, retry: () => setRetryIndex((index) => index + 1) };
+  return { payload, loading, error, errorMessage, loadMore, retry: () => setRetryIndex((index) => index + 1) };
 }
 
 function useModalLock(active: boolean, onClose: () => void) {
@@ -390,6 +411,7 @@ function MoviesPage() {
         {!all.loading && !all.error && !all.payload.movies.length ? <p className="catalogue-empty">No movies match these filters. Try another title, year, or language.</p> : null}
         <div className="catalogue-pagination" aria-live="polite">
           {all.payload.movies.length ? <span>Showing {all.payload.movies.length.toLocaleString("en-IN")} of {(all.payload.pagination?.total ?? all.payload.movies.length).toLocaleString("en-IN")} movies</span> : null}
+          {all.error ? <p role="status" className="catalogue-error-message">{all.errorMessage}</p> : null}
           {all.error ? <button type="button" onClick={all.retry}>Couldn’t load movies. Retry</button> : null}
           {all.payload.pagination?.hasMore ? <button type="button" onClick={all.loadMore} disabled={all.loading || all.error}>{all.loading ? "Loading more…" : "Load more movies"}</button> : null}
         </div>
@@ -419,6 +441,7 @@ function SeriesPage() {
         {!all.loading && !all.error && !all.payload.series.length ? <p className="catalogue-empty">No series match these filters. Try another title, year, or language.</p> : null}
         <div className="catalogue-pagination" aria-live="polite">
           {all.payload.series.length ? <span>Showing {all.payload.series.length.toLocaleString("en-IN")} of {(all.payload.pagination?.total ?? all.payload.series.length).toLocaleString("en-IN")} series</span> : null}
+          {all.error ? <p role="status" className="catalogue-error-message">{all.errorMessage}</p> : null}
           {all.error ? <button type="button" onClick={all.retry}>Couldn’t load series. Retry</button> : null}
           {all.payload.pagination?.hasMore ? <button type="button" onClick={all.loadMore} disabled={all.loading || all.error}>{all.loading ? "Loading more…" : "Load more series"}</button> : null}
         </div>
