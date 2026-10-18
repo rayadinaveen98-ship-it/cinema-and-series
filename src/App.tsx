@@ -320,6 +320,10 @@ function Row({ title, action, children }: { title: string; action?: ReactNode; c
   return <section className="content-row"><div className="row-title"><h2>{title}</h2>{action}</div><div className="horizontal-rail">{children}</div></section>;
 }
 
+function RailError({ message, retry }: { message?: string; retry: () => void }) {
+  return <div className="rail-error" role="alert"><p>{message || "Couldn't load this section. Please retry."}</p><button type="button" onClick={retry}>Retry</button></div>;
+}
+
 function MovieDetail({ movie, onClose }: { movie: Movie; onClose: () => void }) {
   useModalLock(true, onClose);
   return (
@@ -361,7 +365,7 @@ function SeriesDetail({ item, onClose }: { item: SeriesTitle; onClose: () => voi
 }
 
 function HomePage() {
-  const counts = useCounts();
+  const { counts, loading: countsLoading, error: countsError, retry: retryCounts } = useCounts();
   const upcoming = useMovies({ scope: "upcoming" }, 40);
   const series = useSeries({}, 18);
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null);
@@ -374,13 +378,36 @@ function HomePage() {
       <section className={`home-hero tone-${toneIndex(hero?.title || "Cinema")}`}>
         {hero?.backdropUrl || hero?.posterUrl ? <img src={hero.backdropUrl || hero.posterUrl} alt="" referrerPolicy="no-referrer" /> : null}
         <div className="home-hero-shade" />
-        <div className="home-hero-copy"><p>FEATURED RELEASE</p><h1>{hero?.title || "Cinema & Series"}</h1><span>{hero ? `${formatDate(hero.releaseDate)} · ${hero.language}` : "Movies and series, one cinematic home."}</span><div className="hero-actions">{hero ? <button onClick={() => setSelectedMovie(hero)}>ⓘ More info</button> : null}<Link to="/movies">Browse movies</Link></div></div>
+        <div className="home-hero-copy"><p>FEATURED RELEASE</p><h1>{hero?.title || "Cinema & Series"}</h1><span>{hero ? `${formatDate(hero.releaseDate)} · ${hero.language}` : upcoming.loading ? "Checking for new releases…" : upcoming.error ? "Release information is temporarily unavailable." : "Movies and series, one cinematic home."}</span><div className="hero-actions">{hero ? <button onClick={() => setSelectedMovie(hero)}>ⓘ More info</button> : null}<Link to="/movies">Browse movies</Link></div></div>
       </section>
       <div className="home-content">
-        <Row title="Verified releases" action={<Link to="/upcoming">See all</Link>}>{verified.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelectedMovie} />)}</Row>
-        <Row title="Coming soon" action={<Link to="/upcoming">See all</Link>}>{coming.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelectedMovie} />)}</Row>
-        <Row title="Series to discover" action={<Link to="/series">Explore series</Link>}>{series.payload.series.slice(0, 14).map((item) => <SeriesCard key={item.id} item={item} onOpen={setSelectedSeries} />)}</Row>
-        <section className="home-library-callout"><div><p>EXPLORE THE LIBRARY</p><h2>{counts.total.toLocaleString("en-IN")} titles and growing</h2><span>{counts.movies.toLocaleString("en-IN")} movies · {counts.series.toLocaleString("en-IN")} series</span></div><div><Link to="/movies">Movies</Link><Link to="/series">Series</Link></div></section>
+        <Row title="Verified releases" action={<Link to="/upcoming">See all</Link>}>
+          {upcoming.loading && !verified.length ? <p className="rail-status" role="status">Loading verified releases…</p> : null}
+          {upcoming.error ? <RailError message={upcoming.errorMessage} retry={upcoming.retry} /> : null}
+          {!upcoming.loading && !upcoming.error && !verified.length ? <p className="rail-status">No verified upcoming releases found.</p> : null}
+          {verified.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelectedMovie} />)}
+        </Row>
+        <Row title="Coming soon" action={<Link to="/upcoming">See all</Link>}>
+          {upcoming.loading && !coming.length ? <p className="rail-status" role="status">Loading upcoming movies…</p> : null}
+          {upcoming.error ? <RailError message={upcoming.errorMessage} retry={upcoming.retry} /> : null}
+          {!upcoming.loading && !upcoming.error && !coming.length ? <p className="rail-status">No upcoming movies found.</p> : null}
+          {coming.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelectedMovie} />)}
+        </Row>
+        <Row title="Series to discover" action={<Link to="/series">Explore series</Link>}>
+          {series.loading && !series.payload.series.length ? <p className="rail-status" role="status">Loading series…</p> : null}
+          {series.error ? <RailError message={series.errorMessage} retry={series.retry} /> : null}
+          {!series.loading && !series.error && !series.payload.series.length ? <p className="rail-status">No series found.</p> : null}
+          {series.payload.series.slice(0, 14).map((item) => <SeriesCard key={item.id} item={item} onOpen={setSelectedSeries} />)}
+        </Row>
+        <section className="home-library-callout">
+          <div>
+            <p>EXPLORE THE LIBRARY</p>
+            <h2>{counts ? `${counts.total.toLocaleString("en-IN")} titles and growing` : "Explore the catalogue"}</h2>
+            <span>{counts ? `${counts.movies.toLocaleString("en-IN")} movies · ${counts.series.toLocaleString("en-IN")} series` : countsLoading ? "Loading catalogue totals…" : "Catalogue totals unavailable"}</span>
+            {countsError ? <RailError message={countsError} retry={retryCounts} /> : null}
+          </div>
+          <div><Link to="/movies">Movies</Link><Link to="/series">Series</Link></div>
+        </section>
       </div>
       {selectedMovie ? <MovieDetail movie={selectedMovie} onClose={() => setSelectedMovie(null)} /> : null}
       {selectedSeries ? <SeriesDetail item={selectedSeries} onClose={() => setSelectedSeries(null)} /> : null}
