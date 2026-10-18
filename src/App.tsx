@@ -420,7 +420,7 @@ function FilterButton({ open, count, onClick }: { open: boolean; count: number; 
 }
 
 function MoviesPage() {
-  const counts = useCounts();
+  const { counts, loading: countsLoading, error: countsError, retry: retryCounts } = useCounts();
   const [filters, setFilters] = useState<MovieFilters>({ q: "", year: "all", language: "all", country: "all" });
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState<Movie | null>(null);
@@ -431,10 +431,11 @@ function MoviesPage() {
   const facets = all.payload.facets;
   return (
     <main className="page library-page">
-      <section className="library-hero movie-library-hero"><div><p>MOVIES</p><h1>Movies</h1><span>Discover cinema by language, country and year.</span></div><b>{counts.movies.toLocaleString("en-IN")} titles</b></section>
-      <Row title="New & upcoming" action={<Link to="/upcoming">View upcoming</Link>}>{coming.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</Row>
+      <section className="library-hero movie-library-hero"><div><p>MOVIES</p><h1>Movies</h1><span>Discover cinema by language, country and year.</span></div><b>{counts ? `${counts.movies.toLocaleString("en-IN")} titles` : countsLoading ? "Loading totals…" : "Totals unavailable"}</b></section>
+      <Row title="New & upcoming" action={<Link to="/upcoming">View upcoming</Link>}>{coming.loading && !coming.payload.movies.length ? <p className="rail-status" role="status">Loading upcoming releases…</p> : null}{coming.error ? <RailError message={coming.errorMessage} retry={coming.retry} /> : null}{!coming.loading && !coming.error && !coming.payload.movies.length ? <p className="rail-status">No upcoming releases found.</p> : null}{coming.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</Row>
       <section className="catalogue-section">
-        <div className="catalogue-heading"><div><h2>Explore movies</h2><span>{all.payload.pagination?.total?.toLocaleString("en-IN") || counts.movies.toLocaleString("en-IN")} titles</span></div><div className="catalogue-tools"><input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Search movies" /><FilterButton open={filterOpen} count={activeFilterCount({ year: filters.year, language: filters.language, country: filters.country })} onClick={() => setFilterOpen((value) => !value)} /></div></div>
+        {countsError ? <RailError message={countsError} retry={retryCounts} /> : null}
+        <div className="catalogue-heading"><div><h2>Explore movies</h2><span>{(all.payload.pagination?.total ?? counts?.movies)?.toLocaleString("en-IN") ?? "—"} titles</span></div><div className="catalogue-tools"><input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Search movies" /><FilterButton open={filterOpen} count={activeFilterCount({ year: filters.year, language: filters.language, country: filters.country })} onClick={() => setFilterOpen((value) => !value)} /></div></div>
         {filterOpen ? <div className="filter-panel"><label>Year<select value={filters.year} onChange={(event) => setFilters((current) => ({ ...current, year: event.target.value }))}><option value="all">All years</option>{facets?.years.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Language<select value={filters.language} onChange={(event) => setFilters((current) => ({ ...current, language: event.target.value }))}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Country<select value={filters.country} onChange={(event) => setFilters((current) => ({ ...current, country: event.target.value }))}><option value="all">All countries</option>{facets?.countries.map((item) => <option key={item.value} value={item.value}>{countryLabel(item.value)}</option>)}</select></label><button onClick={() => setFilters({ q: "", year: "all", language: "all", country: "all" })}>Reset</button></div> : null}
         {all.loading && !all.payload.movies.length ? <CardSkeletons /> : <div className="media-grid">{all.payload.movies.map((item) => <MovieCard key={item.id} movie={item} onOpen={setSelected} />)}</div>}
         {!all.loading && !all.error && !all.payload.movies.length ? <p className="catalogue-empty">No movies match these filters. Try another title, year, or language.</p> : null}
@@ -452,7 +453,7 @@ function MoviesPage() {
 }
 
 function SeriesPage() {
-  const counts = useCounts();
+  const { counts, loading: countsLoading, error: countsError, retry: retryCounts } = useCounts();
   const [filters, setFilters] = useState<SeriesFilters>({ q: "", year: "all", language: "all", country: "all", kind: "all" });
   const [filterOpen, setFilterOpen] = useState(false);
   const [selected, setSelected] = useState<SeriesTitle | null>(null);
@@ -462,10 +463,11 @@ function SeriesPage() {
   const facets = all.payload.facets;
   return (
     <main className="page library-page series-library-page">
-      <section className="library-hero series-library-hero"><div><p>SERIES</p><h1>Series</h1><span>Shows from India and around the world, in their own dedicated library.</span></div><b>{counts.series.toLocaleString("en-IN")} titles</b></section>
+      <section className="library-hero series-library-hero"><div><p>SERIES</p><h1>Series</h1><span>Shows from India and around the world, in their own dedicated library.</span></div><b>{counts ? `${counts.series.toLocaleString("en-IN")} titles` : countsLoading ? "Loading totals…" : "Totals unavailable"}</b></section>
       <section className="spotlight-strip"><div><small>DISCOVER SERIES</small><h2>Find your next show</h2><p>Browse by language, country, debut year or format. Genre browsing will appear when genre metadata is available in the catalogue.</p></div></section>
       <section className="catalogue-section series-catalogue-section">
-        <div className="catalogue-heading"><div><h2>Explore series</h2><span>{all.payload.pagination?.total?.toLocaleString("en-IN") || counts.series.toLocaleString("en-IN")} titles</span></div><div className="catalogue-tools"><input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Search series" /><FilterButton open={filterOpen} count={activeFilterCount({ year: filters.year, language: filters.language, country: filters.country, kind: filters.kind })} onClick={() => setFilterOpen((value) => !value)} /></div></div>
+        {countsError ? <RailError message={countsError} retry={retryCounts} /> : null}
+        <div className="catalogue-heading"><div><h2>Explore series</h2><span>{(all.payload.pagination?.total ?? counts?.series)?.toLocaleString("en-IN") ?? "—"} titles</span></div><div className="catalogue-tools"><input value={filters.q} onChange={(event) => setFilters((current) => ({ ...current, q: event.target.value }))} placeholder="Search series" /><FilterButton open={filterOpen} count={activeFilterCount({ year: filters.year, language: filters.language, country: filters.country, kind: filters.kind })} onClick={() => setFilterOpen((value) => !value)} /></div></div>
         {filterOpen ? <div className="filter-panel four"><label>Language<select value={filters.language} onChange={(event) => setFilters((current) => ({ ...current, language: event.target.value }))}><option value="all">All languages</option>{facets?.languages.filter((item) => item.value !== "Unknown").map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Country<select value={filters.country} onChange={(event) => setFilters((current) => ({ ...current, country: event.target.value }))}><option value="all">All countries</option>{facets?.countries.map((item) => <option key={item.value} value={item.value}>{countryLabel(item.value)}</option>)}</select></label><label>Year<select value={filters.year} onChange={(event) => setFilters((current) => ({ ...current, year: event.target.value }))}><option value="all">All years</option>{facets?.years.map((item) => <option key={item.value} value={item.value}>{item.value}</option>)}</select></label><label>Format<select value={filters.kind} onChange={(event) => setFilters((current) => ({ ...current, kind: event.target.value }))}><option value="all">All formats</option>{facets?.kinds.filter((item) => item.value !== "unknown").map((item) => <option key={item.value} value={item.value}>{kindLabel(item.value as SeriesKind)}</option>)}</select></label><button onClick={() => setFilters({ q: "", year: "all", language: "all", country: "all", kind: "all" })}>Reset</button></div> : null}
         {all.loading && !all.payload.series.length ? <CardSkeletons /> : <div className="media-grid">{all.payload.series.map((item) => <SeriesCard key={item.id} item={item} onOpen={setSelected} />)}</div>}
         {!all.loading && !all.error && !all.payload.series.length ? <p className="catalogue-empty">No series match these filters. Try another title, year, or language.</p> : null}
