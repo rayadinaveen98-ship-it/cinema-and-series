@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "rea
 import { Link, Navigate, NavLink, Route, Routes } from "react-router";
 import { appendUniquePage, cataloguePageSearch, readCataloguePage } from "./catalogue-pages";
 import { nextDialogTabTarget } from "./dialog-tab-navigation";
+import { countryDisplayLabel, releaseDateLabel } from "./media-presentation";
 
 type Movie = {
   id: string;
@@ -70,12 +71,8 @@ const kindLabels: Record<SeriesKind, string> = {
   series: "Series", web_series: "Web series", miniseries: "Miniseries", anthology: "Anthology", unknown: "Series",
 };
 
-function countryLabel(code?: string) { return !code ? "Global" : countryNames[code] ?? code; }
+function countryLabel(code?: string) { return countryDisplayLabel(code, countryNames); }
 function movieYear(movie: Movie) { return movie.releaseYear ?? Number(movie.releaseDate?.slice(0, 4) || 0); }
-function formatDate(value?: string) {
-  if (!value) return "Release date not confirmed";
-  return new Intl.DateTimeFormat("en-IN", { day: "numeric", month: "short", year: "numeric" }).format(new Date(`${value}T00:00:00+05:30`));
-}
 function kindLabel(kind: SeriesKind) { return kindLabels[kind] ?? "Series"; }
 function toneIndex(title: string) { return [...title].reduce((total, char) => total + char.charCodeAt(0), 0) % 8; }
 function firstLetter(title: string) { return title.trim().slice(0, 1).toUpperCase() || "C"; }
@@ -318,9 +315,21 @@ function MobileNav() {
 function PosterArtwork({ url, title, hero = false }: { url?: string; title: string; hero?: boolean }) {
   const [failed, setFailed] = useState(false);
   if (!url || failed) {
-    return <span className={hero ? "detail-fallback-letter" : "fallback-letter"}>{firstLetter(title)}</span>;
+    if (hero) return <span className="detail-fallback-letter" aria-hidden="true">{firstLetter(title)}</span>;
+    return <div className="poster-placeholder" aria-hidden="true">
+      <span className="poster-placeholder-mark">{firstLetter(title)}</span>
+      <span className="poster-placeholder-brand">CINEMA & SERIES</span>
+      <span className="poster-placeholder-title">{title}</span>
+    </div>;
   }
   return <img src={url} alt="" loading={hero ? "eager" : "lazy"} referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
+}
+
+// Missing or broken official artwork must never show a broken-image icon.
+function HomeBackdrop({ url }: { url?: string }) {
+  const [failed, setFailed] = useState(false);
+  if (!url || failed) return null;
+  return <img src={url} alt="" referrerPolicy="no-referrer" onError={() => setFailed(true)} />;
 }
 
 function MovieCard({ movie, onOpen }: { movie: Movie; onOpen: (movie: Movie) => void }) {
@@ -331,7 +340,7 @@ function MovieCard({ movie, onOpen }: { movie: Movie; onOpen: (movie: Movie) => 
         <PosterArtwork key={artwork ?? movie.id} url={artwork} title={movie.title} />
         {movie.verificationStatus === "verified" ? <em className="quality-pill">Verified</em> : null}
       </div>
-      <div className="media-copy"><strong>{movie.title}</strong><span>{movieYear(movie) || "—"} · {movie.language || "Cinema"}</span></div>
+      <div className="media-copy"><strong title={movie.title}>{movie.title}</strong><span>{movieYear(movie) || "Year unknown"} · {movie.language || "Language unknown"}</span></div>
     </button>
   );
 }
@@ -343,7 +352,7 @@ function SeriesCard({ item, onOpen }: { item: SeriesTitle; onOpen: (item: Series
         <PosterArtwork key={item.posterUrl ?? item.id} url={item.posterUrl} title={item.title} />
         <em className="kind-pill">{kindLabel(item.seriesKind)}</em>
       </div>
-      <div className="media-copy"><strong>{item.title}</strong><span>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"}</span></div>
+      <div className="media-copy"><strong title={item.title}>{item.title}</strong><span>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"}</span></div>
     </button>
   );
 }
@@ -365,7 +374,7 @@ function MovieDetail({ movie, onClose }: { movie: Movie; onClose: () => void }) 
         <button type="button" className="modal-close" data-modal-initial-focus aria-label="Close movie details" onClick={onClose}>×</button>
         <div className="detail-hero">
           <PosterArtwork key={movie.backdropUrl || movie.posterUrl || movie.id} url={movie.backdropUrl || movie.posterUrl} title={movie.title} hero />
-          <div><p>MOVIE</p><h2 id={titleId}>{movie.title}</h2><small>{formatDate(movie.releaseDate)} · {movie.language} · {countryLabel(movie.countryCode)}</small></div>
+          <div><p>MOVIE</p><h2 id={titleId}>{movie.title}</h2><small>{releaseDateLabel(movie)} · {movie.language} · {countryLabel(movie.countryCode)}</small></div>
         </div>
         <div className="detail-content">
           <p>{movie.datePrecision === "year" || !movie.releaseDate ? `Release year sourced from ${movie.releaseSourceName || "the catalogue"}. The exact release date is not independently verified.` : movie.verificationStatus === "verified" ? `Release information is verified against ${movie.releaseSourceName || "a first-party source"}.` : "This title is in the catalogue while stronger first-party release evidence is still being collected."}</p>
@@ -389,7 +398,7 @@ function SeriesDetail({ item, onClose }: { item: SeriesTitle; onClose: () => voi
           <div><p>{kindLabel(item.seriesKind).toUpperCase()}</p><h2 id={titleId}>{item.title}</h2><small>{item.firstAirYear ?? "Year unknown"} · {item.language || "Language unknown"} · {countryLabel(item.countryCode)}</small></div>
         </div>
         <div className="detail-content">
-          <p>Series information stays inside Cinema & Series. External references are sources, not the browsing experience.</p>
+          <p>Browse the series details here. Open the original source below to check its information.</p>
           <div className="detail-facts"><span><b>Format</b>{kindLabel(item.seriesKind)}</span><span><b>Status</b>{item.lifecycleStatus === "unknown" ? "Not classified" : item.lifecycleStatus}</span><span><b>Seasons</b>{item.seasonCount ?? "—"}</span><span><b>Episodes</b>{item.episodeCount ?? "—"}</span></div>
           {(item.sourceUrl || item.wikidataQid) ? <div className="source-links">{item.sourceUrl ? <a href={item.sourceUrl} target="_blank" rel="noreferrer noopener">Wikipedia source ↗</a> : null}{item.wikidataQid ? <a href={`https://www.wikidata.org/wiki/${item.wikidataQid}`} target="_blank" rel="noreferrer noopener">Wikidata ↗</a> : null}</div> : null}
         </div>
@@ -410,9 +419,9 @@ function HomePage() {
   return (
     <main className="page home-page">
       <section className={`home-hero tone-${toneIndex(hero?.title || "Cinema")}`}>
-        {hero?.backdropUrl || hero?.posterUrl ? <img src={hero.backdropUrl || hero.posterUrl} alt="" referrerPolicy="no-referrer" /> : null}
+        <HomeBackdrop key={hero?.backdropUrl || hero?.posterUrl || hero?.id || "empty"} url={hero?.backdropUrl || hero?.posterUrl} />
         <div className="home-hero-shade" />
-        <div className="home-hero-copy"><p>FEATURED RELEASE</p><h1>{hero?.title || "Cinema & Series"}</h1><span>{hero ? `${formatDate(hero.releaseDate)} · ${hero.language}` : upcoming.loading ? "Checking for new releases…" : upcoming.error ? "Release information is temporarily unavailable." : "Movies and series, one cinematic home."}</span><div className="hero-actions">{hero ? <button onClick={() => setSelectedMovie(hero)}>ⓘ More info</button> : null}<Link to="/movies">Browse movies</Link></div></div>
+        <div className="home-hero-copy"><p>FEATURED RELEASE</p><h1>{hero?.title || "Cinema & Series"}</h1><span>{hero ? `${releaseDateLabel(hero)} · ${hero.language}` : upcoming.loading ? "Checking for new releases…" : upcoming.error ? "Release information is temporarily unavailable." : "Movies and series, one cinematic home."}</span><div className="hero-actions">{hero ? <button onClick={() => setSelectedMovie(hero)}>ⓘ More info</button> : null}<Link to="/movies">Browse movies</Link></div></div>
       </section>
       <div className="home-content">
         <Row title="Verified releases" action={<Link to="/upcoming">See all</Link>}>

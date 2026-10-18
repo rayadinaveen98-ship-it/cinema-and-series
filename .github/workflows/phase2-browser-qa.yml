@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "feature/phase2-pr-b-accessibility-20261018"
+      - "feature/phase2-pr-c-visual-details-20261018"
   workflow_dispatch:
 
 permissions:
