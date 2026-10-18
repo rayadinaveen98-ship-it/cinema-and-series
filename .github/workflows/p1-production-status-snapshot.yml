@@ -1,8 +1,8 @@
 name: P1 Production Status Snapshot
 
 on:
-  schedule:
-    - cron: "5 1 * * *"
+  # P1 is closed. Production DB snapshots are now manual-only to protect the
+  # free-tier daily D1 read budget for people browsing movies and series.
   workflow_dispatch:
 
 concurrency:
