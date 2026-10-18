@@ -5,9 +5,8 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/india-wikidata-resumable-waves.yml"
-  schedule:
-    # 4 source-only waves per day; distinct from D1 autopilot.
-    - cron: "10 3,9,15,21 * * *"
+  # The 1990–2025 source range is complete (144/144 shards). Further scans
+  # are manual until a new year/range is selected; avoid four empty runs daily.
   workflow_dispatch:
     inputs:
       start_year:
