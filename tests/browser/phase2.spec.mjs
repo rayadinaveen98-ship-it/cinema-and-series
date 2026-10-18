@@ -136,3 +136,45 @@ test('Responsive navigation and focusable controls stay within the viewport', as
   expect(dimensions.labelSize).toBeGreaterThanOrEqual(isMobile ? 12 : 13);
   await page.screenshot({ path: `artifacts/browser-results/movies-${test.info().project.name}.png`, fullPage: true });
 });
+
+test('Poster placeholders and year-only source dates are visibly accurate', async ({ page }) => {
+  await mockApi(page);
+  await page.goto('/#/movies');
+  const firstCard = page.locator('.media-grid .media-card').first();
+  await expect(firstCard.locator('.poster-placeholder')).toBeVisible();
+  await expect(firstCard.locator('.poster-placeholder-brand')).toHaveText('CINEMA & SERIES');
+  await expect(firstCard.locator('.poster-placeholder-title')).toHaveText('Release 001');
+  await firstCard.click();
+  const dialog = page.getByRole('dialog', { name: 'Release 001' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText('2027 · Exact date unconfirmed', { exact: false })).toBeVisible();
+  await expect(dialog.locator('.detail-fallback-letter')).toBeVisible();
+  const widths = await page.evaluate(() => ({ content: document.documentElement.scrollWidth, viewport: document.documentElement.clientWidth }));
+  expect(widths.content).toBeLessThanOrEqual(widths.viewport + 1);
+  await page.screenshot({ path: `artifacts/browser-results/details-${test.info().project.name}.png` });
+});
+
+test('Unknown country and failed remote poster use honest fallback copy', async ({ page }) => {
+  await mockApi(page);
+  await page.route('**/api/movies?**', async route => {
+    const payload = {
+      movies: [{
+        id: 'broken-poster', title: 'A Very Long Telugu English Film Title That Needs To Wrap Across Multiple Lines',
+        language: 'Telugu', releaseYear: 2026, datePrecision: 'year',
+        verificationStatus: 'supported', posterUrl: '/images/unavailable-film-poster.png'
+      }],
+      pagination: { limit: 60, offset: 0, total: 1, hasMore: false },
+      facets: { years: [], languages: [], countries: [] }
+    };
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify(payload) });
+  });
+  await page.route('**/images/unavailable-film-poster.png', route => route.fulfill({ status: 404, body: '' }));
+  await page.goto('/#/movies');
+  const card = page.locator('.media-grid .media-card').first();
+  await expect(card.locator('.poster-placeholder')).toBeVisible();
+  await card.click();
+  const modal = page.getByRole('dialog', { name: /A Very Long Telugu English Film Title/ });
+  await expect(modal.getByText('Country unknown', { exact: false }).first()).toBeVisible();
+  await expect(modal.getByText('2026 · Exact date unconfirmed', { exact: false })).toBeVisible();
+  await page.screenshot({ path: `artifacts/browser-results/long-title-${test.info().project.name}.png` });
+});
