@@ -1,0 +1,134 @@
+name: Indian Film Languages — Bounded 1500-Lead Source-Only Wave (Oct 19)
+on:
+  push:
+    branches: ["ops/p2-india-language-extra-1500-source-20261019"]
+    paths:
+      - ".github/workflows/india-film-language-1500-source-wave-20261019.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: india-film-language-source-only
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Run no-guess source-evidence and checkpoint tests
+        run: python -m unittest tests.test_india_film_language_evidence tests.test_reconcile_india_film_languages -v
+
+      - name: Restore expanded historical-to-2026 stage and resumable source checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/language-wave
+          git fetch --no-tags origin refs/heads/automation/india-language-expanded-stage
+          git show FETCH_HEAD:.automation/india-language-expanded-stage.sqlite \
+            > data/generated/language-wave/stage.sqlite
+          git fetch --no-tags origin refs/heads/automation/india-language-evidence
+          git show FETCH_HEAD:.automation/india-language-evidence.json \
+            > data/generated/language-wave/checkpoint.json
+          python - <<'PY'
+          import json,sqlite3
+          from pathlib import Path
+          root=Path("data/generated/language-wave")
+          checkpoint=json.loads((root/"checkpoint.json").read_text())
+          with sqlite3.connect(root/"stage.sqlite") as db:
+              stage_count=db.execute("SELECT COUNT(*) FROM films WHERE year_conflict=0 AND title_conflict=0").fetchone()[0]
+          assert stage_count>=26000 and checkpoint.get("schema")=="india-film-language-evidence-v1"
+          assert len(checkpoint["records"])>=2000
+          print("INDIA_LANGUAGE_WAVE_BASE="+json.dumps({
+              "qualified_source_films":stage_count,"existing_evidence_qids":len(checkpoint["records"]),
+              "d1_reads":0,"d1_writes":0},sort_keys=True),flush=True)
+          PY
+
+      - name: Collect up to 1500 additional language claims in three paced batches
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,sys
+          from pathlib import Path
+          from collections import Counter
+          sys.path.insert(0,"scripts")
+          from india_film_language_evidence import run,read_state,SCHEMA
+          root=Path("data/generated/language-wave")
+          checkpoint=root/"checkpoint.json"
+          before=read_state(checkpoint)
+          before_qids=set(before["records"])
+          waves=[]
+          for index in range(3):
+              report=run(root/"stage.sqlite",checkpoint,500,
+                  root/f"pass-{index+1}-report.json",
+                  root/f"pass-{index+1}-proposals.json",cooldown=0.7)
+              waves.append({"batch":index+1,"checked":report["checked_this_run"],
+                            "halted_reason":report["halted_reason"],
+                            "pending":report["pending_qids"]})
+              if report["halted_reason"] or not report["checked_this_run"]:
+                  break
+          after=read_state(checkpoint)
+          added=set(after["records"])-before_qids
+          counts=Counter(v["status"] for v in after["records"].values())
+          original=Counter(v.get("language") for v in after["records"].values()
+                           if v.get("status")=="single_language_evidence"
+                           and v.get("property")=="P364")
+          p407=sum(1 for v in after["records"].values()
+                   if v.get("status")=="single_language_evidence"
+                   and v.get("property")=="P407")
+          result={"schema":"india-language-source-wave-1500-20261019",
+                  "source_only":True,"d1_reads":0,"d1_writes":0,
+                  "before_evidence_qids":len(before_qids),
+                  "added_evidence_qids":len(added),
+                  "after_evidence_qids":len(after["records"]),
+                  "status_counts":dict(counts),
+                  "strict_p364_languages":dict(original),
+                  "general_only_p407_count":p407,
+                  "waves":waves,
+                  "pending":waves[-1]["pending"]}
+          (root/"summary.json").write_text(json.dumps(result,indent=2,sort_keys=True)+"\n")
+          print("INDIA_LANGUAGE_SOURCE_WAVE="+json.dumps(result,sort_keys=True),flush=True)
+          if result["after_evidence_qids"]!=result["before_evidence_qids"]+len(added):
+              raise SystemExit("Unexpected modification of existing source checkpoint")
+          if len(added)>1500 or result["d1_reads"] or result["d1_writes"]:
+              raise SystemExit("Source-only wave exceeded guard")
+          PY
+
+      - name: Persist checked source results to dedicated automation branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="$RUNNER_TEMP/language-wave-state"
+          git fetch --no-tags origin refs/heads/automation/india-language-evidence
+          git worktree add --detach "$TARGET" FETCH_HEAD
+          mkdir -p "$TARGET/.automation"
+          cp data/generated/language-wave/checkpoint.json \
+             "$TARGET/.automation/india-language-evidence.json"
+          cd "$TARGET"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .automation/india-language-evidence.json
+          if git diff --cached --quiet; then
+              echo "INDIA_LANGUAGE_SOURCE_CHECKPOINT=unchanged"
+          else
+              git commit -m "data(source-only): advance verified Indian film-language evidence"
+              git push origin HEAD:refs/heads/automation/india-language-evidence
+              echo "INDIA_LANGUAGE_SOURCE_CHECKPOINT=advanced"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-film-language-1500-source-wave-20261019
+          path: |
+            data/generated/language-wave/summary.json
+            data/generated/language-wave/pass-*-report.json
+          retention-days: 30
+          if-no-files-found: warn
