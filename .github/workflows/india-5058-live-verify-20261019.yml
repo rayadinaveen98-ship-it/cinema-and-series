@@ -1,0 +1,36 @@
+name: India 5058 Films — Read-Only Live Verification
+
+on:
+  push:
+    branches: ["ops/india-3000-guarded-bulk-20261019"]
+    paths:
+      - ".github/workflows/india-5058-live-verify-20261019.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify live movie and series catalogue after 5058 new films
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,urllib.request
+          origin="https://cinema-and-series.rayadinaveen98.workers.dev"
+          for kind,path,minimum in [
+            ("movies","/api/movies?scope=all&limit=1&offset=0&meta=0&probe=post5058-20261019",41836),
+            ("series","/api/series?limit=1&offset=0&meta=0&probe=post5058-20261019",13380),
+          ]:
+            req=urllib.request.Request(origin+path,headers={"Accept":"application/json","User-Agent":"CinemaAndSeries-ReadOnly-After5058"})
+            with urllib.request.urlopen(req,timeout=25) as res:
+              data=json.load(res)
+              report={"section":kind,"http":res.status,"source":data.get("source"),
+                      "total":(data.get("pagination") or {}).get("total"),
+                      "rows":len(data.get(kind) or []),"meta":data.get("metadataLevel")}
+              print("INDIA_5058_LIVE="+json.dumps(report,sort_keys=True),flush=True)
+              assert report["http"]==200 and report["source"]=="d1" and report["rows"]==1
+              assert report["total"]>=minimum
+          PY
