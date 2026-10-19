@@ -1,0 +1,34 @@
+name: India 2115-Title Recovery — Read-Only Live Verification
+
+on:
+  push:
+    branches: ["ops/india-next-milestone-second-1000-20261019"]
+    paths:
+      - ".github/workflows/india-2115-titles-live-check-20261019.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Verify fresh live D1 catalogue totals after guarded 2115-title recovery
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+          origin="https://cinema-and-series.rayadinaveen98.workers.dev"
+          for kind,path,minimum in [
+            ("movies","/api/movies?scope=all&limit=1&offset=0&meta=0&probe=after2115-20261019",38893),
+            ("series","/api/series?limit=1&offset=0&meta=0&probe=after2115-20261019",13380)
+          ]:
+            req=urllib.request.Request(origin+path, headers={"Accept":"application/json","User-Agent":"CinemaAndSeries-After2115-ReadOnly"})
+            with urllib.request.urlopen(req,timeout=25) as res:
+              data=json.load(res)
+              result={"section":kind,"status":res.status,"source":data.get("source"),"total":(data.get("pagination") or {}).get("total"),"rows":len(data.get(kind) or []),"metadataLevel":data.get("metadataLevel")}
+              print("INDIA_2115_LIVE_CHECK="+json.dumps(result,sort_keys=True),flush=True)
+              assert result["status"]==200 and result["source"]=="d1" and result["rows"]==1
+              assert result["total"]>=minimum, "Unexpected live catalogue total after import"
+          PY
