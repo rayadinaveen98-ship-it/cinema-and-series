@@ -126,6 +126,9 @@ jobs:
               summary.write(f"Explicit film original-language (P364): **{report['strict_p364_original_language']}**\n\n")
               summary.write(f"General-language only (P407): **{report['general_p407_only_language']}**\n\n")
               summary.write(f"Pending: **{report['pending_qids']}**\n\n")
+              summary.write(f"Held incomplete film IDs: **{report['held_incomplete_film_entities']}**\n\n")
+              summary.write(f"Held incomplete language entities: **{report['held_incomplete_language_entities']}**\n\n")
+              summary.write(f"Source API defer/error: **{report['halted_reason'] or 'none'}**\n\n")
               summary.write("All proposals require separate production reconciliation and quality review.\n")
           PY
           fi
