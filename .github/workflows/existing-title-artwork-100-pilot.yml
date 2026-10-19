@@ -42,7 +42,7 @@ jobs:
         with: {node-version: "22"}
       - name: Verify source-only pilot test suite
         if: steps.guard.outputs.allowed == 'true'
-        run: python -m unittest tests.test_existing_title_artwork_pilot -v
+        run: python -m unittest tests.test_existing_title_artwork_pilot tests.test_existing_artwork_review_gallery -v
       - name: Bind existing D1 (no create, migration or data changes)
         if: steps.guard.outputs.allowed == 'true'
         shell: bash
@@ -123,6 +123,10 @@ jobs:
             --catalogue-titles "$ROOT/catalogue_titles.json" \
             --series-titles "$ROOT/series_titles.json" \
             --limit 100 --output "$ROOT/candidates.json"
+          python scripts/render_existing_artwork_review.py \
+            --input "$ROOT/candidates.json" \
+            --html "$ROOT/artwork-review-gallery.html" \
+            --csv "$ROOT/artwork-review-decisions.csv"
           python - <<'PY'
           import json, os
           from pathlib import Path
@@ -155,5 +159,7 @@ jobs:
           path: |
             data/generated/artwork-pilot/candidates.json
             data/generated/artwork-pilot/coverage-report.json
+            data/generated/artwork-pilot/artwork-review-gallery.html
+            data/generated/artwork-pilot/artwork-review-decisions.csv
           if-no-files-found: warn
           retention-days: 30
