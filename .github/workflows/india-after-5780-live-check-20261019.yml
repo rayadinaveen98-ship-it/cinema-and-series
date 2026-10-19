@@ -1,0 +1,31 @@
+name: India Films — Live Check After 5780 Verified Additions
+on:
+  push:
+    branches: ["ops/india-new-year-import-20261019"]
+    paths: [".github/workflows/india-after-5780-live-check-20261019.yml"]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Request uncached lightweight live movie and series pages
+        shell: bash
+        run: |
+          python - <<'PY'
+          import urllib.request,json
+          base="https://cinema-and-series.rayadinaveen98.workers.dev"
+          for kind,path,expected in [
+             ("movies","/api/movies?scope=all&limit=1&offset=0&meta=0&check=post5780-20261019",42558),
+             ("series","/api/series?limit=1&offset=0&meta=0&check=post5780-20261019",13380)
+          ]:
+             req=urllib.request.Request(base+path,headers={"Accept":"application/json","User-Agent":"CinemaAndSeries-Post5780ReadOnlyCheck"})
+             with urllib.request.urlopen(req,timeout=20) as r:
+                v=json.load(r)
+                info={"endpoint":kind,"http":r.status,"source":v.get("source"),
+                      "total":(v.get("pagination") or {}).get("total"),"rows":len(v.get(kind) or [])}
+                print("INDIA_5780_LIVE="+json.dumps(info,sort_keys=True),flush=True)
+                assert r.status==200 and info["source"]=="d1" and info["rows"]==1
+                assert info["total"]>=expected,"Unexpected total"
+          PY
