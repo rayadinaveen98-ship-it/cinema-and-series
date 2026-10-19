@@ -1,12 +1,32 @@
 name: Phase 2 browser QA (mocked APIs)
 
+# Release-blocking interaction tests now run for active V1 changes, not
+# only the three historical feature branches. APIs are locally mocked: 0 D1 reads.
 on:
   push:
-    branches:
-      - "feature/phase2-pr-b-accessibility-20261018"
-      - "feature/phase2-pr-c-visual-details-20261018"
-      - "feature/phase2-pr-d-d1-read-reduction-20261018"
+    branches: [main]
+    paths:
+      - "src/**"
+      - "worker/**"
+      - "tests/browser/**"
+      - "playwright.config.mjs"
+      - "package.json"
+      - "index.html"
+      - ".github/workflows/phase2-browser-qa.yml"
+  pull_request:
+    paths:
+      - "src/**"
+      - "worker/**"
+      - "tests/browser/**"
+      - "playwright.config.mjs"
+      - "package.json"
+      - "index.html"
+      - ".github/workflows/phase2-browser-qa.yml"
   workflow_dispatch:
+
+concurrency:
+  group: browser-qa-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -14,7 +34,7 @@ permissions:
 jobs:
   browser:
     runs-on: ubuntu-latest
-    timeout-minutes: 18
+    timeout-minutes: 24
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
