@@ -24,13 +24,20 @@ on:
           - rotate
           - all-historical
       max_titles:
-        description: Maximum titles to import this run (hard capped at 4000)
+        description: Maximum titles to acquire (hard capped at 4000)
         required: true
         default: "4000"
         type: string
+      apply_to_production:
+        description: Explicitly permit guarded D1 import for this manual run
+        required: true
+        default: false
+        type: boolean
 
+# Serialize deliberate production imports with the Oct 20 migration/recovery.
+# Routine push/schedule acquisition remains source-only and consumes no D1.
 concurrency:
-  group: wikipedia-year-catalogue
+  group: india-catalogue-autopilot
   cancel-in-progress: false
 
 jobs:
@@ -120,15 +127,19 @@ jobs:
             data/generated/wikipedia-year-catalogue-upsert.sql
           retention-days: 14
 
-      - name: Check Cloudflare connection
+      - name: Gate production database access behind explicit manual opt-in
         id: cloudflare
         shell: bash
         run: |
-          if [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
+          if [[ "$GITHUB_EVENT_NAME" != "workflow_dispatch" || "${{ inputs.apply_to_production }}" != "true" ]]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Source-only acquisition: D1 access disabled for scheduled/push jobs and unapproved manual runs."
+          elif [[ -n "$CLOUDFLARE_ACCOUNT_ID" && -n "$CLOUDFLARE_API_TOKEN" ]]; then
             echo "ready=true" >> "$GITHUB_OUTPUT"
+            echo "Explicitly approved manual production import; D1 operations enabled."
           else
             echo "ready=false" >> "$GITHUB_OUTPUT"
-            echo "Cloudflare credentials unavailable; catalogue artifact retained but D1 import skipped."
+            echo "Cloudflare credentials unavailable; source artefact retained without D1 import."
           fi
 
       - uses: actions/setup-node@v4
