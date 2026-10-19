@@ -16,7 +16,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections import Counter
+from collections import Counter, deque
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
@@ -150,14 +150,42 @@ def evidence_for(film: dict, entity: dict, language_entities: dict) -> dict:
     return output
 
 
+def select_pending_films(films: list[dict], existing: dict, limit: int,
+                         selection: str = "recent") -> list[dict]:
+    """Use predictable source ordering without repeatedly neglecting older decades."""
+    if selection not in ("recent", "decade-balanced"):
+        raise ValueError("Unsupported film-language source selection")
+    pending = [film for film in films if film["qid"] not in existing]
+    if selection == "recent":
+        return pending[:limit]
+    by_decade: dict[int, deque] = {}
+    for film in pending:
+        year = int(film["year"])
+        by_decade.setdefault((year // 10) * 10, deque()).append(film)
+    decades = sorted(by_decade, reverse=True)
+    selected: list[dict] = []
+    while len(selected) < limit:
+        progress = False
+        for decade in decades:
+            if not by_decade[decade]:
+                continue
+            selected.append(by_decade[decade].popleft())
+            progress = True
+            if len(selected) == limit:
+                break
+        if not progress:
+            break
+    return selected
+
+
 def run(stage: Path, checkpoint: Path, max_films: int, out_report: Path,
         out_proposals: Path, fetcher: Callable[[list[str], str], dict] = fetch_entities,
-        cooldown: float = 0.5) -> dict:
+        cooldown: float = 0.5, selection: str = "recent") -> dict:
     if not 1 <= max_films <= MAX_PER_RUN:
         raise ValueError("Source batch outside 1..500 bound")
     films = load_films(stage)
     state = read_state(checkpoint)
-    pending = [film for film in films if film["qid"] not in state["records"]][:max_films]
+    pending = select_pending_films(films, state["records"], max_films, selection)
     checked = 0
     halted = None
     held_identity = 0
@@ -218,6 +246,9 @@ def run(stage: Path, checkpoint: Path, max_films: int, out_report: Path,
                 "detail": str(exc)[:140]}, sort_keys=True), flush=True)
             break
     records = [state["records"][f["qid"]] for f in films if f["qid"] in state["records"]]
+    checked_by_decade = dict(sorted(Counter(
+        (int(row["year"]) // 10) * 10 for row in records
+    ).items()))
     summary = dict(Counter(row["status"] for row in records))
     proposals = [row for row in records if row["status"] == "single_language_evidence"]
     # A single P407 claim is useful discovery evidence, but not a film's
@@ -229,6 +260,7 @@ def run(stage: Path, checkpoint: Path, max_films: int, out_report: Path,
         "source": "Wikidata CC0 P364/P407 film-language statements",
         "production_d1_access": False, "production_updates": 0,
         "stage_qualified_qids": len(films), "checked_this_run": checked,
+        "source_selection": selection, "checked_by_decade": checked_by_decade,
         "cumulative_checked_qids": len(records),
         "pending_qids": len(films) - len(records),
         "proposed_single_language": len(proposals),
@@ -250,11 +282,12 @@ def main() -> int:
     parser.add_argument("--stage", type=Path, required=True)
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--max-films", type=int, default=400)
+    parser.add_argument("--selection", choices=("recent", "decade-balanced"), default="recent")
     parser.add_argument("--out-report", type=Path, required=True)
     parser.add_argument("--out-proposals", type=Path, required=True)
     args = parser.parse_args()
     result = run(args.stage, args.checkpoint, args.max_films,
-                 args.out_report, args.out_proposals)
+                 args.out_report, args.out_proposals, selection=args.selection)
     # A throttled source-only pass is a clean deferral; the checkpoint is
     # unchanged for failed batches, and the scheduled job will resume later.
     # Unexpected/malformed responses still fail CI visibly.
