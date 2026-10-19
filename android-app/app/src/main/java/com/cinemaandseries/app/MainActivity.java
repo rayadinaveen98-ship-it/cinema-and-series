@@ -8,6 +8,9 @@ import android.graphics.Color;
 import android.graphics.Bitmap;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Build;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -40,6 +43,7 @@ public class MainActivity extends Activity {
     private View retryScreen;
     private boolean mainFrameFailed;
     private boolean backPending;
+    private OnBackInvokedCallback systemBackCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -91,6 +95,15 @@ public class MainActivity extends Activity {
             webView.reload();
         });
         setContentView(root);
+
+        // Android 13+ does not reliably route gesture Back through the legacy
+        // Activity.onBackPressed override. Register the platform callback,
+        // while retaining onBackPressed for Android 7-12 devices.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            systemBackCallback = this::handleBack;
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(
+                OnBackInvokedDispatcher.PRIORITY_DEFAULT, systemBackCallback);
+        }
 
         WebSettings settings = webView.getSettings();
         settings.setJavaScriptEnabled(true);
@@ -191,6 +204,10 @@ public class MainActivity extends Activity {
 
     @Override
     public void onBackPressed() {
+        handleBack();
+    }
+
+    private void handleBack() {
         if (backPending) return;
         if (webView == null || retryScreen.getVisibility() == View.VISIBLE
                 || !isAppUrl(Uri.parse(webView.getUrl() == null ? "" : webView.getUrl()))) {
@@ -207,6 +224,10 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onDestroy() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && systemBackCallback != null) {
+            getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback(systemBackCallback);
+            systemBackCallback = null;
+        }
         if (webView != null) {
             webView.stopLoading();
             webView.setWebViewClient(null);

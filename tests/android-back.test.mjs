@@ -46,5 +46,9 @@ test("Android wrapper dispatches Back before history without a JS-to-native brid
   assert.match(java, /request\.isForMainFrame\(\)/);
   assert.match(java, /showLoadFailure\(\)/);
   assert.match(java, /retry\.setOnClickListener/);
+  assert.match(java, /registerOnBackInvokedCallback\(/);
+  assert.match(java, /unregisterOnBackInvokedCallback\(/);
+  assert.match(java, /Build.VERSION_CODES.TIRAMISU/);
+  assert.match(java, /private void handleBack\(\)/);
   assert.doesNotMatch(java, /addJavascriptInterface\(/);
 });
