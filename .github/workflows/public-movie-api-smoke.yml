@@ -28,18 +28,21 @@ jobs:
           import urllib.error
           import urllib.request
 
+          # Keep one full-metadata /api/movies page to validate the legacy API contract.
+          # All remaining catalogue pages check rows/pagination without repeating
+          # the catalogue-wide statistics and facet aggregation queries.
           paths = (
               "/api/health",
               "/api/catalogue-stats",
-              "/api/movies?scope=all&limit=1&offset=0",
+              "/api/movies?scope=all&limit=1&offset=0&meta=0",
               "/api/movies?scope=all&limit=60&offset=0",
-              "/api/movies?scope=all&limit=60&offset=60",
-              "/api/movies?scope=all&country=IN&limit=10&offset=0",
-              "/api/movies?scope=all&country=IN&year=2024&limit=40&offset=0",
-              "/api/series?limit=60&offset=0",
-              "/api/series?limit=60&offset=60",
-              "/api/movies?scope=all&official=1&limit=1&offset=0",
-              "/api/movies?scope=all&official=1&limit=200&offset=0",
+              "/api/movies?scope=all&limit=60&offset=60&meta=0",
+              "/api/movies?scope=all&country=IN&limit=10&offset=0&meta=0",
+              "/api/movies?scope=all&country=IN&year=2024&limit=40&offset=0&meta=0",
+              "/api/series?limit=60&offset=0&meta=0",
+              "/api/series?limit=60&offset=60&meta=0",
+              "/api/movies?scope=all&official=1&limit=1&offset=0&meta=0",
+              "/api/movies?scope=all&official=1&limit=200&offset=0&meta=0",
           )
           root = os.environ["BASE_URL"].rstrip("/")
           failures = []
@@ -81,12 +84,18 @@ jobs:
                       "detail": str(exc)[:180],
                   }), flush=True)
                   failures.append(path)
+          # Page-only responses must retain source, records and filtered counts,
+          # but must not trigger expensive global facets/stats.
+          for path, payload in pages.items():
+              if "meta=0" in path and path.startswith(("/api/movies", "/api/series")):
+                  if payload.get("metadataLevel") != "page-only" or "facets" in payload or "stats" in payload:
+                      failures.append(f"page_only_metadata_contract:{path}")
           # Load-more must return new titles, never the same first page again.
           for kind, first, second in (
               ("movies", "/api/movies?scope=all&limit=60&offset=0",
-               "/api/movies?scope=all&limit=60&offset=60"),
-              ("series", "/api/series?limit=60&offset=0",
-               "/api/series?limit=60&offset=60"),
+               "/api/movies?scope=all&limit=60&offset=60&meta=0"),
+              ("series", "/api/series?limit=60&offset=0&meta=0",
+               "/api/series?limit=60&offset=60&meta=0"),
           ):
               if first not in pages or second not in pages:
                   continue
@@ -99,12 +108,12 @@ jobs:
                       ids_a.intersection(ids_b) or
                       (pages[second].get("pagination") or {}).get("offset") != 60):
                   failures.append(f"{kind}_pagination_overlap_or_missing_rows")
-          india = pages.get("/api/movies?scope=all&country=IN&limit=10&offset=0")
+          india = pages.get("/api/movies?scope=all&country=IN&limit=10&offset=0&meta=0")
           if india and any(row.get("countryCode") != "IN" for row in india.get("movies") or []):
               failures.append("india_country_filter_incorrect")
           # Year-only sourced films must carry the correct origin and never
           # masquerade as an officially verified release date.
-          year_page = pages.get("/api/movies?scope=all&country=IN&year=2024&limit=40&offset=0")
+          year_page = pages.get("/api/movies?scope=all&country=IN&year=2024&limit=40&offset=0&meta=0")
           if year_page:
               for film in year_page.get("movies") or []:
                   if film.get("releaseSource") == "wikidata":
