@@ -1,0 +1,35 @@
+name: India 100-Title Follow-up — Read-Only Live Verification
+
+on:
+  push:
+    branches: ["ops/india-next-milestone-100-title-followup-20261019"]
+    paths:
+      - ".github/workflows/india-100-followup-live-check-20261019.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Verify live catalogue totals after 115-title import
+        shell: bash
+        run: |
+          python - <<'PY'
+          import urllib.request,json
+          root="https://cinema-and-series.rayadinaveen98.workers.dev"
+          for kind,path in [
+            ("movies","/api/movies?scope=all&limit=1&offset=0&meta=0&probe=after115-20261019"),
+            ("series","/api/series?limit=1&offset=0&meta=0&probe=after115-20261019"),
+          ]:
+            req=urllib.request.Request(root+path,headers={"Accept":"application/json","User-Agent":"CinemaAndSeries-After115-ReadOnlyCheck"})
+            with urllib.request.urlopen(req,timeout=20) as res:
+              data=json.load(res)
+              info={"section":kind,"http":res.status,"source":data.get("source"),"total":(data.get("pagination") or {}).get("total"),
+                    "returned":len(data.get(kind) or []),"meta":data.get("metadataLevel")}
+              print("INDIA_115_LIVE_VERIFIED="+json.dumps(info,sort_keys=True),flush=True)
+              assert res.status==200 and info["source"]=="d1" and info["returned"]==1
+              if kind=="movies":assert info["total"]>=36893,"Movie total lower than expected"
+          PY
