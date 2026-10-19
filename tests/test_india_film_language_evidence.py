@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from india_film_language_evidence import (
-    claim_qids, evidence_for, run, read_state, MAX_PER_RUN,
+    claim_qids, evidence_for, run, read_state, select_pending_films, MAX_PER_RUN,
 )
 
 
@@ -122,6 +122,52 @@ class SourceLanguageTests(unittest.TestCase):
             self.assertEqual(report["proposed_single_language"], 1)
             self.assertEqual(report["strict_p364_original_language"], 0)
             self.assertEqual(report["general_p407_only_language"], 1)
+            self.assertEqual(report["production_updates"], 0)
+
+    def test_decade_balanced_source_selection_covers_old_and_new_films(self):
+        films = [
+            {"qid": "Q101", "title": "New A", "year": 2025},
+            {"qid": "Q102", "title": "New B", "year": 2024},
+            {"qid": "Q103", "title": "New C", "year": 2023},
+            {"qid": "Q104", "title": "Classic A", "year": 1988},
+            {"qid": "Q105", "title": "Classic B", "year": 1980},
+            {"qid": "Q106", "title": "Vintage", "year": 1952},
+        ]
+        recent = select_pending_films(films, {}, 4, "recent")
+        self.assertEqual([x["qid"] for x in recent], ["Q101", "Q102", "Q103", "Q104"])
+        balanced = select_pending_films(films, {}, 4, "decade-balanced")
+        self.assertEqual([x["qid"] for x in balanced], ["Q101", "Q104", "Q106", "Q102"])
+        excluded = select_pending_films(films, {"Q101": {"status": "already_checked"}}, 3, "decade-balanced")
+        self.assertEqual([x["qid"] for x in excluded], ["Q102", "Q104", "Q106"])
+        self.assertEqual(len(select_pending_films(films, {}, 50, "decade-balanced")), 6)
+        with self.assertRaises(ValueError):
+            select_pending_films(films, {}, 5, "unknown")
+
+    def test_decade_balanced_run_preserves_identity_and_existing_checkpoint(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            stage = root / "stage.sqlite"
+            with sqlite3.connect(stage) as db:
+                db.execute("CREATE TABLE films (qid TEXT,title TEXT,year INTEGER,"
+                           "year_conflict INTEGER,title_conflict INTEGER)")
+                db.executemany("INSERT INTO films VALUES (?,?,?,?,?)", [
+                    ("Q701", "Modern", 2025, 0, 0),
+                    ("Q702", "Recent", 2024, 0, 0),
+                    ("Q703", "Vintage", 1952, 0, 0),
+                ])
+            def fetcher(ids, props):
+                if props == "claims":
+                    return {qid: {"id": qid, "claims": {"P364": [statement("Q999")]}}
+                            for qid in ids}
+                return {"Q999": labels("Telugu")}
+            checkpoint = root / "checkpoint.json"
+            report = run(stage, checkpoint, 2, root / "report.json",
+                         root / "proposals.json", fetcher=fetcher, cooldown=0,
+                         selection="decade-balanced")
+            self.assertEqual(report["checked_this_run"], 2)
+            self.assertEqual(report["source_selection"], "decade-balanced")
+            self.assertEqual(report["checked_by_decade"], {1950: 1, 2020: 1})
+            self.assertEqual(set(read_state(checkpoint)["records"]), {"Q701", "Q703"})
             self.assertEqual(report["production_updates"], 0)
 
     def test_rate_limit_does_not_mark_pending_qids_checked(self):
