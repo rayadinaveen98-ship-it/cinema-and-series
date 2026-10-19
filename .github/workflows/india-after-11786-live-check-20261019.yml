@@ -1,0 +1,32 @@
+name: Cinema & Series — Live Catalogue Check After 11786 New Films
+on:
+  push:
+    branches: ["ops/india-1940s-import-20261019"]
+    paths: [".github/workflows/india-after-11786-live-check-20261019.yml"]
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Verify small uncached public movie and series pages
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,urllib.request,urllib.error
+          base="https://cinema-and-series.rayadinaveen98.workers.dev"
+          for name,path,expected in [
+             ("movies","/api/movies?scope=all&limit=1&offset=0&meta=0&check=after11786-20261019",48564),
+             ("series","/api/series?limit=1&offset=0&meta=0&check=after11786-20261019",13380)
+          ]:
+            req=urllib.request.Request(base+path,headers={"Accept":"application/json","User-Agent":"CinemaAndSeries-Post11786-ReadOnlyCheck"})
+            with urllib.request.urlopen(req,timeout=25) as res:
+              data=json.load(res)
+              result={"section":name,"http":res.status,"source":data.get("source"),
+                      "total":(data.get("pagination") or {}).get("total"),
+                      "rows":len(data.get(name) or []),"metadataLevel":data.get("metadataLevel")}
+              print("INDIA_11786_LIVE="+json.dumps(result,sort_keys=True),flush=True)
+              if res.status!=200 or result["source"]!="d1" or result["rows"]!=1 or result["total"]<expected:
+                 raise SystemExit("Live catalogue verification failed")
+          PY
