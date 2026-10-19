@@ -123,6 +123,48 @@ class SourceLanguageTests(unittest.TestCase):
             self.assertEqual(report["pending_qids"], 1)
             self.assertFalse(read_state(checkpoint)["records"])
 
+    def test_partial_or_missing_wikidata_entity_does_not_poison_checkpoint(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            stage = root / "stage.sqlite"
+            with sqlite3.connect(stage) as db:
+                db.execute("CREATE TABLE films (qid TEXT,title TEXT,year INTEGER,"
+                           "year_conflict INTEGER,title_conflict INTEGER)")
+                db.executemany("INSERT INTO films VALUES (?,?,?,?,?)", [
+                    ("Q211", "One", 2024, 0, 0),
+                    ("Q212", "Two", 2024, 0, 0),
+                ])
+            for missing in (True, False):
+                def partial_fetch(ids, props):
+                    if missing:
+                        return {"Q211": {"claims": {"P364": [statement("Q999")]}}}
+                    return {
+                        "Q211": {"claims": {"P364": [statement("Q999")]}},
+                        "Q212": {"missing": "", "id": "Q212"},
+                    }
+                checkpoint = root / "checkpoint.json"
+                report = run(stage, checkpoint, 2, root / "report.json",
+                             root / "proposals.json", fetcher=partial_fetch, cooldown=0)
+                self.assertEqual(report["checked_this_run"], 0)
+                self.assertEqual(report["pending_qids"], 2)
+                self.assertEqual(report["halted_reason"], "source_error_ValueError")
+                self.assertEqual(read_state(checkpoint)["records"], {})
+
+    def test_wikidata_error_payload_is_not_interpreted_as_empty_language(self):
+        from unittest.mock import patch
+        from india_film_language_evidence import fetch_entities
+        class FakeResponse:
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                return False
+            def read(self, limit):
+                return b'{"error":{"code":"maxlag","info":"Server lag"}}'
+        with patch("india_film_language_evidence.urllib.request.urlopen",
+                   return_value=FakeResponse()):
+            with self.assertRaisesRegex(ValueError, "maxlag"):
+                fetch_entities(["Q123"], "claims")
+
     def test_run_limits_are_enforced(self):
         with self.assertRaises(ValueError):
             run(Path("unused"), Path("unused"), MAX_PER_RUN + 1,

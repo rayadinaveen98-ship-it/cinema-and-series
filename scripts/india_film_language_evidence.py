@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Collect Wikidata film-language claims without reading or writing Cloudflare D1.
 
-Uses the existing conflict-checked 1990-2025 Wikidata SQLite stage. P364 is
+Uses the existing conflict-checked Wikidata film-identity staging SQLite file. P364 is
 preferred for films, P407 is used only if P364 is absent; conflicting or
 multi-language evidence is held for human review, never guessed. Output is an
 evidence queue, NOT an update file and NOT verified/official metadata.
@@ -78,7 +78,7 @@ def fetch_entities(qids: list[str], props: str) -> dict:
         raise ValueError("Unsafe Wikidata entity lookup batch")
     params = urllib.parse.urlencode({
         "action": "wbgetentities", "ids": "|".join(qids),
-        "props": props, "languages": "en", "format": "json",
+        "props": props, "languages": "en", "format": "json", "maxlag": "5",
     })
     req = urllib.request.Request(
         API + "?" + params,
@@ -86,9 +86,16 @@ def fetch_entities(qids: list[str], props: str) -> dict:
     )
     with urllib.request.urlopen(req, timeout=35) as response:
         payload = json.loads(response.read(5_000_000).decode("utf-8"))
+    if not isinstance(payload, dict):
+        raise ValueError("Invalid Wikidata JSON response")
+    if isinstance(payload.get("error"), dict):
+        raise ValueError("Wikidata API error: " + str(payload["error"].get("code") or "unknown"))
     if not isinstance(payload.get("entities"), dict):
         raise ValueError("Invalid Wikidata entities response")
-    return payload["entities"]
+    received = payload["entities"]
+    if set(qids) - set(received):
+        raise ValueError("Wikidata response omitted requested entity IDs")
+    return received
 
 
 def claim_qids(entity: dict, property_id: str) -> set[str]:
@@ -150,6 +157,8 @@ def run(stage: Path, checkpoint: Path, max_films: int, out_report: Path,
         ids = [item["qid"] for item in batch]
         try:
             entities = fetcher(ids, "claims")
+            if set(ids) - set(entities):
+                raise ValueError("Incomplete Wikidata film-claim batch; checkpoint unchanged")
             needed = set()
             for item in batch:
                 entity = entities.get(item["qid"]) or {}
@@ -160,6 +169,12 @@ def run(stage: Path, checkpoint: Path, max_films: int, out_report: Path,
                 subset = sorted(needed)[index:index + 50]
                 if subset:
                     labels.update(fetcher(subset, "labels"))
+            # Never checkpoint a missing/deleted film entity as a film with
+            # genuinely missing language metadata.
+            if any(not isinstance(entities[item["qid"]], dict)
+                   or entities[item["qid"]].get("missing") is not None
+                   for item in batch):
+                raise ValueError("Missing Wikidata film identity; checkpoint unchanged")
             for film in batch:
                 state["records"][film["qid"]] = evidence_for(
                     film, entities.get(film["qid"]) or {}, labels
