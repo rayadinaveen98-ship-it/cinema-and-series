@@ -121,14 +121,19 @@ jobs:
                           time.sleep(3)
               raise RuntimeError(f"live smoke failed for {path}: {last_error}")
 
+          # Read the verified film roster without repeating six catalogue-wide
+          # metadata/aggregate queries on every 200-record pagination request.
+          # Full stats were already verified on the first catalogue page.
           def get_all_official_movies():
               movies = []
               offset = 0
               expected_total = None
               while True:
-                  payload = get_json(f"/api/movies?scope=all&official=1&limit=200&offset={offset}")
+                  payload = get_json(f"/api/movies?scope=all&official=1&limit=200&offset={offset}&meta=0")
                   if payload.get("source") != "d1":
                       raise RuntimeError(f"official catalogue is not backed by D1: {payload.get('source')}")
+                  if payload.get("metadataLevel") != "page-only":
+                      raise RuntimeError("official catalogue pagination unexpectedly requested global metadata")
                   page = payload.get("movies") or []
                   pagination = payload.get("pagination") or {}
                   if expected_total is None:
