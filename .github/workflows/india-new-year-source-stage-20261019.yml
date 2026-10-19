@@ -1,0 +1,65 @@
+name: India Film Growth — New-Year Source Staging (No D1)
+on:
+  push:
+    branches: ["ops/india-new-year-source-stage-20261019"]
+    paths: [".github/workflows/india-new-year-source-stage-20261019.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate source-stage parser before use
+        run: python -m unittest tests.test_wikidata_bulk_stage -v
+      - name: Restore completed Wikidata stage as starting point
+        shell: bash
+        run: |
+          mkdir -p data/generated/new-year-stage
+          git fetch --no-tags origin refs/heads/automation/wikidata-bulk-stage
+          git show FETCH_HEAD:.automation/wikidata-bulk-stage.sqlite > data/generated/new-year-stage/stage.sqlite
+          test -s data/generated/new-year-stage/stage.sqlite
+      - name: Collect source-backed 2026 and historical 1980s film claims
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, sqlite3, sys
+          from pathlib import Path
+          sys.path.insert(0, "scripts")
+          from wikidata_bulk_stage import connect, run_stage
+          root=Path("data/generated/new-year-stage")
+          dbpath=root/"stage.sqlite"
+          with connect(dbpath) as db:
+            before={row[0] for row in db.execute("SELECT qid FROM films")}
+            report_recent=run_stage(db,2026,2026,4)
+            print("NEW_YEAR_STAGE_2026="+json.dumps({key:report_recent.get(key) for key in ["new_shard_results","stopped_reason","completed_shards","source_qualified_unconflicted"]},sort_keys=True),flush=True)
+            if (report_recent.get("stopped_reason") or "").startswith("wikidata_rate_limited"):
+              report_historical={"stopped_reason":"deferred_after_recent_rate_limit","new_shard_results":[]}
+            else:
+              report_historical=run_stage(db,1980,1989,8)
+            print("NEW_YEAR_STAGE_HISTORY="+json.dumps({key:report_historical.get(key) for key in ["new_shard_results","stopped_reason","completed_shards","source_qualified_unconflicted"]},sort_keys=True),flush=True)
+            after={row[0] for row in db.execute("SELECT qid FROM films")}
+            new=sorted(after-before)
+            prepared={"before_staged_qids":len(before),"after_staged_qids":len(after),
+              "new_qids":len(new),"new_qid_sample":new[:10],
+              "source_2026":report_recent.get("stopped_reason"),
+              "source_1980s":report_historical.get("stopped_reason"),
+              "new_2026_shards":len(report_recent.get("new_shard_results") or []),
+              "new_1980s_shards":len(report_historical.get("new_shard_results") or []),
+              "d1_reads":0,"d1_writes":0,"production_imported":0}
+            (root/"stage-summary.json").write_text(json.dumps(prepared,indent=2)+"\n")
+            print("INDIA_NEW_YEAR_STAGE="+json.dumps(prepared,sort_keys=True),flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: indian-films-new-year-source-stage-20261019
+          path: data/generated/new-year-stage/
+          retention-days: 14
+          if-no-files-found: error
