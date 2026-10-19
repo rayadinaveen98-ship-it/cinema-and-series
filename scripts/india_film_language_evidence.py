@@ -173,7 +173,10 @@ def run(stage: Path, checkpoint: Path, max_films: int, out_report: Path,
             needed = set()
             for item in batch:
                 entity = entities.get(item["qid"])
-                if not isinstance(entity, dict) or entity.get("missing") is not None:
+                if (not isinstance(entity, dict) or entity.get("missing") is not None
+                        or (entity.get("id") and entity["id"] != item["qid"])):
+                    # Reject aliased/redirected QIDs unless revalidated under
+                    # their own identity in a separate source-check pass.
                     held_identity += 1
                     continue
                 available[item["qid"]] = entity
