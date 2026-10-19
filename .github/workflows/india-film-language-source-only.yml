@@ -110,6 +110,30 @@ jobs:
             git push origin HEAD:refs/heads/automation/india-language-evidence
           fi
 
+      - name: Audit original-language coverage by decade after collection (NO D1)
+        shell: bash
+        run: |
+          python scripts/audit_india_film_language_coverage.py \
+            --stage data/generated/india-language/film-stage.sqlite \
+            --checkpoint data/generated/india-language/checkpoint.json \
+            --out data/generated/india-language/coverage-report.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads(Path("data/generated/india-language/coverage-report.json").read_text(encoding="utf-8"))
+          if not (report["source_only"] and report["d1_reads"] == 0 and report["d1_writes"] == 0):
+              raise SystemExit("Expected an offline, source-only coverage audit")
+          held = sum(item["count"] for item in report["held_for_review"].values())
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## Indian film-language coverage by decade\n\n")
+              summary.write("Source checkpoint only — **not** production catalogue updates or official verification.\n\n")
+              summary.write("| Decade | Staged films | Reviewed | Original language (P364) | P364 coverage |\n")
+              summary.write("|---|---:|---:|---:|---:|\n")
+              for decade, item in report["by_decade"].items():
+                  summary.write(f"| {decade}s | {item['source_films']:,} | {item['reviewed_identities']:,} | {item['strict_original_language']:,} | {item['coverage_pct']:.2f}% |\n")
+              summary.write(f"\nIdentity mismatches held for review: **{held}**.\n")
+          PY
+
       - name: Summarize proposals without claiming official verification
         if: always()
         shell: bash
@@ -143,5 +167,6 @@ jobs:
           path: |
             data/generated/india-language/report.json
             data/generated/india-language/proposals.json
+            data/generated/india-language/coverage-report.json
           if-no-files-found: warn
           retention-days: 30
