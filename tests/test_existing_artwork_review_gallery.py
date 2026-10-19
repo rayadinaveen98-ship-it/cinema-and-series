@@ -71,7 +71,7 @@ class ExistingArtworkReviewGalleryTests(unittest.TestCase):
         self.assertEqual(image_shape({"width": 0, "height": 1000}), "unknown")
         self.assertEqual(image_shape({}), "unknown")
         self.assertEqual(image_shape({"width": "nan", "height": 1000}), "unknown")
-        self.assertNotIn("verified theatrical poster", render_html(pilot()).lower())
+        self.assertIn("NOT verified theatrical posters", render_html(pilot()))
 
     def test_rejects_unsafe_pilot_and_identity_drift(self):
         for prop, value in (("read_only", False), ("publication_performed", True),
