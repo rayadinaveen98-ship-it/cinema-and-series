@@ -165,7 +165,7 @@ class SourceLanguageTests(unittest.TestCase):
                         "Q211": {"claims": {"P364": [statement("Q999")]}},
                         "Q212": {"missing": "", "id": "Q212"},
                     }
-                checkpoint = root / "checkpoint.json"
+                checkpoint = root / f"checkpoint-{missing}.json"
                 report = run(stage, checkpoint, 2, root / "report.json",
                              root / "proposals.json", fetcher=partial_fetch, cooldown=0)
                 self.assertEqual(report["checked_this_run"], 1)
