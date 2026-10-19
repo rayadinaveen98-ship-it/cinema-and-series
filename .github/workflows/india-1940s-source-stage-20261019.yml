@@ -1,0 +1,55 @@
+name: India Films — 1940s Trusted-Source Discovery (No D1)
+on:
+  push:
+    branches: ["ops/india-1940s-source-stage-20261019"]
+    paths: [".github/workflows/india-1940s-source-stage-20261019.yml"]
+permissions:
+  contents: read
+  actions: read
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - name: Unit-test Wikidata source parser and checkpoint rules
+        run: python -m unittest tests.test_wikidata_bulk_stage -v
+      - name: Restore previous complete 2026/1980s source stage
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-1940s-stage
+          gh run download 39207272454 --repo "$GITHUB_REPOSITORY" \
+            --name india-1950s-cc0-stage-20261019 \
+            --dir data/generated/india-1940s-stage
+          test -s data/generated/india-1940s-stage/stage.sqlite
+      - name: Stage 1940-1949 film/country/year Wikidata claims, no D1
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"scripts")
+          from wikidata_bulk_stage import connect,run_stage
+          root=Path("data/generated/india-1940s-stage")
+          with connect(root/"stage.sqlite") as db:
+            prior={q[0] for q in db.execute("SELECT qid FROM films")}
+            result=run_stage(db,1940,1949,40)
+            afterward={q[0] for q in db.execute("SELECT qid FROM films")}
+            report={"new_qids":len(afterward-prior),"new_shards":len(result["new_shard_results"]),
+                "completed_shards":result["completed_shards"],"stopped_reason":result["stopped_reason"],
+                "all_shards_completed":result["all_shards_completed"],"valid_source_films":result["source_qualified_unconflicted"],
+                "years":[1940,1949],"d1_reads":0,"d1_writes":0}
+            (root/"stage-report.json").write_text(json.dumps(report,indent=2)+"\n")
+            print("INDIA_1940S_SOURCE_STAGE="+json.dumps(report,sort_keys=True),flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-1940s-cc0-stage-20261019
+          path: data/generated/india-1940s-stage/
+          if-no-files-found: error
+          retention-days: 14
