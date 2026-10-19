@@ -1,0 +1,54 @@
+name: D1 Reset Check — Read Only 2026-10-19
+
+on:
+  push:
+    branches: ["chore/d1-reset-readonly-probe-20261019"]
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Probe two small uncached production catalogue pages
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, urllib.request, urllib.error
+          root = "https://cinema-and-series.rayadinaveen98.workers.dev"
+          cases = [
+            ("health", "/api/health"),
+            ("movie", "/api/movies?scope=all&limit=1&offset=0&meta=0&probe=reset20261019-01"),
+            ("series", "/api/series?limit=1&offset=0&meta=0&probe=reset20261019-01"),
+          ]
+          failures = 0
+          for kind, path in cases:
+            req = urllib.request.Request(root + path, headers={"Accept": "application/json", "Cache-Control": "no-cache", "User-Agent": "CinemaAndSeries-ReadOnly-D1Reset/20261019"})
+            try:
+              with urllib.request.urlopen(req, timeout=20) as res:
+                status, body = res.status, res.read(24000)
+            except urllib.error.HTTPError as exc:
+              status, body = exc.code, exc.read(24000)
+            except Exception as exc:
+              status, body = 0, str(exc).encode()
+            try:
+              data = json.loads(body)
+            except Exception:
+              data = {"error": body.decode(errors="replace")[:400]}
+            report = {"kind": kind, "http": status, "error": data.get("error"), "retryAt": data.get("retryAt"), "source": data.get("source")}
+            if kind == "health":
+              report.update({"ok": data.get("ok"), "database": data.get("database")})
+              ok = status == 200 and data.get("ok") is True and data.get("database") is True
+            else:
+              rows = data.get("movies" if kind == "movie" else "series")
+              page = data.get("pagination") or {}
+              report.update({"rows": len(rows) if isinstance(rows, list) else None, "catalogueTotal": page.get("total"), "metadataLevel": data.get("metadataLevel")})
+              ok = status == 200 and data.get("source") == "d1" and isinstance(rows, list)
+            print("D1_RESET_CHECK=" + json.dumps(report, sort_keys=True), flush=True)
+            if not ok: failures += 1
+          if failures:
+            raise SystemExit("Read-only D1 reset check failed for %s endpoint(s)" % failures)
+          print("D1_RESET_CHECK_SUCCESS=health,movies,series", flush=True)
+          PY
