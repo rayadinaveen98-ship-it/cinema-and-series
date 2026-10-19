@@ -1,0 +1,71 @@
+name: India Film Languages — Source Evidence Coverage Audit
+
+on:
+  push:
+    branches: [main, "feature/p2-film-language-decade-coverage-audit"]
+    paths:
+      - ".github/workflows/india-film-language-coverage-audit.yml"
+      - "scripts/audit_india_film_language_coverage.py"
+      - "tests/test_audit_india_film_language_coverage.py"
+  schedule:
+    - cron: "35 21 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Verify decade coverage and identity-drift regression tests
+        run: python -m unittest tests.test_audit_india_film_language_coverage -v
+
+      - name: Restore durable source-only stage and evidence checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/india-language-coverage
+          git fetch --no-tags origin refs/heads/automation/india-language-expanded-stage
+          git show FETCH_HEAD:.automation/india-language-expanded-stage.sqlite > data/generated/india-language-coverage/stage.sqlite
+          git fetch --no-tags origin refs/heads/automation/india-language-evidence
+          git show FETCH_HEAD:.automation/india-language-evidence.json > data/generated/india-language-coverage/checkpoint.json
+          test -s data/generated/india-language-coverage/stage.sqlite
+          test -s data/generated/india-language-coverage/checkpoint.json
+
+      - name: Audit film-language coverage by decade with zero D1 access
+        shell: bash
+        run: |
+          python scripts/audit_india_film_language_coverage.py \
+            --stage data/generated/india-language-coverage/stage.sqlite \
+            --checkpoint data/generated/india-language-coverage/checkpoint.json \
+            --out data/generated/india-language-coverage/report.json
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path("data/generated/india-language-coverage/report.json")
+          report=json.loads(p.read_text(encoding="utf-8"))
+          assert report["source_only"] and report["d1_reads"]==0 and report["d1_writes"]==0
+          assert report["staged_qids"]>=26000 and report["checkpoint_records"]>=3500
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+            f.write("## Indian cinema original-language evidence by decade\n\n")
+            f.write("This is sourced film metadata, **not** a production update. D1: 0 reads/0 writes.\n\n")
+            f.write("| Decade | Film identities | Reviewed | Explicit original language (P364) | P364 coverage |\n")
+            f.write("|---|---:|---:|---:|---:|\n")
+            for decade,v in report["by_decade"].items():
+              f.write(f"| {decade}s | {v['source_films']:,} | {v['reviewed_identities']:,} | {v['strict_original_language']:,} | {v['coverage_pct']:.2f}% |\n")
+            f.write("\nSource identity discrepancies (held): "+str(report["held_for_review"])+"\n")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: indian-film-language-decade-coverage-report
+          path: data/generated/india-language-coverage/report.json
+          retention-days: 30
+          if-no-files-found: error
