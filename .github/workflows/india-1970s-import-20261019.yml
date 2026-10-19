@@ -1,0 +1,139 @@
+name: India Films — 1970–1979 Guarded Production Backfill
+on:
+  push:
+    branches: ["ops/india-1970s-import-20261019"]
+    paths: [".github/workflows/india-1970s-import-20261019.yml"]
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: india-catalogue-autopilot
+  cancel-in-progress: false
+
+jobs:
+  import:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - uses: actions/setup-node@v4
+        with: {node-version: "22"}
+
+      - name: Test source safeguards, D1 deduplication and insert-only SQL
+        run: python -m unittest tests.test_wikidata_bulk_execute tests.test_wikidata_bulk_stage tests.test_india_category_import -v
+
+      - name: Download 1970-1979 sourced staging evidence
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-1970s-import
+          gh run download 39206459132 --repo "$GITHUB_REPOSITORY" \
+            --name india-1970s-cc0-stage-20261019 \
+            --dir data/generated/india-1970s-import
+          test -s data/generated/india-1970s-import/stage.sqlite
+          test -s data/generated/india-1970s-import/stage-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          x=json.loads(Path("data/generated/india-1970s-import/stage-report.json").read_text())
+          if x.get("years")!=[1970,1979] or x.get("d1_writes")!=0 or x.get("d1_reads")!=0 or not x.get("all_shards_completed"):
+            raise SystemExit("Stage evidence incomplete")
+          print("INDIA_1970S_STAGE_VALIDATED="+str(x["new_qids"]),flush=True)
+          PY
+
+      - name: Connect only to existing production D1 without migrations
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Read fresh production identities for collision-safe reconciliation
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/india-1970s-import
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,release_date FROM movies;" > "$ROOT/exact.json"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year,source_category FROM catalogue_titles;" > "$ROOT/year.json"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT wikidata_qid,title,first_air_year FROM series_titles;" > "$ROOT/series.json"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS count FROM catalogue_titles;" > "$ROOT/before.json"
+
+      - name: Prepare at most 3500 reviewed source identities
+        shell: bash
+        run: |
+          ROOT=data/generated/india-1970s-import
+          python scripts/wikidata_bulk_import_sql.py \
+            --stage "$ROOT/stage.sqlite" \
+            --exact-movies "$ROOT/exact.json" \
+            --year-movies "$ROOT/year.json" \
+            --series "$ROOT/series.json" \
+            --max-preview 3500 --out-dir "$ROOT/prepared"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("data/generated/india-1970s-import/prepared")
+          report=json.loads((root/"reconciliation.json").read_text())
+          selected=json.loads((root/"selected.json").read_text())
+          if not 0<=len(selected)<=3500 or report["sql_preview_rows"]!=len(selected):
+            raise SystemExit("Invalid import selection")
+          if len({r["qid"] for r in selected})!=len(selected):
+            raise SystemExit("Duplicate candidate QID")
+          print("INDIA_1970S_RECONCILIATION="+json.dumps(report,sort_keys=True),flush=True)
+          PY
+
+      - name: Import in 200-item guarded chunks with QID presence checks
+        shell: bash
+        run: |
+          ROOT=data/generated/india-1970s-import
+          python scripts/wikidata_bulk_execute.py \
+            --selected "$ROOT/prepared/selected.json" \
+            --sql-dir "$ROOT/prepared" \
+            --out-json "$ROOT/import-result.json" --max-row-reads 1000000 --apply
+
+      - name: Record actual before-after production net-new titles
+        shell: bash
+        run: |
+          ROOT=data/generated/india-1970s-import
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS count FROM catalogue_titles;" > "$ROOT/after.json"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("data/generated/india-1970s-import")
+          def total(name):
+            return int(json.loads((root/name).read_text())[0]["results"][0]["count"])
+          before,after=total("before.json"),total("after.json")
+          result=json.loads((root/"import-result.json").read_text())
+          delta=after-before
+          submitted=int(result.get("submitted_to_d1",0))
+          report={"year_table_before":before,"year_table_after":after,"new_films":delta,
+                  "submitted":submitted,"verified_present_qids":result.get("verified_present_qids"),
+                  "import_status":result.get("status"),"years":"1970-1979","day":"2026-10-19"}
+          print("INDIA_1970S_PRODUCTION_IMPORT="+json.dumps(report,sort_keys=True),flush=True)
+          (root/"verified-delta.json").write_text(json.dumps(report,indent=2)+"\n")
+          if not 0<=delta<=3500 or delta>submitted or result.get("status") not in ("completed","read_budget_paused"):
+            raise SystemExit("Production import exceeded guard or was interrupted")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-1970s-guarded-import-20261019
+          path: |
+            data/generated/india-1970s-import/stage-report.json
+            data/generated/india-1970s-import/prepared/reconciliation.json
+            data/generated/india-1970s-import/prepared/selected.json
+            data/generated/india-1970s-import/import-result.json
+            data/generated/india-1970s-import/verified-delta.json
+          if-no-files-found: warn
+          retention-days: 30
