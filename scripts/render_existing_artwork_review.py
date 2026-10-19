@@ -192,6 +192,14 @@ a { color:#b3cfff; } .hold { font-size:12px; font-weight:700; color:#e6c589; mar
 """
 
 
+def safe_csv_cell(value: object) -> str:
+    """Prevent formula execution when source-supplied fields open in Excel."""
+    text = str(value if value is not None else "")
+    if text.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + text
+    return text
+
+
 def csv_rows(pilot: dict) -> list[dict]:
     candidates = validate_pilot(pilot)
     result = []
@@ -206,6 +214,7 @@ def csv_rows(pilot: dict) -> list[dict]:
             record[field] = image.get(field) or ""
         record["review_decision"] = "PENDING"
         record["review_notes"] = ""
+        record = {key: safe_csv_cell(value) for key, value in record.items()}
         result.append(record)
     return result
 
