@@ -17,8 +17,10 @@ on:
   schedule:
     - cron: "27 */6 * * *"
 
+# The website and YouTube monitors share one production-review write slot.
+# Retain source artifacts if the database sync fails; never cancel an active sync.
 concurrency:
-  group: official-youtube-monitor
+  group: official-production-source-sync
   cancel-in-progress: false
 
 jobs:
@@ -119,14 +121,14 @@ jobs:
 
       - name: Apply D1 migrations
         if: steps.youtube.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true' && steps.p1_quota.outputs.reserved != 'true'
-        run: npx wrangler d1 migrations apply cinema-and-series --remote
+        run: python scripts/retry_d1_busy.py -- npx wrangler d1 migrations apply cinema-and-series --remote
 
       - name: Sync review candidates to D1
         if: steps.youtube.outputs.ready == 'true' && steps.cloudflare.outputs.ready == 'true' && steps.p1_quota.outputs.reserved != 'true'
         shell: bash
         run: |
           if [[ -s data/generated/youtube-candidates-upsert.sql ]]; then
-            npx wrangler d1 execute cinema-and-series --remote --file=data/generated/youtube-candidates-upsert.sql
+            python scripts/retry_d1_busy.py -- npx wrangler d1 execute cinema-and-series --remote --file=data/generated/youtube-candidates-upsert.sql
           else
             echo "No new release-date candidates detected in the latest official uploads."
           fi
