@@ -1,0 +1,36 @@
+name: India 15-Title Pilot — Read-Only Live Check
+
+on:
+  push:
+    branches: ["ops/india-next-milestone-15-title-pilot-20261019"]
+    paths:
+      - ".github/workflows/india-pilot-live-check-20261019.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - name: Verify live movies and series after production import (no D1 writes)
+        shell: bash
+        run: |
+          python - <<'PY'
+          import urllib.request,json
+          root="https://cinema-and-series.rayadinaveen98.workers.dev"
+          for label,path in [
+            ("movies","/api/movies?scope=all&limit=1&offset=0&meta=0&probe=afterpilot20261019"),
+            ("series","/api/series?limit=1&offset=0&meta=0&probe=afterpilot20261019")
+          ]:
+            req=urllib.request.Request(root+path,headers={"Accept":"application/json","User-Agent":"CinemaAndSeries-AfterImport-LowCostCheck"})
+            with urllib.request.urlopen(req,timeout=20) as response:
+              payload=json.load(response)
+              result={"section":label,"http":response.status,"total":(payload.get("pagination") or {}).get("total"),
+                      "rows_returned":len(payload.get(label) or []),"source":payload.get("source"),
+                      "meta":payload.get("metadataLevel")}
+              print("INDIA_PILOT_LIVE_CHECK="+json.dumps(result,sort_keys=True),flush=True)
+              assert response.status==200 and result["source"]=="d1" and result["rows_returned"]==1
+              if label=="movies": assert result["total"]>=36793,"Movie total did not increase as expected"
+          PY
