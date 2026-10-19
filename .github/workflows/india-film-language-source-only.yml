@@ -9,6 +9,8 @@ on:
       - "tests/test_india_film_language_evidence.py"
       - "scripts/triage_india_film_languages.py"
       - "tests/test_triage_india_film_languages.py"
+      - "scripts/recheck_india_film_language_evidence.py"
+      - "tests/test_recheck_india_film_language_evidence.py"
   schedule:
     # Respectful, bounded thrice-daily Wikidata source work. No Cloudflare D1.
     - cron: "20 2,10,18 * * *"
@@ -33,7 +35,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Validate film-language evidence and safe resumability
-        run: python -m unittest tests.test_india_film_language_evidence -v
+        run: python -m unittest tests.test_india_film_language_evidence tests.test_recheck_india_film_language_evidence -v
       - name: Restore expanded 1940–2026 film identities where available
         shell: bash
         run: |
@@ -75,13 +77,34 @@ jobs:
             echo "Initialized source-only language evidence checkpoint"
           fi
 
-      - name: Collect at most 500 film-language source records (NO D1 ACCESS)
+      - name: Revisit at most 25 unresolved film languages (source only; NO D1)
+        shell: bash
+        run: |
+          python scripts/recheck_india_film_language_evidence.py \
+            --stage data/generated/india-language/film-stage.sqlite \
+            --checkpoint data/generated/india-language/checkpoint.json \
+            --max-films 25 \
+            --out-report data/generated/india-language/recheck-report.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads(Path("data/generated/india-language/recheck-report.json").read_text(encoding="utf-8"))
+          assert report["source_only"] and report["d1_reads"] == 0 and report["d1_writes"] == 0
+          assert report["production_updates"] == 0 and report["selected"] <= 25
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## Previously unresolved film languages — bounded source recheck\n\n")
+              summary.write("Source-stage evidence only; no production or release-date updates.\n\n")
+              summary.write(f"Attempted: **{report['attempted']}** / max 25; newly supported original languages: **{report['promoted_to_p364']}**.\n\n")
+              summary.write(f"Deferred source entities: **{report['deferred_entities']}**; source throttle/error: **{report['halted_reason'] or 'none'}**.\n\n")
+          PY
+
+      - name: Collect at most 475 new film-language source records (NO D1 ACCESS)
         shell: bash
         run: |
           python scripts/india_film_language_evidence.py \
             --stage data/generated/india-language/film-stage.sqlite \
             --checkpoint data/generated/india-language/checkpoint.json \
-            --max-films 500 \
+            --max-films 475 \
             --selection decade-balanced \
             --out-report data/generated/india-language/report.json \
             --out-proposals data/generated/india-language/proposals.json
@@ -196,5 +219,6 @@ jobs:
             data/generated/india-language/proposals.json
             data/generated/india-language/coverage-report.json
             data/generated/india-language/language-review-queue.json
+            data/generated/india-language/recheck-report.json
           if-no-files-found: warn
           retention-days: 30
