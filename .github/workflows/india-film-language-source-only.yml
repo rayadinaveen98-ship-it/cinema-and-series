@@ -5,6 +5,8 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/india-film-language-source-only.yml"
+      - "scripts/india_film_language_evidence.py"
+      - "tests/test_india_film_language_evidence.py"
   schedule:
     # Respectful, bounded twice-daily Wikidata source work. No Cloudflare D1.
     - cron: "20 2,14 * * *"
@@ -30,14 +32,32 @@ jobs:
           python-version: "3.13"
       - name: Validate film-language evidence and safe resumability
         run: python -m unittest tests.test_india_film_language_evidence -v
-      - name: Restore Wikidata film identities from the completed source stage
+      - name: Restore expanded 1940–2026 film identities where available
         shell: bash
         run: |
+          set -euo pipefail
           mkdir -p data/generated/india-language
-          git fetch --no-tags origin refs/heads/automation/wikidata-bulk-stage
-          git show FETCH_HEAD:.automation/wikidata-bulk-stage.sqlite \
-            > data/generated/india-language/film-stage.sqlite
+          if git ls-remote --exit-code --heads origin automation/india-language-expanded-stage >/dev/null 2>&1; then
+            git fetch --no-tags origin refs/heads/automation/india-language-expanded-stage
+            git show FETCH_HEAD:.automation/india-language-expanded-stage.sqlite \
+              > data/generated/india-language/film-stage.sqlite
+            echo "Expanded 1940–2026 Indian-language film source stage loaded"
+          else
+            git fetch --no-tags origin refs/heads/automation/wikidata-bulk-stage
+            git show FETCH_HEAD:.automation/wikidata-bulk-stage.sqlite \
+              > data/generated/india-language/film-stage.sqlite
+            echo "Expanded source stage not initialized; preserving original stage"
+          fi
           test -s data/generated/india-language/film-stage.sqlite
+          python - <<'PY'
+          import sqlite3
+          path="data/generated/india-language/film-stage.sqlite"
+          with sqlite3.connect(path) as db:
+              count=db.execute("SELECT COUNT(*) FROM films WHERE year_conflict=0 AND title_conflict=0").fetchone()[0]
+          if count < 1000:
+              raise SystemExit("Source stage is unexpectedly small")
+          print(f"LANGUAGE_SOURCE_QUALIFIED_FILMS={count}",flush=True)
+          PY
 
       - name: Restore isolated durable language evidence checkpoint
         shell: bash
