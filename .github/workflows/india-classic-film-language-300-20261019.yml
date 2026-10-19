@@ -1,0 +1,105 @@
+name: Indian Classic Films — Decade-Balanced 300-Language Source Pass
+
+on:
+  push:
+    branches: ["ops/p2-classic-film-language-source-20261019"]
+    paths: [".github/workflows/india-classic-film-language-300-20261019.yml"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: india-film-language-source-only
+  cancel-in-progress: false
+
+jobs:
+  classic-source:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Verify decade balanced source selection, QID safety and resumability
+        run: python -m unittest tests.test_india_film_language_evidence tests.test_audit_india_film_language_coverage -v
+
+      - name: Restore already-audited stage and current durable source checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/india-classic-source
+          git fetch --no-tags origin refs/heads/automation/india-language-expanded-stage
+          git show FETCH_HEAD:.automation/india-language-expanded-stage.sqlite > data/generated/india-classic-source/stage.sqlite
+          git fetch --no-tags origin refs/heads/automation/india-language-evidence
+          git show FETCH_HEAD:.automation/india-language-evidence.json > data/generated/india-classic-source/checkpoint.json
+          cp data/generated/india-classic-source/checkpoint.json data/generated/india-classic-source/before.json
+          test -s data/generated/india-classic-source/stage.sqlite
+          test -s data/generated/india-classic-source/checkpoint.json
+
+      - name: Collect up to 300 films spread across historic and modern decades
+        shell: bash
+        run: |
+          python scripts/india_film_language_evidence.py \
+            --stage data/generated/india-classic-source/stage.sqlite \
+            --checkpoint data/generated/india-classic-source/checkpoint.json \
+            --max-films 300 --selection decade-balanced \
+            --out-report data/generated/india-classic-source/source-run.json \
+            --out-proposals data/generated/india-classic-source/source-proposals.json
+          python - <<'PY'
+          import json
+          from collections import Counter
+          from pathlib import Path
+          root=Path("data/generated/india-classic-source")
+          before=json.loads((root/"before.json").read_text())["records"]
+          after=json.loads((root/"checkpoint.json").read_text())["records"]
+          report=json.loads((root/"source-run.json").read_text())
+          assert set(before)<=set(after)
+          additions={k:v for k,v in after.items() if k not in before}
+          accepted=Counter((int(r["year"])//10)*10 for r in additions.values())
+          original=Counter((int(r["year"])//10)*10 for r in additions.values()
+                    if r["status"]=="single_language_evidence" and r["property"]=="P364")
+          result={"starting_records":len(before),"ending_records":len(after),"added_records":len(additions),
+                  "added_by_decade":dict(sorted(accepted.items())),
+                  "new_strict_p364_by_decade":dict(sorted(original.items())),
+                  "held_film_identities":report["held_incomplete_film_entities"],
+                  "held_language_identities":report["held_incomplete_language_entities"],
+                  "halted_reason":report["halted_reason"],
+                  "d1_reads":0,"d1_writes":0,"selection":report["source_selection"]}
+          assert result["added_records"]<=300 and result["d1_reads"]==0 and result["d1_writes"]==0
+          (root/"result.json").write_text(json.dumps(result,sort_keys=True,indent=2)+"\n")
+          print("INDIA_CLASSIC_300_RESULT="+json.dumps(result,sort_keys=True),flush=True)
+          PY
+
+      - name: Persist only new safe source evidence to isolated checkpoint branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/india-classic-source
+          TARGET="$RUNNER_TEMP/india-classic-evidence"
+          git fetch --no-tags origin refs/heads/automation/india-language-evidence
+          git worktree add --detach "$TARGET" FETCH_HEAD
+          mkdir -p "$TARGET/.automation"
+          cp "$ROOT/checkpoint.json" "$TARGET/.automation/india-language-evidence.json"
+          cd "$TARGET"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .automation/india-language-evidence.json
+          if git diff --cached --quiet; then
+            echo "CLASSIC_EVIDENCE_CHECKPOINT=unchanged"
+          else
+            git commit -m "data(source-only): checkpoint classic Indian film language evidence"
+            git push origin HEAD:refs/heads/automation/india-language-evidence
+            echo "CLASSIC_EVIDENCE_CHECKPOINT=advanced"
+          fi
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-classic-film-language-300-oct19
+          path: |
+            data/generated/india-classic-source/result.json
+            data/generated/india-classic-source/source-run.json
+          retention-days: 14
+          if-no-files-found: warn
