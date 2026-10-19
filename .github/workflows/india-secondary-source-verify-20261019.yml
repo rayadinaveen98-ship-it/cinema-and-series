@@ -1,0 +1,68 @@
+name: India — Verify 1500 Secondary Film Leads (No D1)
+
+on:
+  push:
+    branches: ["ops/india-secondary-source-verify-20261019"]
+    paths: [".github/workflows/india-secondary-source-verify-20261019.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Test source claim and QID validation
+        run: python -m unittest tests.test_indian_movie_verification -v
+      - name: Restore queued source leads and completed CC0 Wikidata stage
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-second-source
+          git fetch --no-tags origin refs/heads/automation/india-growth-state
+          git show FETCH_HEAD:.automation/india-growth-state.json > data/generated/india-second-source/state.json
+          git fetch --no-tags origin refs/heads/automation/wikidata-bulk-stage
+          git show FETCH_HEAD:.automation/wikidata-bulk-stage.sqlite > data/generated/india-second-source/stage.sqlite
+      - name: Check current film/India/year claims for 1500 independent leads
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,sys,sqlite3
+          from pathlib import Path
+          from collections import Counter
+          sys.path.insert(0,"scripts")
+          from india_daily_autopilot import eligible_queue_items
+          from verify_indian_movie_candidates import verify
+          root=Path("data/generated/india-second-source")
+          state=json.loads((root/"state.json").read_text())
+          with sqlite3.connect(root/"stage.sqlite") as db:
+            staged={str(row[0]).upper() for row in db.execute("SELECT qid FROM films")}
+          eligible=[r for r in eligible_queue_items(state["queue"]) if str(r["wikidata_qid"]).upper() not in staged]
+          eligible.sort(key=lambda r:(-r["year"],str(r["title"]).casefold(),r["wikidata_qid"]))
+          selection=eligible[:1500]
+          result=verify(selection)
+          summary={"state_queue":len(state["queue"]),"eligible_missing_from_stage":len(eligible),
+                   "chosen":len(selection),"checked":result["checked"],
+                   "accepted":len(result["accepted"]),"rate_limited":result["rate_limited"],
+                   "rejected_reasons":dict(Counter(r["reason"] for r in result["rejected"])),
+                   "priority":"recent-first","d1_queries":0}
+          (root/"verified.json").write_text(json.dumps(result["accepted"],ensure_ascii=False,indent=2)+"\n")
+          (root/"summary.json").write_text(json.dumps(summary,indent=2)+"\n")
+          print("INDIA_SECONDARY_SOURCE_VERIFICATION="+json.dumps(summary,sort_keys=True),flush=True)
+          print("INDIA_SECONDARY_SOURCE_SAMPLE="+json.dumps([{"qid":r["wikidata_qid"],"title":r["title"],"year":r["year"]} for r in result["accepted"][:12]],ensure_ascii=False),flush=True)
+          if not result["checked"]:
+            raise SystemExit("No claims verified — refusing downstream import")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-secondary-source-claims-20261019
+          path: |
+            data/generated/india-second-source/summary.json
+            data/generated/india-second-source/verified.json
+          retention-days: 14
+          if-no-files-found: error
