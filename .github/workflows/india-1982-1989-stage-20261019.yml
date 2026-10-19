@@ -1,0 +1,62 @@
+name: India Films — 1982–1989 Trusted-Source Staging (No D1)
+on:
+  push:
+    branches: ["ops/india-1982-1989-source-stage-20261019"]
+    paths: [".github/workflows/india-1982-1989-stage-20261019.yml"]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  stage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - name: Verify staging unit tests
+        run: python -m unittest tests.test_wikidata_bulk_stage -v
+      - name: Restore audited first 2026 and 1980s source checkpoint
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-1980s-stage
+          gh run download 39205762987 --repo "$GITHUB_REPOSITORY" \
+            --name indian-films-new-year-source-stage-20261019 \
+            --dir data/generated/india-1980s-stage
+          test -s data/generated/india-1980s-stage/stage.sqlite
+
+      - name: Stage remaining 1980s quarters from CC0 Wikidata claims
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json,sys
+          from pathlib import Path
+          sys.path.insert(0,"scripts")
+          from wikidata_bulk_stage import connect,run_stage
+          root=Path("data/generated/india-1980s-stage")
+          with connect(root/"stage.sqlite") as db:
+            before={q[0] for q in db.execute("SELECT qid FROM films")}
+            report=run_stage(db,1982,1989,32)
+            after={q[0] for q in db.execute("SELECT qid FROM films")}
+            details={"source":"Wikidata CC0 P31 film P495 India P577 year",
+                     "years":[1982,1989],"new_qids":len(after-before),
+                     "new_shards":len(report["new_shard_results"]),
+                     "completed_shards":report["completed_shards"],
+                     "stopped_reason":report["stopped_reason"],
+                     "all_shards_completed":report["all_shards_completed"],
+                     "source_qualified_unconflicted":report["source_qualified_unconflicted"],
+                     "d1_reads":0,"d1_writes":0,"production_imported":0}
+            (root/"stage-report.json").write_text(json.dumps(details,indent=2)+"\n")
+            print("INDIA_1980S_STAGE="+json.dumps(details,sort_keys=True),flush=True)
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-1982-1989-wikidata-stage-20261019
+          path: data/generated/india-1980s-stage/
+          retention-days: 14
+          if-no-files-found: error
