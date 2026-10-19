@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, NavLink, Route, Routes } from "react-router";
 import { appendUniquePage, cataloguePageSearch, readCataloguePage } from "./catalogue-pages";
+import { ANDROID_BACK_EVENT, consumeAndroidBack } from "./android-back";
 import { nextDialogTabTarget } from "./dialog-tab-navigation";
 import { countryDisplayLabel, releaseDateLabel } from "./media-presentation";
 
@@ -278,10 +279,14 @@ function useModalLock(onClose: () => void) {
         (initialFocus ?? dialog).focus();
       }
     };
+    // Android Back closes the active detail before WebView history navigation.
+    const onAndroidBack = (event: Event) => consumeAndroidBack(event, () => onCloseRef.current());
+    document.addEventListener(ANDROID_BACK_EVENT, onAndroidBack);
     document.addEventListener("keydown", onKey);
     document.addEventListener("focusin", onFocus);
     return () => {
       document.body.style.overflow = previousOverflow;
+      document.removeEventListener(ANDROID_BACK_EVENT, onAndroidBack);
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("focusin", onFocus);
       // The activating card stays mounted behind the sheet.
@@ -290,6 +295,22 @@ function useModalLock(onClose: () => void) {
   }, []);
 
   return dialogRef;
+}
+
+/** Close visible filter panels before leaving the page on Android Back.
+ * The detail modal has priority whenever both are open. */
+function useAndroidFilterBack(open: boolean, close: () => void) {
+  const closeRef = useRef(close);
+  closeRef.current = close;
+  useEffect(() => {
+    if (!open) return;
+    const onBack = (event: Event) => {
+      const modalOpen = Boolean(document.querySelector('[role="dialog"][aria-modal="true"]'));
+      consumeAndroidBack(event, () => closeRef.current(), modalOpen);
+    };
+    document.addEventListener(ANDROID_BACK_EVENT, onBack);
+    return () => document.removeEventListener(ANDROID_BACK_EVENT, onBack);
+  }, [open]);
 }
 
 function TopNav() {
@@ -476,6 +497,7 @@ function MoviesPage() {
   const filterPanelId = useId();
   const [filters, setFilters] = useState<MovieFilters>({ q: "", year: "all", language: "all", country: "all" });
   const [filterOpen, setFilterOpen] = useState(false);
+  useAndroidFilterBack(filterOpen, () => setFilterOpen(false));
   const [selected, setSelected] = useState<Movie | null>(null);
   const settledSearch = useDebouncedValue(filters.q.trim());
   const query = useMemo(() => ({ scope: "all", ...(settledSearch ? { q: settledSearch } : {}), ...(filters.year !== "all" ? { year: filters.year } : {}), ...(filters.language !== "all" ? { language: filters.language } : {}), ...(filters.country !== "all" ? { country: filters.country } : {}) }), [filters.year, filters.language, filters.country, settledSearch]);
@@ -511,6 +533,7 @@ function SeriesPage() {
   const filterPanelId = useId();
   const [filters, setFilters] = useState<SeriesFilters>({ q: "", year: "all", language: "all", country: "all", kind: "all" });
   const [filterOpen, setFilterOpen] = useState(false);
+  useAndroidFilterBack(filterOpen, () => setFilterOpen(false));
   const [selected, setSelected] = useState<SeriesTitle | null>(null);
   const settledSearch = useDebouncedValue(filters.q.trim());
   const query = useMemo(() => ({ ...(settledSearch ? { q: settledSearch } : {}), ...(filters.year !== "all" ? { year: filters.year } : {}), ...(filters.language !== "all" ? { language: filters.language } : {}), ...(filters.country !== "all" ? { country: filters.country } : {}), ...(filters.kind !== "all" ? { kind: filters.kind } : {}) }), [filters.year, filters.language, filters.country, filters.kind, settledSearch]);
