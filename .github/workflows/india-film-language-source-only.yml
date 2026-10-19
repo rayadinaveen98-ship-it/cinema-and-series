@@ -7,6 +7,8 @@ on:
       - ".github/workflows/india-film-language-source-only.yml"
       - "scripts/india_film_language_evidence.py"
       - "tests/test_india_film_language_evidence.py"
+      - "scripts/triage_india_film_languages.py"
+      - "tests/test_triage_india_film_languages.py"
   schedule:
     # Respectful, bounded thrice-daily Wikidata source work. No Cloudflare D1.
     - cron: "20 2,10,18 * * *"
@@ -134,6 +136,31 @@ jobs:
               summary.write(f"\nIdentity mismatches held for review: **{held}**.\n")
           PY
 
+      - name: Generate identity-checked source-language review queue (NO D1)
+        shell: bash
+        run: |
+          python scripts/triage_india_film_languages.py \
+            --stage data/generated/india-language/film-stage.sqlite \
+            --checkpoint data/generated/india-language/checkpoint.json \
+            --out data/generated/india-language/language-review-queue.json
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report = json.loads(Path("data/generated/india-language/language-review-queue.json").read_text(encoding="utf-8"))
+          if not (report["source_only"] and report["d1_reads"] == 0
+                  and report["d1_writes"] == 0 and report["production_updates"] == 0):
+              raise SystemExit("Source-only language review gate failed")
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              summary.write("## Film-language source issues awaiting review\n\n")
+              summary.write("No production changes, release-date claims, or official verification.\n\n")
+              summary.write(f"Original-language P364 source evidence: **{report['accepted_source_p364']:,}**\n\n")
+              summary.write(f"Unresolved language/identity cases: **{report['needs_review']:,}**\n\n")
+              summary.write("| Review reason | Film records |\n|---|---:|\n")
+              for category, count in report["by_category"].items():
+                  summary.write(f"| {category.replace('_', ' ')} | {count:,} |\n")
+              summary.write("\nAll cases are available in the JSON review artifact.\n")
+          PY
+
       - name: Summarize proposals without claiming official verification
         if: always()
         shell: bash
@@ -168,5 +195,6 @@ jobs:
             data/generated/india-language/report.json
             data/generated/india-language/proposals.json
             data/generated/india-language/coverage-report.json
+            data/generated/india-language/language-review-queue.json
           if-no-files-found: warn
           retention-days: 30
