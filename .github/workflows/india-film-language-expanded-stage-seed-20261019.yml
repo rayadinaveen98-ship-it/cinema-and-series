@@ -1,0 +1,137 @@
+name: India Film Languages — Expand Source Stage and Resume (No D1)
+
+on:
+  push:
+    branches: ["feature/p2-film-language-expanded-stage-20261019"]
+    paths:
+      - ".github/workflows/india-film-language-expanded-stage-seed-20261019.yml"
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: india-film-language-source-only
+  cancel-in-progress: false
+
+jobs:
+  seed-and-collect:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Verify language evidence parser and failed-response safety
+        run: python -m unittest tests.test_india_film_language_evidence -v
+
+      - name: Download source-only staged identities covering 1940-2026
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/expanded-language
+          gh run download 39207648514 --repo "$GITHUB_REPOSITORY" \
+            --name india-1940s-cc0-stage-20261019 \
+            --dir data/generated/expanded-language
+          test -s data/generated/expanded-language/stage.sqlite
+          test -s data/generated/expanded-language/stage-report.json
+          python - <<'PY'
+          import json,sqlite3
+          from pathlib import Path
+          root=Path("data/generated/expanded-language")
+          report=json.loads((root/"stage-report.json").read_text())
+          with sqlite3.connect(root/"stage.sqlite") as db:
+              count,minimum,maximum=db.execute(
+                  "SELECT COUNT(*), MIN(year), MAX(year) FROM films WHERE year_conflict=0 AND title_conflict=0"
+              ).fetchone()
+              recent=db.execute("SELECT COUNT(*) FROM films WHERE year=2026 AND year_conflict=0 AND title_conflict=0").fetchone()[0]
+              historic=db.execute("SELECT COUNT(*) FROM films WHERE year BETWEEN 1940 AND 1989 AND year_conflict=0 AND title_conflict=0").fetchone()[0]
+          assert report.get("all_shards_completed") is True and report.get("d1_reads")==0 and report.get("d1_writes")==0
+          assert count>=18000 and historic>=1000 and recent>=50 and minimum<=1940 and maximum>=2026
+          print("EXPANDED_INDIAN_FILM_STAGE="+json.dumps(
+              {"qualified":count,"min_year":minimum,"max_year":maximum,"historic_1940_1989":historic,"year_2026":recent,"d1_usage":0},
+              sort_keys=True),flush=True)
+          PY
+
+      - name: Restore durable prior 1200+ film-language source checkpoint
+        shell: bash
+        run: |
+          git fetch --no-tags origin refs/heads/automation/india-language-evidence
+          git show FETCH_HEAD:.automation/india-language-evidence.json > data/generated/expanded-language/checkpoint.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          checkpoint=json.loads(Path("data/generated/expanded-language/checkpoint.json").read_text())
+          assert checkpoint["schema"]=="india-film-language-evidence-v1"
+          assert len(checkpoint["records"])>=1200
+          print("PREVIOUS_EVIDENCE_QIDS="+str(len(checkpoint["records"])),flush=True)
+          PY
+
+      - name: Collect up to 500 new original-language source records without D1
+        shell: bash
+        run: |
+          python scripts/india_film_language_evidence.py \
+            --stage data/generated/expanded-language/stage.sqlite \
+            --checkpoint data/generated/expanded-language/checkpoint.json \
+            --max-films 500 \
+            --out-report data/generated/expanded-language/language-report.json \
+            --out-proposals data/generated/expanded-language/proposals.json
+
+      - name: Persist full source stage in separate durable automation branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="$RUNNER_TEMP/expanded-stage-branch"
+          if git ls-remote --exit-code --heads origin automation/india-language-expanded-stage >/dev/null 2>&1; then
+              git fetch --no-tags origin refs/heads/automation/india-language-expanded-stage
+              git worktree add --detach "$TARGET" FETCH_HEAD
+          else
+              git worktree add -b automation/india-language-expanded-stage "$TARGET" HEAD
+          fi
+          mkdir -p "$TARGET/.automation"
+          cp data/generated/expanded-language/stage.sqlite "$TARGET/.automation/india-language-expanded-stage.sqlite"
+          cd "$TARGET"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .automation/india-language-expanded-stage.sqlite
+          if ! git diff --cached --quiet; then
+              git commit -m "data(source-only): persist 1940–2026 Indian film identity stage"
+              git push origin HEAD:refs/heads/automation/india-language-expanded-stage
+          fi
+          echo "EXPANDED_STAGE_PERSISTED=true"
+
+      - name: Persist updated language evidence on existing checkpoint branch
+        shell: bash
+        run: |
+          set -euo pipefail
+          TARGET="$RUNNER_TEMP/expanded-language-checkpoint"
+          git fetch --no-tags origin refs/heads/automation/india-language-evidence
+          git worktree add --detach "$TARGET" FETCH_HEAD
+          mkdir -p "$TARGET/.automation"
+          cp data/generated/expanded-language/checkpoint.json "$TARGET/.automation/india-language-evidence.json"
+          cd "$TARGET"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .automation/india-language-evidence.json
+          if ! git diff --cached --quiet; then
+              git commit -m "data(source-only): checkpoint expanded film-language claims"
+              git push origin HEAD:refs/heads/automation/india-language-evidence
+          fi
+          echo "LANGUAGE_CHECKPOINT_PERSISTED=true"
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: india-expanded-film-language-evidence-20261019
+          path: |
+            data/generated/expanded-language/language-report.json
+            data/generated/expanded-language/proposals.json
+            data/generated/expanded-language/stage-report.json
+          if-no-files-found: warn
+          retention-days: 30
