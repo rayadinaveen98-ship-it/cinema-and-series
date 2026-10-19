@@ -8,8 +8,8 @@ on:
       - "scripts/india_film_language_evidence.py"
       - "tests/test_india_film_language_evidence.py"
   schedule:
-    # Respectful, bounded twice-daily Wikidata source work. No Cloudflare D1.
-    - cron: "20 2,14 * * *"
+    # Respectful, bounded thrice-daily Wikidata source work. No Cloudflare D1.
+    - cron: "20 2,10,18 * * *"
   workflow_dispatch:
 
 concurrency:
@@ -73,13 +73,13 @@ jobs:
             echo "Initialized source-only language evidence checkpoint"
           fi
 
-      - name: Collect at most 400 film-language source records (NO D1 ACCESS)
+      - name: Collect at most 500 film-language source records (NO D1 ACCESS)
         shell: bash
         run: |
           python scripts/india_film_language_evidence.py \
             --stage data/generated/india-language/film-stage.sqlite \
             --checkpoint data/generated/india-language/checkpoint.json \
-            --max-films 400 \
+            --max-films 500 \
             --out-report data/generated/india-language/report.json \
             --out-proposals data/generated/india-language/proposals.json
 
@@ -122,7 +122,9 @@ jobs:
               summary.write("## Film language evidence — no D1 reads/writes\n\n")
               summary.write(f"Checked this run: **{report['checked_this_run']}**\n\n")
               summary.write(f"Total checked: **{report['cumulative_checked_qids']}**\n\n")
-              summary.write(f"Single-language source proposals: **{report['proposed_single_language']}**\n\n")
+              summary.write(f"Single-language source evidence: **{report['proposed_single_language']}**\n\n")
+              summary.write(f"Explicit film original-language (P364): **{report['strict_p364_original_language']}**\n\n")
+              summary.write(f"General-language only (P407): **{report['general_p407_only_language']}**\n\n")
               summary.write(f"Pending: **{report['pending_qids']}**\n\n")
               summary.write("All proposals require separate production reconciliation and quality review.\n")
           PY
