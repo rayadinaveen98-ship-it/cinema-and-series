@@ -28,6 +28,11 @@ CHUNK_SIZE = 25
 MAX_PER_RUN = 500
 SCHEMA = "india-film-language-evidence-v1"
 
+
+class WikidataRateLimited(RuntimeError):
+    """Source API is busy: retry at the next scheduled, checkpointed run."""
+
+
 # These are display choices, not country-to-language guesses. Nonmatching
 # languages are kept as unsupported evidence, never silently coerced.
 LANGUAGE_LABELS = {
@@ -89,13 +94,16 @@ def fetch_entities(qids: list[str], props: str) -> dict:
     if not isinstance(payload, dict):
         raise ValueError("Invalid Wikidata JSON response")
     if isinstance(payload.get("error"), dict):
-        raise ValueError("Wikidata API error: " + str(payload["error"].get("code") or "unknown"))
+        code = str(payload["error"].get("code") or "unknown").casefold()
+        if code in ("maxlag", "ratelimited", "readonly"):
+            raise WikidataRateLimited("Wikidata API busy: " + code)
+        raise ValueError("Wikidata API error: " + code)
     if not isinstance(payload.get("entities"), dict):
         raise ValueError("Invalid Wikidata entities response")
-    received = payload["entities"]
-    if set(qids) - set(received):
-        raise ValueError("Wikidata response omitted requested entity IDs")
-    return received
+    # A successful response may omit a redirected/deleted QID. The caller
+    # must hold that particular film for later review; do not treat a
+    # missing entity as film evidence, and do not stall other valid films.
+    return payload["entities"]
 
 
 def claim_qids(entity: dict, property_id: str) -> set[str]:
@@ -152,42 +160,59 @@ def run(stage: Path, checkpoint: Path, max_films: int, out_report: Path,
     pending = [film for film in films if film["qid"] not in state["records"]][:max_films]
     checked = 0
     halted = None
+    held_identity = 0
+    held_language_entities = 0
     for start in range(0, len(pending), CHUNK_SIZE):
         batch = pending[start:start + CHUNK_SIZE]
         ids = [item["qid"] for item in batch]
         try:
             entities = fetcher(ids, "claims")
-            if set(ids) - set(entities):
-                raise ValueError("Incomplete Wikidata film-claim batch; checkpoint unchanged")
+            if not isinstance(entities, dict):
+                raise ValueError("Invalid Wikidata film-claim batch")
+            available = {}
             needed = set()
             for item in batch:
-                entity = entities.get(item["qid"]) or {}
+                entity = entities.get(item["qid"])
+                if not isinstance(entity, dict) or entity.get("missing") is not None:
+                    held_identity += 1
+                    continue
+                available[item["qid"]] = entity
                 needed.update(claim_qids(entity, "P364"))
                 needed.update(claim_qids(entity, "P407"))
             labels = {}
             for index in range(0, len(sorted(needed)), 50):
                 subset = sorted(needed)[index:index + 50]
                 if subset:
-                    labels.update(fetcher(subset, "labels"))
-            # Never checkpoint a missing/deleted film entity as a film with
-            # genuinely missing language metadata.
-            if any(not isinstance(entities[item["qid"]], dict)
-                   or entities[item["qid"]].get("missing") is not None
-                   for item in batch):
-                raise ValueError("Missing Wikidata film identity; checkpoint unchanged")
+                    response = fetcher(subset, "labels")
+                    if not isinstance(response, dict):
+                        raise ValueError("Invalid Wikidata language-label batch")
+                    labels.update(response)
+            # Keep incomplete/redirected film or language-entity IDs
+            # uncheckpointed for a later source run. Never manufacture
+            # missing-language evidence from an incomplete API response.
             for film in batch:
-                state["records"][film["qid"]] = evidence_for(
-                    film, entities.get(film["qid"]) or {}, labels
-                )
-            checked += len(batch)
-            save_json(checkpoint, state)
+                entity = available.get(film["qid"])
+                if entity is None:
+                    continue
+                required = claim_qids(entity, "P364") | claim_qids(entity, "P407")
+                if required - labels.keys():
+                    held_language_entities += 1
+                    continue
+                state["records"][film["qid"]] = evidence_for(film, entity, labels)
+                checked += 1
+            if checked:
+                save_json(checkpoint, state)
             if cooldown:
                 time.sleep(cooldown)
-        except (urllib.error.HTTPError, urllib.error.URLError, TimeoutError,
-                ValueError, OSError) as exc:
+        except (WikidataRateLimited, urllib.error.HTTPError, urllib.error.URLError,
+                TimeoutError, ValueError, OSError) as exc:
             # Never mark a failed API batch as checked. Next run resumes from it.
-            halted = ("rate_limited" if isinstance(exc, urllib.error.HTTPError)
-                      and exc.code in (429, 503) else "source_error_" + type(exc).__name__)
+            throttled = (isinstance(exc, WikidataRateLimited)
+                         or isinstance(exc, urllib.error.HTTPError) and exc.code in (429, 503))
+            halted = "rate_limited" if throttled else "source_error_" + type(exc).__name__
+            print("INDIA_FILM_LANGUAGE_BATCH_DEFERRED=" + json.dumps({
+                "reason": halted, "batch_start": start,
+                "detail": str(exc)[:140]}, sort_keys=True), flush=True)
             break
     records = [state["records"][f["qid"]] for f in films if f["qid"] in state["records"]]
     summary = dict(Counter(row["status"] for row in records))
@@ -204,6 +229,8 @@ def run(stage: Path, checkpoint: Path, max_films: int, out_report: Path,
         "cumulative_checked_qids": len(records),
         "pending_qids": len(films) - len(records),
         "proposed_single_language": len(proposals),
+        "held_incomplete_film_entities": held_identity,
+        "held_incomplete_language_entities": held_language_entities,
         "strict_p364_original_language": len(strict_original),
         "general_p407_only_language": len(general_only),
         "status_counts": summary, "halted_reason": halted,
@@ -225,7 +252,11 @@ def main() -> int:
     args = parser.parse_args()
     result = run(args.stage, args.checkpoint, args.max_films,
                  args.out_report, args.out_proposals)
-    return 0 if result["checked_this_run"] or result["pending_qids"] == 0 else 2
+    # A throttled source-only pass is a clean deferral; the checkpoint is
+    # unchanged for failed batches, and the scheduled job will resume later.
+    # Unexpected/malformed responses still fail CI visibly.
+    return 0 if (result["checked_this_run"] or result["pending_qids"] == 0
+                 or result["halted_reason"] == "rate_limited") else 2
 
 
 if __name__ == "__main__":
