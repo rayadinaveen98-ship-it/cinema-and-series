@@ -1,0 +1,64 @@
+name: India Movies — Source Queue Gap Audit (No D1)
+
+on:
+  push:
+    branches: ["ops/india-source-queue-gap-audit-20261019"]
+    paths:
+      - ".github/workflows/india-source-queue-gap-audit-20261019.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Restore source queue and Wikidata stage without production DB access
+        shell: bash
+        run: |
+          mkdir -p data/generated/india-source-gap
+          git fetch --no-tags origin refs/heads/automation/india-growth-state
+          git show FETCH_HEAD:.automation/india-growth-state.json > data/generated/india-source-gap/state.json
+          git fetch --no-tags origin refs/heads/automation/wikidata-bulk-stage
+          git show FETCH_HEAD:.automation/wikidata-bulk-stage.sqlite > data/generated/india-source-gap/stage.sqlite
+
+      - name: Count backed candidate gaps and overlap
+        shell: bash
+        run: |
+          python - <<'PY'
+          import sqlite3,json
+          from pathlib import Path
+          root=Path("data/generated/india-source-gap")
+          state=json.loads((root/"state.json").read_text())
+          with sqlite3.connect(root/"stage.sqlite") as db:
+            staged={row[0].upper() for row in db.execute("SELECT qid FROM films")}
+            supported={row[0].upper() for row in db.execute("SELECT qid FROM films WHERE year_conflict=0 AND title_conflict=0")}
+          queue=state.get("queue") or {}
+          eligible=[]
+          for qid,row in queue.items():
+            years=row.get("observed_years") or []
+            if len(years)!=1:continue
+            year=years[0]
+            if f"Category:{year} Indian films" not in (row.get("source_categories") or []):continue
+            if not row.get("page_id") or not row.get("title") or row.get("title","").upper()==qid:continue
+            eligible.append(qid.upper())
+          gaps=sorted(set(eligible)-staged)
+          stats={"source_queue_qids":len(queue),"category_qualified":len(eligible),
+                 "wikidata_stage_qids":len(staged),"stage_valid_qids":len(supported),
+                 "eligible_source_qids_not_in_stage":len(gaps),
+                 "eligible_source_qids_in_stage":len(set(eligible)&staged),
+                 "new_gap_qid_sample":gaps[:15],"d1_queries":0}
+          print("INDIA_SOURCE_GAP="+json.dumps(stats,sort_keys=True),flush=True)
+          (root/"report.json").write_text(json.dumps(stats,indent=2)+"\n")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: india-source-gap-audit-20261019
+          path: data/generated/india-source-gap/report.json
+          if-no-files-found: error
