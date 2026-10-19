@@ -192,6 +192,10 @@ def run(stage: Path, checkpoint: Path, max_films: int, out_report: Path,
     records = [state["records"][f["qid"]] for f in films if f["qid"] in state["records"]]
     summary = dict(Counter(row["status"] for row in records))
     proposals = [row for row in records if row["status"] == "single_language_evidence"]
+    # A single P407 claim is useful discovery evidence, but not a film's
+    # explicitly asserted original language (P364). Keep the counts distinct.
+    strict_original = [row for row in proposals if row["property"] == "P364"]
+    general_only = [row for row in proposals if row["property"] == "P407"]
     report = {
         "schema": SCHEMA, "generated_at": datetime.now(timezone.utc).isoformat(),
         "source": "Wikidata CC0 P364/P407 film-language statements",
@@ -200,6 +204,8 @@ def run(stage: Path, checkpoint: Path, max_films: int, out_report: Path,
         "cumulative_checked_qids": len(records),
         "pending_qids": len(films) - len(records),
         "proposed_single_language": len(proposals),
+        "strict_p364_original_language": len(strict_original),
+        "general_p407_only_language": len(general_only),
         "status_counts": summary, "halted_reason": halted,
         "note": "Evidence proposals only. No release-date, official, or D1 language claims.",
     }
