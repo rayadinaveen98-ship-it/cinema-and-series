@@ -44,11 +44,26 @@ test("Android wrapper dispatches Back before history without a JS-to-native brid
   assert.match(java, /webView\.evaluateJavascript\(WEB_BACK_EVENT/);
   assert.match(java, /if \(!"true"\.equals\(result\)\) backThroughHistoryOrFinish\(\)/);
   assert.match(java, /request\.isForMainFrame\(\)/);
-  assert.match(java, /showLoadFailure\(\)/);
+  assert.match(java, /showLoadFailure\(request\.getUrl\(\)\)/);
   assert.match(java, /retry\.setOnClickListener/);
   assert.match(java, /registerOnBackInvokedCallback\(/);
   assert.match(java, /unregisterOnBackInvokedCallback\(/);
   assert.match(java, /Build.VERSION_CODES.TIRAMISU/);
   assert.match(java, /private void handleBack\(\)/);
+  assert.doesNotMatch(java, /addJavascriptInterface\(/);
+});
+
+test("Offline Retry avoids WebView error-page reload and Back exits the offline overlay", () => {
+  const java = readFileSync(new URL("../android-app/app/src/main/java/com/cinemaandseries/app/MainActivity.java", import.meta.url), "utf8");
+  assert.match(java, /private String lastTrustedUrl = HOME_URL/);
+  assert.match(java, /private void rememberTrustedUrl\(Uri uri\)/);
+  assert.match(java, /if \(isAppUrl\(uri\)\) lastTrustedUrl = uri\.toString\(\)/);
+  assert.match(java, /webView\.loadUrl\(lastTrustedUrl\)/);
+  assert.doesNotMatch(java, /webView\.reload\(\)/);
+  assert.match(java, /outState\.putString\("last_trusted_app_url", lastTrustedUrl\)/);
+  assert.match(java, /String restoredUrl = savedInstanceState\.getString\("last_trusted_app_url"\)/);
+  assert.match(java, /if \(retryScreen\.getVisibility\(\) == View\.VISIBLE\) \{\s*finish\(\);/);
+  assert.match(java, /if \(request\.isForMainFrame\(\)\) showLoadFailure\(request\.getUrl\(\)\)/);
+  assert.match(java, /showLoadFailure\(request\.getUrl\(\)\)/);
   assert.doesNotMatch(java, /addJavascriptInterface\(/);
 });

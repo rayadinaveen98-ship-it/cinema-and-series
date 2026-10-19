@@ -43,11 +43,17 @@ public class MainActivity extends Activity {
     private View retryScreen;
     private boolean mainFrameFailed;
     private boolean backPending;
+    // Retain the trusted app destination even if WebView renders chrome-error://.
+    private String lastTrustedUrl = HOME_URL;
     private OnBackInvokedCallback systemBackCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        if (savedInstanceState != null) {
+            String restoredUrl = savedInstanceState.getString("last_trusted_app_url");
+            rememberTrustedUrl(Uri.parse(restoredUrl == null ? "" : restoredUrl));
+        }
 
         getWindow().setStatusBarColor(Color.BLACK);
         getWindow().setNavigationBarColor(Color.BLACK);
@@ -91,8 +97,11 @@ public class MainActivity extends Activity {
         retry.setOnClickListener(view -> {
             mainFrameFailed = false;
             retryScreen.setVisibility(View.GONE);
+            loadProgress.setProgress(0);
             loadProgress.setVisibility(View.VISIBLE);
-            webView.reload();
+            // A failed main-frame navigation may leave WebView on chrome-error://.
+            // Always navigate to our trusted last destination, not that error page.
+            webView.loadUrl(lastTrustedUrl);
         });
         setContentView(root);
 
@@ -133,7 +142,10 @@ public class MainActivity extends Activity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 if (!request.isForMainFrame()) return false;
                 Uri uri = request.getUrl();
-                if (isAppUrl(uri)) return false;
+                if (isAppUrl(uri)) {
+                    rememberTrustedUrl(uri);
+                    return false;
+                }
                 if (uri != null && ("https".equalsIgnoreCase(uri.getScheme())
                         || "http".equalsIgnoreCase(uri.getScheme()))) {
                     try {
@@ -148,6 +160,8 @@ public class MainActivity extends Activity {
 
             @Override
             public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                if (!isAppUrl(Uri.parse(url == null ? "" : url))) return;
+                rememberTrustedUrl(Uri.parse(url));
                 mainFrameFailed = false;
                 retryScreen.setVisibility(View.GONE);
                 loadProgress.setProgress(0);
@@ -162,17 +176,18 @@ public class MainActivity extends Activity {
 
             @Override
             public void onReceivedError(WebView view, WebResourceRequest request, WebResourceError error) {
-                if (request.isForMainFrame()) showLoadFailure();
+                if (request.isForMainFrame()) showLoadFailure(request.getUrl());
             }
 
             @Override
             public void onReceivedHttpError(WebView view, WebResourceRequest request, WebResourceResponse response) {
-                if (request.isForMainFrame() && response.getStatusCode() >= 400) showLoadFailure();
+                if (request.isForMainFrame() && response.getStatusCode() >= 400)
+                    showLoadFailure(request.getUrl());
             }
         });
 
         if (savedInstanceState == null || webView.restoreState(savedInstanceState) == null) {
-            webView.loadUrl(HOME_URL);
+            webView.loadUrl(lastTrustedUrl);
         }
     }
 
@@ -185,7 +200,12 @@ public class MainActivity extends Activity {
             && APP_HOST.equalsIgnoreCase(uri.getHost());
     }
 
-    private void showLoadFailure() {
+    private void rememberTrustedUrl(Uri uri) {
+        if (isAppUrl(uri)) lastTrustedUrl = uri.toString();
+    }
+
+    private void showLoadFailure(Uri failedUrl) {
+        rememberTrustedUrl(failedUrl);
         mainFrameFailed = true;
         loadProgress.setVisibility(View.GONE);
         retryScreen.setVisibility(View.VISIBLE);
@@ -193,6 +213,7 @@ public class MainActivity extends Activity {
 
     @Override
     protected void onSaveInstanceState(Bundle outState) {
+        outState.putString("last_trusted_app_url", lastTrustedUrl);
         if (webView != null) webView.saveState(outState);
         super.onSaveInstanceState(outState);
     }
@@ -209,8 +230,12 @@ public class MainActivity extends Activity {
 
     private void handleBack() {
         if (backPending) return;
-        if (webView == null || retryScreen.getVisibility() == View.VISIBLE
-                || !isAppUrl(Uri.parse(webView.getUrl() == null ? "" : webView.getUrl()))) {
+        // The offline overlay must not navigate back into Chrome's failed page.
+        if (retryScreen.getVisibility() == View.VISIBLE) {
+            finish();
+            return;
+        }
+        if (webView == null || !isAppUrl(Uri.parse(webView.getUrl() == null ? "" : webView.getUrl()))) {
             backThroughHistoryOrFinish();
             return;
         }
@@ -218,6 +243,10 @@ public class MainActivity extends Activity {
         webView.evaluateJavascript(WEB_BACK_EVENT, result -> {
             backPending = false;
             if (isFinishing() || webView == null) return;
+            if (retryScreen.getVisibility() == View.VISIBLE) {
+                finish();
+                return;
+            }
             if (!"true".equals(result)) backThroughHistoryOrFinish();
         });
     }
