@@ -99,9 +99,30 @@ class SourceLanguageTests(unittest.TestCase):
             self.assertEqual(report_b["checked_this_run"], 1)
             self.assertEqual(report_b["cumulative_checked_qids"], 2)
             self.assertEqual(report_b["proposed_single_language"], 2)
+            self.assertEqual(report_b["strict_p364_original_language"], 2)
+            self.assertEqual(report_b["general_p407_only_language"], 0)
             self.assertEqual(len(calls), 4)
             self.assertEqual(len(read_state(checkpoint)["records"]), 2)
             self.assertEqual(len(json.loads((root / "proposals.json").read_text())["proposals"]), 2)
+
+    def test_general_p407_evidence_counted_separately_from_original_language(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            stage = root / "stage.sqlite"
+            with sqlite3.connect(stage) as db:
+                db.execute("CREATE TABLE films (qid TEXT,title TEXT,year INTEGER,"
+                           "year_conflict INTEGER,title_conflict INTEGER)")
+                db.execute("INSERT INTO films VALUES ('Q305','Test',2024,0,0)")
+            def fetcher(ids, props):
+                if props == "claims":
+                    return {"Q305": {"claims": {"P407": [statement("Q15")]}}}
+                return {"Q15": labels("Telugu")}
+            report = run(stage, root / "checkpoint.json", 1, root / "report.json",
+                         root / "proposals.json", fetcher=fetcher, cooldown=0)
+            self.assertEqual(report["proposed_single_language"], 1)
+            self.assertEqual(report["strict_p364_original_language"], 0)
+            self.assertEqual(report["general_p407_only_language"], 1)
+            self.assertEqual(report["production_updates"], 0)
 
     def test_rate_limit_does_not_mark_pending_qids_checked(self):
         with tempfile.TemporaryDirectory() as temp:
