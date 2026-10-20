@@ -1,8 +1,13 @@
 name: Indian Film Language — One-Time D1 Reset Recovery
 
-# One production window only. This runs at the next D1 UTC quota reset,
-# not immediately when the workflow definition merges.
+# October 20 2026 only. Scheduled run did not appear by 09:30 IST.
+# A single workflow-file merge can also initiate the existing guarded recovery.
+# The October-20 UTC time gate, exact QID checks, and serial concurrency stay.
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/india-film-language-quota-reset-20261020.yml"
   schedule:
     - cron: "17 0 20 10 *"
   workflow_dispatch:
