@@ -10,7 +10,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
+
+# Support both the standalone CLI and python -m unittest importing scripts.*.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from audit_indian_movie_growth import audit
 from india_daily_autopilot import (

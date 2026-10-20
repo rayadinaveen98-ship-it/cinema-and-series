@@ -44,6 +44,7 @@ jobs:
         if: steps.window.outputs.allowed == 'true'
         with:
           node-version: "22"
+      # Re-run after fixing isolated-test Python import path; date guard unchanged.
       - name: Test reconciliation and source eligibility
         if: steps.window.outputs.allowed == 'true'
         run: |
