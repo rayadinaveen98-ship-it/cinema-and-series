@@ -14,6 +14,8 @@ class OneTimeFilmLanguageRecoveryContract(unittest.TestCase):
         self.assertIn('echo "allowed=false"', body)
         self.assertIn("steps.window.outputs.allowed == 'true'",body)
         self.assertIn('cron: "17 0 20 10 *"',body)
+        self.assertIn("  push:\n    branches: [main]",body)
+        self.assertIn('".github/workflows/india-film-language-quota-reset-20261020.yml"',body)
         self.assertIn("cancel-in-progress: false",body)
 
     def test_source_is_immutable_and_writes_require_fresh_reconciliation(self):
