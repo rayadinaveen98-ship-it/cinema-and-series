@@ -1,0 +1,65 @@
+name: Film Poster Rescue — Exact Wikipedia Articles (Read Only)
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/oct20-wikipedia-film-poster-pilot.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+  actions: read
+jobs:
+  visual-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.13"}
+      - name: Test exact Wikipedia page identity, image matching and safe review
+        run: python -m unittest tests.test_wikipedia_film_posters_pilot tests.test_existing_artwork_review_gallery -v
+      - name: Reuse actual 100 D1 identities without asking D1 again
+        run: |
+          mkdir -p data/generated/film-poster-rescue
+          gh run download 39370361299 \
+            --repo "$GITHUB_REPOSITORY" --name cinema-existing-100-artwork-review \
+            --dir data/generated/film-poster-rescue
+          test -s data/generated/film-poster-rescue/candidates.json
+      - name: Resolve exact-film Wikipedia article images (including nonfree REVIEW leads)
+        shell: bash
+        run: |
+          python scripts/wikipedia_film_posters_pilot.py \
+            --input data/generated/film-poster-rescue/candidates.json \
+            --output data/generated/film-poster-rescue/wikipedia-poster-candidates.json
+          python scripts/render_existing_artwork_review.py \
+            --input data/generated/film-poster-rescue/wikipedia-poster-candidates.json \
+            --html data/generated/film-poster-rescue/wikipedia-poster-gallery.html \
+            --csv data/generated/film-poster-rescue/wikipedia-poster-review.csv
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path("data/generated/film-poster-rescue/wikipedia-poster-candidates.json")
+          r=json.loads(p.read_text())
+          s=r["discovery_stats"]
+          assert len(r["candidates"])==100
+          assert r["d1_writes"]==0 and r["publication_performed"] is False
+          assert not any(c["approved_for_publication"] or c["production_written"] for c in r["candidates"])
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Real film-page imagery: existing 100-title pilot\n\n")
+              f.write(f"- Film article image candidates found: **{s['wikipedia_new_article_images']}**\n")
+              f.write(f"- Portrait images: **{s['portrait_article_images']}**\n")
+              f.write(f"- Total visual leads (Commons + Wikipedia): **{s['total_visual_candidates']}** / 100\n")
+              f.write(f"- Source batch failures: **{s['sitelink_batch_errors']+s['pageimage_batch_errors']}**\n\n")
+              f.write("These are **preview leads only**, and may be copyrighted nonfree film posters. They are NOT approved for use in the live app. No D1 reads or writes.\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: existing-film-wikipedia-poster-gallery
+          path: |
+            data/generated/film-poster-rescue/wikipedia-poster-candidates.json
+            data/generated/film-poster-rescue/wikipedia-poster-gallery.html
+            data/generated/film-poster-rescue/wikipedia-poster-review.csv
+          retention-days: 21
+          if-no-files-found: warn
