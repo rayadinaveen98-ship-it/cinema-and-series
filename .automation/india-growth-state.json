@@ -255452,16 +255452,8 @@
     "mode": "india_only"
   },
   "last_run": {
-    "timestamp_utc": "2026-10-20T05:15:12.134661+00:00",
+    "timestamp_utc": "2026-10-20T13:49:24.126550+00:00",
     "source_queue_qids": 19092,
-    "source_discovery": {
-      "status": "category_batch_complete",
-      "decade": "2020-2026",
-      "next_offset": 7,
-      "new_source_qids": 2253,
-      "failed_categories": 0,
-      "wikipedia_rate_limited": false
-    },
     "category_qualified_queue": 18561,
     "production": {
       "status": "source_only"
@@ -255550,6 +255542,12 @@
       "timestamp": "2026-10-20T05:15:12.134661+00:00",
       "production_status": "source_only",
       "discovery_status": "category_batch_complete",
+      "new_movies_added_today": 0
+    },
+    {
+      "timestamp": "2026-10-20T13:49:24.126550+00:00",
+      "production_status": "source_only",
+      "discovery_status": null,
       "new_movies_added_today": 0
     }
   ]
