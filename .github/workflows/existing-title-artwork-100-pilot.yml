@@ -1,8 +1,13 @@
 name: Existing Titles — Artwork Pilot (Read Only)
 
-# One off: scheduled after October 20, 2026 database quota reset/recovery.
-# Exact existing title identities only; never imports titles or publishes images.
+# October 20, 2026 only: after verified production language recovery,
+# schedule did not launch. A single path-limited main-branch merge triggers the
+# existing read-only, no-publication artwork pilot.
 on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/existing-title-artwork-100-pilot.yml"
   schedule:
     - cron: "10 3 20 10 *"
   workflow_dispatch:

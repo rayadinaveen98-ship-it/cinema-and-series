@@ -121,6 +121,8 @@ class ExistingArtworkPilotTests(unittest.TestCase):
                     ".github/workflows/existing-title-artwork-100-pilot.yml").read_text()
         self.assertIn('2026-10-20', workflow)
         self.assertIn('10 3 20 10', workflow)
+        self.assertIn("  push:\n    branches: [main]", workflow)
+        self.assertIn('".github/workflows/existing-title-artwork-100-pilot.yml"', workflow)
         self.assertIn('LIMIT 180;', workflow)
         self.assertIn("publication_performed", workflow)
         self.assertNotIn("migrations apply", workflow)
