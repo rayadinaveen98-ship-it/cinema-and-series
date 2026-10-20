@@ -1,0 +1,233 @@
+name: October 20 — Next Indian Film Source Years (Verified D1 Growth)
+
+# User explicitly authorized today's extra production growth. Does not change
+# the completed historical 10K milestone or recurring source-only workflows.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/oct20-next-india-year-wave.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: india-catalogue-autopilot
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  grow-existing-source-queue:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Authorize only October 20 2026 UTC
+        id: window
+        shell: bash
+        run: |
+          if [[ "$(date -u +%F)" == "2026-10-20" ]]; then
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            echo "Import authorization expired; no database connection."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.window.outputs.allowed == 'true'
+      - uses: actions/setup-python@v5
+        if: steps.window.outputs.allowed == 'true'
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        if: steps.window.outputs.allowed == 'true'
+        with:
+          node-version: "22"
+      # Re-run after fixing isolated-test Python import path; date guard unchanged.
+      - name: Test reconciliation and source eligibility
+        if: steps.window.outputs.allowed == 'true'
+        run: |
+          python -m unittest tests.test_oct20_existing_queue_import tests.test_oct20_next_india_source_wave tests.test_india_daily_autopilot \
+            tests.test_india_category_import -v
+
+      - name: Restore durable Wikipedia category queue (no source-only counts treated as added)
+        if: steps.window.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          mkdir -p data/generated/oct20-category-import
+          git fetch --no-tags origin refs/heads/automation/india-growth-state
+          git show FETCH_HEAD:.automation/india-growth-state.json \
+            > data/generated/oct20-category-import/state.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("data/generated/oct20-category-import/state.json")
+          state=json.loads(p.read_text())
+          assert state.get("schema_version")==1 and len(state.get("queue") or {})>0
+          print(f"EXISTING_SOURCE_QUEUE_QIDS={len(state['queue'])}",flush=True)
+          PY
+
+
+      - name: Scan eight additional source cohorts without database access
+        if: steps.window.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/oct20-category-import
+          python scripts/oct20_next_india_source_wave.py \
+            --state "$ROOT/state.json" --output "$ROOT/wave.json" --passes 8
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          s=json.loads(Path("data/generated/oct20-category-import/wave.json").read_text())
+          assert s["read_only_source_discovery"] and not s["production_titles_added"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as f:
+              f.write("## Additional India film-year source discovery\n\n")
+              f.write(f"New source QIDs discovered: **{s['new_source_qids']:,}**\n\n")
+              f.write(f"Completed source passes: {s['wave_count']}.\n\n")
+              f.write("These are only source leads; live imports are verified separately.\n")
+          PY
+
+      - name: Persist new Wikipedia discovery cursor and queue for later safe continuation
+        if: steps.window.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/oct20-category-import
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch --no-tags origin refs/heads/automation/india-growth-state
+          git worktree add --detach "$RUNNER_TEMP/source-queue" FETCH_HEAD
+          mkdir -p "$RUNNER_TEMP/source-queue/.automation"
+          cp "$ROOT/state.json" "$RUNNER_TEMP/source-queue/.automation/india-growth-state.json"
+          cd "$RUNNER_TEMP/source-queue"
+          git add .automation/india-growth-state.json
+          if ! git diff --cached --quiet; then
+            git commit -m "chore(india): preserve next-year film discovery cursor"
+            git push origin HEAD:refs/heads/automation/india-growth-state
+          fi
+
+      - name: Bind existing D1 (no creation or schema changes)
+        if: steps.window.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Export fresh exact title, year-precision title and series QIDs from live D1
+        if: steps.window.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/oct20-category-import
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,release_date FROM movies;" > "$ROOT/exact.json"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year FROM catalogue_titles;" > "$ROOT/year.json"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT wikidata_qid,title,first_air_year FROM series_titles;" > "$ROOT/series.json"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS year_movies_before FROM catalogue_titles;" > "$ROOT/before.json"
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.production_catalogue_quality import load_d1_rows
+          root=Path("data/generated/oct20-category-import")
+          for f in ("exact","year","series","before"):
+              rows=load_d1_rows(root/(f+".json"))
+              if not rows: raise SystemExit("Snapshot missing: "+f)
+              print("D1_FRESH_"+f.upper()+"="+str(len(rows)),flush=True)
+          PY
+
+      - name: Import genuinely new year-category film identities in bounded batches
+        if: steps.window.outputs.allowed == 'true'
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/oct20-category-import
+          python scripts/oct20_existing_queue_import.py \
+            --state "$ROOT/state.json" --exact "$ROOT/exact.json" \
+            --year "$ROOT/year.json" --series "$ROOT/series.json" \
+            --dir "$ROOT/import" --max-new 5000 --max-reads 1200000
+
+      - name: Verify actual new production titles, not source or upsert counts
+        if: steps.window.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/oct20-category-import
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path("data/generated/oct20-category-import")
+          result=json.loads((root/"import/result.json").read_text())
+          with open(os.environ["GITHUB_OUTPUT"],"a") as fh:
+              fh.write("quota_paused="+("true" if result["status"]=="cloudflare_quota_paused" else "false")+"\n")
+          PY
+        id: result
+
+      - name: Measure new D1 records when read quota remains
+        if: steps.window.outputs.allowed == 'true' && steps.result.outputs.quota_paused != 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/oct20-category-import
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT COUNT(*) AS year_movies_after FROM catalogue_titles;" > "$ROOT/after.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from scripts.production_catalogue_quality import load_d1_rows
+          root=Path("data/generated/oct20-category-import")
+          prior=int(load_d1_rows(root/"before.json")[0]["year_movies_before"])
+          after=int(load_d1_rows(root/"after.json")[0]["year_movies_after"])
+          result=json.loads((root/"import/result.json").read_text())
+          preview=json.loads((root/"import/preview.json").read_text())
+          inserted=after-prior
+          if inserted<0 or inserted>result["submitted_to_d1"] or inserted!=result["verified_net_new_qids"]:
+              raise SystemExit("D1 growth mismatch; do not claim verified additions")
+          output={
+            "date_utc":"2026-10-20","source":"Wikipedia year-specific Indian-film categories",
+            "independent_net_new_production_movies":inserted,
+            "source_queue_qids":preview["source_queue_qids"],
+            "eligible_not_in_production":preview["eligible_not_in_production"],
+            "submitted_to_d1":result["submitted_to_d1"],
+            "verified_new_qids":result["verified_net_new_qids"],
+            "status":result["status"],"before_year_movies":prior,"after_year_movies":after,
+            "identity_and_year": "category/QID/article; unconfirmed",
+            "source_only_discoveries_counted_as_new":False
+          }
+          (root/"verified-growth.json").write_text(json.dumps(output,indent=2,sort_keys=True)+"\n")
+          print("CATEGORY_NET_NEW_PRODUCTION="+json.dumps(output,sort_keys=True),flush=True)
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as fh:
+              fh.write("## New production films — October 20\n\n")
+              fh.write(f"**{inserted:,} verified newly created year-precision film records**.\n\n")
+              fh.write(f"Eligible missing candidates: {preview['eligible_not_in_production']:,}.\n\n")
+              fh.write(f"Batch outcome: {result['status']}; D1 reads reserved for app activity.\n")
+          PY
+
+      - name: Preserve partial verified counts if full D1 quota hit
+        if: steps.window.outputs.allowed == 'true' && steps.result.outputs.quota_paused == 'true'
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("data/generated/oct20-category-import")
+          report=json.loads((root/"import/result.json").read_text())
+          print("CATEGORY_QUOTA_PAUSED_VERIFIED_QIDS="+str(report["verified_net_new_qids"]),flush=True)
+          PY
+
+      - name: Archive actual reconciliation and batch verification
+        if: always() && steps.window.outputs.allowed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: oct20-next-years-production-additions
+          path: |
+            data/generated/oct20-category-import/wave.json
+            data/generated/oct20-category-import/import/preview.json
+            data/generated/oct20-category-import/import/result.json
+            data/generated/oct20-category-import/verified-growth.json
+          if-no-files-found: warn
+          retention-days: 30
