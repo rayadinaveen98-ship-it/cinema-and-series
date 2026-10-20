@@ -2,8 +2,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from scripts.oct20_existing_queue_import import choose, apply
-from scripts.india_daily_autopilot import D1QuotaReached
+from scripts.oct20_existing_queue_import import choose, apply, D1QuotaReached
 
 
 def film(qid, year=2026, name=None):
