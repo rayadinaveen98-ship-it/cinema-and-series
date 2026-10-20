@@ -1,0 +1,202 @@
+name: October 20 — Verified New Indian Films (Guarded D1 Import)
+
+# Explicitly requested net-new production growth beyond the completed +10K
+# milestone. A single workflow-file merge launches it on Oct 20, 2026.
+# Source scans alone do not count as additions.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/oct20-production-title-growth.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: india-catalogue-autopilot
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  add-verified-film-identities:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Hard stop outside explicitly requested October 20 UTC window
+        id: date
+        shell: bash
+        run: |
+          if [[ "$(date -u +%F)" == "2026-10-20" ]]; then
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            echo "IMPORT_CLOSED: this one-time Oct 20 authorization has expired."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.date.outputs.allowed == 'true'
+      - uses: actions/setup-python@v5
+        if: steps.date.outputs.allowed == 'true'
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        if: steps.date.outputs.allowed == 'true'
+        with:
+          node-version: "22"
+
+      - name: Validate import collision guards and quota-stop behavior
+        if: steps.date.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          python -m unittest tests.test_wikidata_bulk_stage \
+            tests.test_wikidata_bulk_execute tests.test_india_category_import \
+            tests.test_india_bulk_target -v
+
+      - name: Restore audited CC0 source stage, not unverified research leads
+        if: steps.date.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          mkdir -p data/generated/oct20-new-film-import
+          git fetch --no-tags origin refs/heads/automation/wikidata-bulk-stage
+          git show FETCH_HEAD:.automation/wikidata-bulk-stage.sqlite \
+            > data/generated/oct20-new-film-import/stage.sqlite
+          test -s data/generated/oct20-new-film-import/stage.sqlite
+
+      - name: Bind existing production D1 without creating databases
+        if: steps.date.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+
+      - name: Capture full live exact QID, title/year, and series collision snapshots
+        if: steps.date.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/oct20-new-film-import
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,title,release_date FROM movies;" > "$ROOT/exact.json"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT id,wikidata_qid,wikipedia_page_id,title,release_year FROM catalogue_titles;" > "$ROOT/year.json"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT wikidata_qid,title,first_air_year FROM series_titles;" > "$ROOT/series.json"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT
+              (SELECT COUNT(*) FROM catalogue_titles) AS year_movies,
+              (SELECT COUNT(*) FROM movies) AS exact_movies,
+              (SELECT COUNT(*) FROM series_titles) AS series_titles;" > "$ROOT/baseline.json"
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.production_catalogue_quality import load_d1_rows
+          root=Path("data/generated/oct20-new-film-import")
+          for name in ("exact","year","series","baseline"):
+              rows=load_d1_rows(root/(name+".json"))
+              if not rows: raise SystemExit(f"Refusing import: missing fresh {name} snapshot")
+              print(f"PRODUCTION_SNAPSHOT_{name.upper()}={len(rows)}",flush=True)
+          PY
+
+      - name: Select genuinely new Indian film identities from proven stage
+        if: steps.date.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          ROOT=data/generated/oct20-new-film-import
+          python scripts/wikidata_bulk_import_sql.py \
+            --stage "$ROOT/stage.sqlite" \
+            --exact-movies "$ROOT/exact.json" \
+            --year-movies "$ROOT/year.json" \
+            --series "$ROOT/series.json" \
+            --max-preview 10000 \
+            --out-dir "$ROOT/prepared"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("data/generated/oct20-new-film-import/prepared")
+          report=json.loads((root/"reconciliation.json").read_text())
+          selected=json.loads((root/"selected.json").read_text())
+          if len(selected)>10000 or report["sql_preview_rows"]!=len(selected):
+              raise SystemExit("Selection count contract failed")
+          if any(row.get("year") is None or not row.get("qid") for row in selected):
+              raise SystemExit("Unsafe, source-unidentified import candidate")
+          print("NET_NEW_PREVIEW="+json.dumps(report,sort_keys=True),flush=True)
+          PY
+
+      - name: Apply insert-only batches, stop on reserved D1 read budget or quota
+        if: steps.date.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          ROOT=data/generated/oct20-new-film-import
+          python scripts/wikidata_bulk_execute.py \
+            --selected "$ROOT/prepared/selected.json" \
+            --sql-dir "$ROOT/prepared" \
+            --out-json "$ROOT/import-result.json" \
+            --max-row-reads 1500000 --apply
+
+      - name: Verify actual production new records and cross-check import claims
+        if: steps.date.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/oct20-new-film-import
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "SELECT
+              (SELECT COUNT(*) FROM catalogue_titles) AS year_movies,
+              (SELECT COUNT(*) FROM movies) AS exact_movies,
+              (SELECT COUNT(*) FROM series_titles) AS series_titles;" > "$ROOT/after.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from scripts.production_catalogue_quality import load_d1_rows
+          root=Path("data/generated/oct20-new-film-import")
+          before=load_d1_rows(root/"baseline.json")[0]
+          after=load_d1_rows(root/"after.json")[0]
+          imported=json.loads((root/"import-result.json").read_text())
+          proposed=json.loads((root/"prepared/reconciliation.json").read_text())
+          actual=int(after["year_movies"])-int(before["year_movies"])
+          if actual<0 or actual>int(proposed["sql_preview_rows"]):
+              raise SystemExit("Unexpected catalogue growth / possible concurrent change")
+          if int(before["exact_movies"])!=int(after["exact_movies"]) or int(before["series_titles"])!=int(after["series_titles"]):
+              raise SystemExit("Unrelated title tables changed; investigate independently")
+          if actual>int(imported.get("verified_present_qids",0)):
+              raise SystemExit("Net additions exceed verified inserted identities")
+          summary={
+              "date":"2026-10-20","source":"Wikidata CC0 P31 film/P495 India/P577 release year",
+              "new_production_movies_added":actual,"net_new_staged_candidates":proposed["reconciled_net_new_candidates"],
+              "selected_for_import":proposed["sql_preview_rows"],
+              "submitted_to_d1":imported.get("submitted_to_d1",0),
+              "verified_present_submitted_qids":imported.get("verified_present_qids",0),
+              "import_status":imported.get("status"),
+              "import_reported_rows_read":imported.get("rows_read_reported",0),
+              "prior_year_movie_rows":before["year_movies"],"after_year_movie_rows":after["year_movies"],
+              "unconfirmed_release_dates_only":True,
+              "full_exact_release_date_claims_added":0,
+              "source_only_candidates_count_as_additions":False,
+              "automatic_import_time_limit":"2026-10-20 UTC"
+          }
+          (root/"verified-result.json").write_text(json.dumps(summary,indent=2,sort_keys=True)+"\n")
+          print("OCT20_GENUINE_NEW_TITLES="+json.dumps(summary,sort_keys=True),flush=True)
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Actual new Indian movie records published to D1\n\n")
+              f.write(f"**{actual:,} newly created year-precision Indian-film titles.**\n\n")
+              f.write(f"Submitted: {imported.get('submitted_to_d1',0):,}. Import status: {imported.get('status')}.\n\n")
+              f.write(f"Remaining eligible source candidates before run: {proposed['reconciled_net_new_candidates']:,}.\n\n")
+              f.write("No invented day release dates; new rows remain unconfirmed.\n")
+          PY
+
+      - name: Archive exact audited proof for transparency
+        if: always() && steps.date.outputs.allowed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: oct20-production-net-new-indian-films
+          path: |
+            data/generated/oct20-new-film-import/baseline.json
+            data/generated/oct20-new-film-import/prepared/reconciliation.json
+            data/generated/oct20-new-film-import/import-result.json
+            data/generated/oct20-new-film-import/verified-result.json
+          retention-days: 30
+          if-no-files-found: warn
