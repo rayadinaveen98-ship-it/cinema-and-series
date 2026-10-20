@@ -9,7 +9,7 @@ from scripts.india_daily_autopilot import D1QuotaReached
 def film(qid, year=2026, name=None):
     return {
         "wikidata_qid": qid, "page_id": int(qid[1:]) + 1000,
-        "title": name or ("Example " + qid), "observed_years": [year],
+        "title": name or ("Example " + qid), "observed_years": [year], "year": year,
         "source_categories": [f"Category:{year} Indian films"],
         "observed_languages": ["Telugu"],
         "india_category": True,
