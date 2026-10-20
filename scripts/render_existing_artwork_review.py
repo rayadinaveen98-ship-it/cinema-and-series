@@ -18,7 +18,7 @@ from urllib.parse import urlsplit
 
 SCHEMA = "existing-title-artwork-pilot-v1"
 IMAGE_HOSTS = {"upload.wikimedia.org", "commons.wikimedia.org"}
-FILE_HOSTS = {"commons.wikimedia.org"}
+FILE_HOSTS = {"commons.wikimedia.org", "en.wikipedia.org", "te.wikipedia.org", "hi.wikipedia.org", "ta.wikipedia.org", "ml.wikipedia.org", "kn.wikipedia.org", "bn.wikipedia.org"}
 CSV_FIELDS = [
     "source_table", "source_id", "wikidata_qid", "title", "year", "language",
     "country", "status", "image_shape", "file_name", "file_page_url",
@@ -114,8 +114,8 @@ def card(candidate: dict, index: int) -> str:
     )
     attribution = esc(image.get("artist") or "Not provided")
     link = (
-        '<a href="' + esc(file_url) + '" target="_blank" rel="noopener noreferrer">Open Commons file</a>'
-        if file_url else "<span>No file link</span>"
+        '<a href="' + esc(file_url) + '" target="_blank" rel="noopener noreferrer">Open source article/file</a>'
+        if file_url else "<span>No source link</span>"
     )
     license_text = esc(image.get("license") or "Not documented")
     license_label = (
@@ -135,7 +135,7 @@ def card(candidate: dict, index: int) -> str:
         '<dt>Filename</dt><dd>' + esc(candidate.get("file_name") or "Unavailable") + "</dd>",
         '<dt>License (unreviewed)</dt><dd>' + license_label + "</dd>",
         '<dt>Artist</dt><dd>' + attribution + "</dd>",
-        '<dt>Commons file</dt><dd>' + link + "</dd></dl>",
+        '<dt>Image source</dt><dd>' + link + "</dd></dl>",
         '<p class="hold">Review required · not approved for publication</p>',
         "</div></article>",
     ])
