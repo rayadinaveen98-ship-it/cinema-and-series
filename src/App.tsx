@@ -20,6 +20,9 @@ type Movie = {
   releaseSourceUrl?: string;
   posterUrl?: string;
   backdropUrl?: string;
+  artworkAttribution?: string;
+  artworkSourceUrl?: string;
+  artworkLicenseUrl?: string;
 };
 
 type SeriesKind = "series" | "web_series" | "miniseries" | "anthology" | "unknown";
@@ -31,6 +34,9 @@ type SeriesTitle = {
   posterUrl?: string;
   backdropUrl?: string;
   artworkSource?: string;
+  artworkAttribution?: string;
+  artworkSourceUrl?: string;
+  artworkLicenseUrl?: string;
   seriesKind: SeriesKind;
   language: string;
   countryCode?: string;
@@ -409,6 +415,7 @@ function MovieDetail({ movie, onClose }: { movie: Movie; onClose: () => void }) 
           <p>{movie.datePrecision === "year" || !movie.releaseDate ? `Release year sourced from ${movie.releaseSourceName || "the catalogue"}. The exact release date is not independently verified.` : movie.verificationStatus === "verified" ? `Release information is verified against ${movie.releaseSourceName || "a first-party source"}.` : "This title is in the catalogue while stronger first-party release evidence is still being collected."}</p>
           <div className="detail-facts"><span><b>Year</b>{movieYear(movie) || "—"}</span><span><b>Language</b>{movie.language || "Unknown"}</span><span><b>Country</b>{countryLabel(movie.countryCode)}</span><span><b>Status</b>{movie.verificationStatus === "verified" ? "Verified" : "Unconfirmed"}</span></div>
           {movie.releaseSourceUrl && (movie.datePrecision === "year" || !movie.releaseDate) ? <div className="source-links"><a href={movie.releaseSourceUrl} target="_blank" rel="noopener noreferrer">View {movie.releaseSource === "wikidata" ? "Wikidata film record" : "Wikipedia film source"} ↗</a></div> : null}
+          {movie.artworkAttribution ? <div className="source-links artwork-credit"><small>{movie.artworkAttribution}</small>{movie.artworkSourceUrl ? <a href={movie.artworkSourceUrl} target="_blank" rel="noopener noreferrer">Image source ↗</a> : null}{movie.artworkLicenseUrl ? <a href={movie.artworkLicenseUrl} target="_blank" rel="noopener noreferrer">License ↗</a> : null}</div> : null}
         </div>
       </article>
     </div>
@@ -430,6 +437,7 @@ function SeriesDetail({ item, onClose }: { item: SeriesTitle; onClose: () => voi
           <p>Browse the series details here. Open the original source below to check its information.</p>
           <div className="detail-facts"><span><b>Format</b>{kindLabel(item.seriesKind)}</span><span><b>Status</b>{item.lifecycleStatus === "unknown" ? "Not classified" : item.lifecycleStatus}</span><span><b>Seasons</b>{item.seasonCount ?? "—"}</span><span><b>Episodes</b>{item.episodeCount ?? "—"}</span></div>
           {(item.sourceUrl || item.wikidataQid) ? <div className="source-links">{item.sourceUrl ? <a href={item.sourceUrl} target="_blank" rel="noreferrer noopener">Wikipedia source ↗</a> : null}{item.wikidataQid ? <a href={`https://www.wikidata.org/wiki/${item.wikidataQid}`} target="_blank" rel="noreferrer noopener">Wikidata ↗</a> : null}</div> : null}
+          {item.artworkAttribution ? <div className="source-links artwork-credit"><small>{item.artworkAttribution}</small>{item.artworkSourceUrl ? <a href={item.artworkSourceUrl} target="_blank" rel="noopener noreferrer">Image source ↗</a> : null}{item.artworkLicenseUrl ? <a href={item.artworkLicenseUrl} target="_blank" rel="noopener noreferrer">License ↗</a> : null}</div> : null}
         </div>
       </article>
     </div>

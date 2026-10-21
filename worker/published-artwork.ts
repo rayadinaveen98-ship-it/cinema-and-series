@@ -5,7 +5,7 @@ export type TitleArtworkIdentity = {
 };
 type LinkAssetRow = {
   source_id: string; presentation_role: string; asset_id: string; asset_type: string;
-  source_key: string; source_asset_id: string | null; source_page_url: string | null;
+  source_key: string; source_asset_id: string | null; source_page_url: string | null; rights_reference: string | null;
   delivery_url: string | null; language_code: string; territory_code: string;
   publication_state: string; rights_basis: string; hosting_mode: string;
   attribution_required: number; attribution_text: string | null;
@@ -16,7 +16,7 @@ type LinkAssetRow = {
 };
 export type PublishedArtwork = {
   posterUrl?: string; backdropUrl?: string; artworkSource?: string;
-  artworkSourceUrl?: string; artworkAttribution?: string;
+  artworkSourceUrl?: string; artworkAttribution?: string; artworkLicenseUrl?: string;
 };
 
 /** One bounded, page-local lookup; no full-catalogue artwork joins. */
@@ -32,7 +32,7 @@ export async function publishedArtworkForPage(
   if (!ids.length) return output;
   const placeholders = ids.map((_, i) => "?" + (i + 2)).join(",");
   const query = "SELECT l.source_id, l.presentation_role, a.id AS asset_id, a.asset_type, " +
-    "a.source_key, a.source_asset_id, a.source_page_url, a.delivery_url, " +
+    "a.source_key, a.source_asset_id, a.source_page_url, a.delivery_url, a.rights_reference, " +
     "a.language_code, a.territory_code, a.publication_state, a.rights_basis, " +
     "a.hosting_mode, a.attribution_required, a.attribution_text, a.rights_verified_at, " +
     "a.valid_from, a.valid_until, a.takedown_status, a.width, a.height, a.aspect_ratio, a.quality_score " +
@@ -80,6 +80,7 @@ export async function publishedArtworkForPage(
       backdropUrl: projection.backdrop.url ?? undefined,
       artworkSource: winner?.source_key, artworkSourceUrl: winner?.source_page_url ?? undefined,
       artworkAttribution: projection.poster.attribution ?? projection.backdrop.attribution ?? undefined,
+      artworkLicenseUrl: winner?.rights_reference?.startsWith("https://creativecommons.org/licenses/") ? winner.rights_reference : undefined,
     });
   }
   return output;

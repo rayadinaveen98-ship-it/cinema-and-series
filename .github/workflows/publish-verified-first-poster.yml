@@ -1,0 +1,160 @@
+name: Publish First Rights-Verified Film Poster (Guarded)
+
+# The Indian Priest (2016): single file, Commons VRT rightsholder permission
+# #2024032810002841, Creative Commons BY-SA 4.0. No unreviewed P18/wiki poster.
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/publish-verified-first-poster.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: cinema-production-artwork-publish
+  cancel-in-progress: false
+permissions:
+  contents: read
+
+jobs:
+  permissioned-poster:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test evidence, title match and write constraints before touching D1
+        run: python -m unittest tests.test_publish_commons_permissioned_pilot -v
+
+      - name: Bind existing production D1 only (never migrate or create)
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID" && test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+          mkdir -p data/generated/permissioned-poster
+
+      - name: Look up unique existing 2016 movie identity and artwork schema, read-only
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/permissioned-poster
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT id,title,wikidata_qid,country_code,CAST(substr(release_date,1,4) AS INTEGER) AS release_year
+            FROM movies WHERE title='The Indian Priest' COLLATE NOCASE
+              AND release_date BETWEEN '2016-01-01' AND '2016-12-31' LIMIT 6;" > "$ROOT/exact.json"
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT id,title,wikidata_qid,country_code,release_year
+            FROM catalogue_titles WHERE title='The Indian Priest' COLLATE NOCASE
+              AND release_year=2016 LIMIT 6;" > "$ROOT/catalogue.json"
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT name FROM sqlite_master
+            WHERE type='table' AND name IN ('artwork_assets','title_artwork_links')
+            ORDER BY name;" > "$ROOT/schema.json"
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.publish_commons_permissioned_pilot import parse_d1
+          root=Path("data/generated/permissioned-poster")
+          tables={r["name"] for r in parse_d1(root/"schema.json")}
+          if tables!={"artwork_assets","title_artwork_links"}:
+              raise SystemExit("Refusing to publish: canonical artwork tables missing")
+          PY
+
+      - name: Verify CC BY-SA VRT source metadata and prepare exact-ID insert-only SQL
+        shell: bash
+        id: candidate
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/permissioned-poster
+          python scripts/publish_commons_permissioned_pilot.py \
+            --exact "$ROOT/exact.json" --catalogue "$ROOT/catalogue.json" \
+            --out "$ROOT/approved.sql" --report "$ROOT/preview.json"
+          if [[ -s "$ROOT/approved.sql" ]]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "No exact matching existing title or metadata verification unavailable; zero writes."
+          fi
+
+      - name: Publish exactly one approved CC poster and its film link
+        if: steps.candidate.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/permissioned-poster
+          test -s "$ROOT/approved.sql"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --file "$ROOT/approved.sql" > "$ROOT/write-result.json"
+          python - <<'PY'
+          from pathlib import Path
+          from scripts.publish_commons_permissioned_pilot import parse_d1
+          root=Path("data/generated/permissioned-poster")
+          result=parse_d1(root/"write-result.json")
+          print("APPROVED_ARTWORK_WRITE_STATEMENTS="+str(len(result)),flush=True)
+          PY
+
+      - name: Independent read-back verification from production
+        if: steps.candidate.outputs.ready == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/permissioned-poster
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT l.source_table,l.source_id,l.presentation_role,a.id AS asset_id,
+              a.delivery_url,a.publication_state,a.rights_basis,a.hosting_mode,
+              a.attribution_required,a.attribution_text,a.rights_reference,
+              a.source_page_url,a.rights_verified_by,a.takedown_status
+            FROM title_artwork_links l JOIN artwork_assets a ON a.id=l.asset_id
+            WHERE a.id='commons-vrt-2024032810002841-the-indian-priest-poster';" > "$ROOT/verified.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from scripts.publish_commons_permissioned_pilot import parse_d1
+          root=Path("data/generated/permissioned-poster")
+          rows=parse_d1(root/"verified.json")
+          report=json.loads((root/"preview.json").read_text())
+          expected=report["source_id"]
+          if len(rows)!=1 or rows[0]["source_id"]!=expected:
+              raise SystemExit("Publication/link mismatch, do not claim live success")
+          item=rows[0]
+          if (item["publication_state"]!="OPEN_LICENSE_VERIFIED" or
+              item["rights_basis"]!="OPEN_LICENSE" or
+              item["takedown_status"]!="clear" or
+              item["attribution_required"]!=1 or
+              "Holdcaulfield1951" not in item["attribution_text"] or
+              "2024032810002841" not in item["rights_verified_by"]):
+              raise SystemExit("Asset rights/credit verification failed")
+          report["published"]=True
+          report["reason"]="verified_live_d1_poster_link"
+          report["verified_asset_id"]=item["asset_id"]
+          (root/"verified-report.json").write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
+          print("APPROVED_POSTER_PUBLISHED="+json.dumps(report,sort_keys=True),flush=True)
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as out:
+              out.write("## First real film poster, rights-verified\n\n")
+              out.write(f"**The Indian Priest (2016)**: one approved licensed poster linked to a real existing movie ID: \`{expected}\`.\n\n")
+              out.write("Copyright-holder permission: Wikimedia VRT #2024032810002841. License: CC BY-SA 4.0. Credit, source and license in app details.\n")
+          PY
+
+      - name: Explain why there were zero writes when identity/source missing
+        if: steps.candidate.outputs.ready == 'false'
+        shell: bash
+        run: |
+          cat data/generated/permissioned-poster/preview.json
+          echo "ARTWORK_SKIPPED_0_WRITES: no unique existing film match or source license check unavailable"
+
+      - name: Archive evidence and verified production result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: first-rights-verified-movie-poster-proof
+          path: |
+            data/generated/permissioned-poster/preview.json
+            data/generated/permissioned-poster/verified-report.json
+          retention-days: 30
+          if-no-files-found: warn
