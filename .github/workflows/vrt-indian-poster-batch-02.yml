@@ -46,7 +46,7 @@ jobs:
       - name: Test rights, identity and collision guards
         if: steps.date.outputs.allowed == 'true'
         run: |
-          python -m unittest tests.test_rights_verified_poster_batch tests.test_publish_commons_permissioned_pilot -v
+          python -m unittest tests.test_rights_verified_poster_batch tests.test_publish_commons_permissioned_pilot tests.test_verify_published_poster_api -v
       - name: Connect existing D1 without creation or migration
         if: steps.date.outputs.allowed == 'true'
         shell: bash
@@ -154,6 +154,26 @@ jobs:
               f.write(str(len(verified))+" genuinely licensed posters, each linked to an exact existing D1 title.\n\n")
               f.write("Held: "+json.dumps(report["held"])+"\n")
           PY
+      - name: Confirm approved posters are visible and credited in public app API
+        if: steps.date.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/vrt02
+          python scripts/verify_published_poster_api.py \
+            --report "$ROOT/verified.json" \
+            --out "$ROOT/public-acceptance.json" \
+            --nonce "$GITHUB_RUN_ID"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          result=json.loads(Path("data/generated/vrt02/public-acceptance.json").read_text())
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("\n## Actual public app artwork delivery\n\n")
+              f.write(str(result["visible_in_public_api"])+" verified poster(s) exposed through the live API with image, QID, source, attribution and CC license.\n\n")
+              if result["published_in_d1"]==0:
+                  f.write("No exact source film qualified; **no new posters published**.\n\n")
+          PY
       - uses: actions/upload-artifact@v4
         if: always() && steps.date.outputs.allowed == 'true'
         with:
@@ -161,5 +181,6 @@ jobs:
           path: |
             data/generated/vrt02/preview.json
             data/generated/vrt02/verified.json
+            data/generated/vrt02/public-acceptance.json
           retention-days: 30
           if-no-files-found: warn
