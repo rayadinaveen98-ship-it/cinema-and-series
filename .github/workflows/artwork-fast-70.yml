@@ -5,7 +5,9 @@ name: Fast Artwork — 50 Movies + 20 Series (Review Only)
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/artwork-fast-70.yml"]
+    paths:
+      - ".github/workflows/artwork-fast-70.yml"
+      - "scripts/artwork_fast_70.py"
   workflow_dispatch:
 
 permissions:
@@ -105,6 +107,7 @@ jobs:
               out.write(f"**{r['selected_count']}** existing titles selected\n\n")
               out.write(f"- Portrait poster leads: **{r['poster_candidates']}**\n")
               out.write(f"- Landscape backdrop leads: **{r['backdrop_candidates']}**\n")
+              out.write(f"- Article-year mismatch holds: **{r['year_mismatch_holds']}**\n")
               out.write(f"- Total titles with a visible candidate: **{r['visible_artwork_candidates']}**\n")
               out.write(f"- By database table: {r['selected_by_table']}\n")
               out.write(f"- Source errors: {r['source_errors']}\n\n")
