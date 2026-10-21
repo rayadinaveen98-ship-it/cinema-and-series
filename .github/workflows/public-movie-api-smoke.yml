@@ -43,6 +43,7 @@ jobs:
               "/api/series?limit=60&offset=60&meta=0",
               "/api/movies?scope=all&official=1&limit=1&offset=0&meta=0",
               "/api/movies?scope=all&official=1&limit=200&offset=0&meta=0",
+              "/api/movies?scope=all&q=The%20Indian%20Priest&year=2016&limit=10&meta=0",
           )
           root = os.environ["BASE_URL"].rstrip("/")
           failures = []
@@ -124,6 +125,32 @@ jobs:
                           or film.get("verificationStatus") != "unconfirmed"):
                           failures.append("wikidata_provenance_mismatch")
                           break
+          # One truly rights-verified Commons VRT poster must appear in the
+          # actual deployed public API, not just in artwork database tables.
+          first_poster = pages.get("/api/movies?scope=all&q=The%20Indian%20Priest&year=2016&limit=10&meta=0")
+          if first_poster is not None:
+              matches = [row for row in first_poster.get("movies") or []
+                         if row.get("wikidataQid") == "Q19508062"]
+              if len(matches) != 1:
+                  failures.append("first_poster_exact_film_identity_missing")
+              else:
+                  artwork = matches[0]
+                  poster = artwork.get("posterUrl") or ""
+                  if (not poster.startswith(("https://thumb.wikimedia.org/",
+                                            "https://upload.wikimedia.org/"))
+                      or artwork.get("artworkSource") != "wikimedia_commons_vrt"
+                      or "Holdcaulfield1951" not in (artwork.get("artworkAttribution") or "")
+                      or "CC BY-SA 4.0" not in (artwork.get("artworkAttribution") or "")
+                      or artwork.get("artworkLicenseUrl") != "https://creativecommons.org/licenses/by-sa/4.0/"
+                      or artwork.get("artworkSourceUrl") != "https://commons.wikimedia.org/wiki/File:The_Indian_Priest_Film_Poster.jpg"):
+                      failures.append("first_poster_not_visible_or_attributed")
+                  else:
+                      print("LIVE_PERMISSIONED_POSTER_VISIBLE=" + json.dumps({
+                          "title": artwork.get("title"), "source_id": artwork.get("id"),
+                          "wikidata_qid": artwork.get("wikidataQid"),
+                          "poster_url_host": poster.split("/")[2],
+                          "license": artwork.get("artworkLicenseUrl"),
+                      },sort_keys=True),flush=True)
           if failures:
               print("FAILED_PUBLIC_ENDPOINTS=" + json.dumps(failures))
               sys.exit(1)
