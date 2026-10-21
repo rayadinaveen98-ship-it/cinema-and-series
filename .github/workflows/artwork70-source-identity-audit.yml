@@ -2,7 +2,19 @@ name: Audit 70 Existing Poster Matches — Source Only
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/artwork70-source-identity-audit.yml"]
+    paths:
+      - ".github/workflows/artwork70-source-identity-audit.yml"
+      - "scripts/audit_artwork70_snapshot.py"
+      - "scripts/artwork_fast_70.py"
+      - "tests/test_artwork_fast_70.py"
+      - "tests/test_audit_artwork70_snapshot.py"
+  pull_request:
+    paths:
+      - ".github/workflows/artwork70-source-identity-audit.yml"
+      - "scripts/audit_artwork70_snapshot.py"
+      - "scripts/artwork_fast_70.py"
+      - "tests/test_artwork_fast_70.py"
+      - "tests/test_audit_artwork70_snapshot.py"
   workflow_dispatch:
 
 permissions:

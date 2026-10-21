@@ -19,16 +19,20 @@ def audit(snapshot: dict) -> dict:
             or len(rows) != snapshot.get("selected_count")
             or len(rows) > 70):
         raise ValueError("Not an audited, read-only 70-title artwork snapshot")
-    selected, article_images = [], {}
-    all_ids = set()
+    selected, article_images, commons_images = [], {}, {}
+    all_ids, all_qids = set(), set()
     for row in rows:
         if row.get("approved_for_publication") is not False or row.get("production_written") is not False:
             raise ValueError("Refusing previously published asset list")
         qid = str(row.get("wikidata_qid") or "")
         identity = (row.get("source_table"), row.get("source_id"))
-        if not QID.fullmatch(qid) or identity in all_ids:
-            raise ValueError("Duplicate/invalid source identity")
+        if (not QID.fullmatch(qid) or identity in all_ids or qid in all_qids
+                or row.get("source_table") not in ("movies", "catalogue_titles", "series_titles")
+                or not row.get("source_id")
+                or row.get("media_type") != ("series" if row["source_table"] == "series_titles" else "movie")):
+            raise ValueError("Duplicate/invalid or inconsistent source identity")
         all_ids.add(identity)
+        all_qids.add(qid)
         selected.append({
             **{k: row.get(k) for k in
                ("source_table","source_id","wikidata_qid","title","year",
@@ -39,10 +43,20 @@ def audit(snapshot: dict) -> dict:
             "approved_for_publication":False,
             "production_written":False,
         })
-        image = row.get("image") or {}
-        if image.get("source") == "wikipedia_article_pageimage":
-            article_images[qid] = image
-    result = attach_candidates(selected, article_images, {}, {"offline_review":0})
+        # The chosen preview may be a Commons poster while a Wikipedia backdrop
+        # remains in the archived candidates (or the other way around).
+        # Replaying only row["image"] silently erases the alternative source.
+        # No new web lookup is necessary: both candidates already exist here.
+        for image in (row.get("poster_candidate"), row.get("backdrop_candidate"), row.get("image")):
+            if not isinstance(image, dict) or not image.get("image_url"):
+                continue
+            if image.get("source") == "wikipedia_article_pageimage":
+                article_images.setdefault(qid, image)
+            elif image.get("source") == "wikidata_p18_commons":
+                commons_images.setdefault(qid, image)
+            else:
+                raise ValueError("Unrecognized archived image provenance; manual review required")
+    result = attach_candidates(selected, article_images, commons_images, {"offline_review":0})
     result["input"] = "archived_70_title_image_pilot"
     result["new_database_queries"] = 0
     result["new_external_searches"] = 0

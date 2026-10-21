@@ -126,6 +126,8 @@ class ArtworkFast70Tests(unittest.TestCase):
         self.assertFalse(unrelated_filename_flag("Peddi","Peddi_Poster.jpg"))
         self.assertEqual(article_media_type("https://en.wikipedia.org/wiki/Dragon_(2025_film)"),"movie")
         self.assertIsNone(article_media_type("https://en.wikipedia.org/wiki/Peddi"))
+        self.assertEqual(article_media_type("https://en.wikipedia.org/wiki/Panchanama_(TV_series)"),"series")
+        self.assertEqual(article_media_type("https://en.wikipedia.org/wiki/Some_title_(film)"),"movie")
 
     def test_no_image_is_not_marked_as_publishable(self):
         selected=select({"movies":[row("m",333)]})
