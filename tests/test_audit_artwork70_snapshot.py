@@ -50,6 +50,32 @@ class AuditArtwork70Tests(unittest.TestCase):
         with self.assertRaises(ValueError):
             audit(snapshot([a,a]))
 
+    def test_retains_both_saved_article_and_commons_candidates(self):
+        a=source("Q1003","Peddi","https://en.wikipedia.org/wiki/Peddi_(2026_film)","Peddi.jpg")
+        article={**a["image"],"width":900,"height":450}
+        commons={**a["image"],"source":"wikidata_p18_commons",
+                 "file_page_url":"https://commons.wikimedia.org/wiki/File:Peddi_poster.jpg",
+                 "pageimage_filename":"Peddi_poster.jpg","width":500,"height":750}
+        a["poster_candidate"]=commons
+        a["backdrop_candidate"]=article
+        a["image"]=commons
+        report=audit(snapshot([a]))
+        self.assertEqual(report["visible_artwork_candidates"],1)
+        self.assertEqual(report["poster_candidates"],1)
+        self.assertEqual(report["backdrop_candidates"],1)
+        self.assertEqual(report["candidates"][0]["poster_candidate"]["source"],"wikidata_p18_commons")
+        self.assertEqual(report["candidates"][0]["article_year"],2026)
+        self.assertFalse(report["candidates"][0]["approved_for_publication"])
+
+    def test_unknown_source_and_duplicate_qid_fail_closed(self):
+        a=source("Q1004","Peddi","https://en.wikipedia.org/wiki/Peddi","Peddi.jpg")
+        b={**a,"source_table":"catalogue_titles","source_id":"other-id"}
+        with self.assertRaises(ValueError):
+            audit(snapshot([a,b]))
+        a["image"]["source"]="unverified_external_provider"
+        with self.assertRaises(ValueError):
+            audit(snapshot([a]))
+
     def test_missing_image_stays_unpublished(self):
         a=source("Q1001","Peddi","https://en.wikipedia.org/wiki/Peddi","Peddi.jpg")
         a["image"]=None
