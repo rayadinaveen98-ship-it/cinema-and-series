@@ -136,6 +136,13 @@ jobs:
               else:
                   artwork = matches[0]
                   poster = artwork.get("posterUrl") or ""
+                  print("LIVE_POSTER_FIELD_DIAGNOSTIC="+json.dumps({
+                      "id": artwork.get("id"), "qid": artwork.get("wikidataQid"),
+                      "posterUrl": artwork.get("posterUrl"), "artworkSource": artwork.get("artworkSource"),
+                      "artworkSourceUrl": artwork.get("artworkSourceUrl"),
+                      "artworkAttribution": artwork.get("artworkAttribution"),
+                      "artworkLicenseUrl": artwork.get("artworkLicenseUrl"),
+                  },sort_keys=True),flush=True)
                   if (not poster.startswith(("https://thumb.wikimedia.org/",
                                             "https://upload.wikimedia.org/"))
                       or artwork.get("artworkSource") != "wikimedia_commons_vrt"
