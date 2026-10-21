@@ -62,6 +62,22 @@ class ArtworkFast70Tests(unittest.TestCase):
         self.assertEqual(result["candidates"][0]["poster_candidate"]["image_url"],article["image_url"])
         self.assertFalse(result["candidates"][0]["approved_for_publication"])
 
+    def test_year_mismatch_article_is_quarantined_even_with_exact_qid(self):
+        film = row("m",999)
+        film["title"] = "Dragon"
+        film["year"] = 2027
+        images = {"Q999": {
+            "image_url": "https://upload.wikimedia.org/wikipedia/en/thumb/dragon.jpg",
+            "file_page_url": "https://en.wikipedia.org/wiki/Dragon_(2025_film)",
+            "width": 250, "height": 375,
+            "match_basis": "EXACT_PAGEPROP_WIKIBASE_ITEM",
+        }}
+        result = attach_candidates(select({"movies":[film]}), images, {}, {})
+        self.assertEqual(result["year_mismatch_holds"], 1)
+        self.assertEqual(result["candidates"][0]["article_year"], 2025)
+        self.assertEqual(result["candidates"][0]["status"], "YEAR_MISMATCH_REVIEW")
+        self.assertFalse(result["candidates"][0]["approved_for_publication"])
+
     def test_no_image_is_not_marked_as_publishable(self):
         selected=select({"movies":[row("m",333)]})
         outcome=attach_candidates(selected,{}, {}, {"site":0})
