@@ -10,6 +10,8 @@ on:
       - "tests/test_audit_artwork70_snapshot.py"
       - "scripts/artwork_review_queue_70.py"
       - "tests/test_artwork_review_queue_70.py"
+      - "scripts/artwork70_html_gallery.py"
+      - "tests/test_artwork70_html_gallery.py"
   pull_request:
     paths:
       - ".github/workflows/artwork70-source-identity-audit.yml"
@@ -19,6 +21,8 @@ on:
       - "tests/test_audit_artwork70_snapshot.py"
       - "scripts/artwork_review_queue_70.py"
       - "tests/test_artwork_review_queue_70.py"
+      - "scripts/artwork70_html_gallery.py"
+      - "tests/test_artwork70_html_gallery.py"
   workflow_dispatch:
 
 permissions:
@@ -38,7 +42,8 @@ jobs:
         run: |
           python -m unittest tests.test_artwork_fast_70 \
             tests.test_audit_artwork70_snapshot \
-            tests.test_artwork_review_queue_70 -v
+            tests.test_artwork_review_queue_70 \
+            tests.test_artwork70_html_gallery -v
       - name: Read saved 70-title image sample without Cloudflare
         uses: actions/download-artifact@v4
         with:
@@ -96,6 +101,16 @@ jobs:
               output.write(f"- Automatically approved/published: **0**\n")
               output.write("\nDownload the CSV/JSON artifacts to review source pages and permissions.\n")
           PY
+      - name: Render local visual gallery from archived candidates
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/artwork70-source-audit
+          python scripts/artwork70_html_gallery.py \
+            --input "$ROOT/candidates.json" \
+            --output "$ROOT/visual-review.html"
+          test -s "$ROOT/visual-review.html"
+          echo "Open visual-review.html locally to inspect candidate thumbnails. No image rights are approved." >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -105,5 +120,6 @@ jobs:
             data/generated/artwork70-source-audit/identity-review.csv
             data/generated/artwork70-source-audit/review-queue.csv
             data/generated/artwork70-source-audit/review-queue.json
+            data/generated/artwork70-source-audit/visual-review.html
           retention-days: 30
           if-no-files-found: warn

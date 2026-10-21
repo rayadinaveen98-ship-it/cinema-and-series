@@ -29,7 +29,7 @@ FIELDS = (
     "review_priority", "action", "source_table", "source_id", "wikidata_qid",
     "title", "year", "language", "media_type", "identity_status",
     "poster_source", "poster_filename", "poster_page_url", "poster_preview_url",
-    "backdrop_source", "backdrop_page_url", "rights_status",
+    "backdrop_source", "backdrop_page_url", "backdrop_preview_url", "rights_status",
     "approved_for_publication",
 )
 
@@ -67,6 +67,7 @@ def make_queue(snapshot: dict) -> dict:
             "poster_preview_url": poster.get("image_url") or "",
             "backdrop_source": backdrop.get("source") or "",
             "backdrop_page_url": backdrop.get("file_page_url") or "",
+            "backdrop_preview_url": backdrop.get("image_url") or "",
             "rights_status": "UNVERIFIED_NOT_FOR_PUBLICATION",
             "approved_for_publication": False,
         })
