@@ -28,9 +28,15 @@ LANGUAGE = {"Telugu", "Tamil", "Malayalam", "Hindi", "Kannada", "Bengali", "Mara
 def select(rows_by_table: dict[str, list[dict]]) -> list[dict]:
     seen = set()
     chosen = []
+    order = {"Telugu": 0, "Tamil": 1, "Malayalam": 2, "Hindi": 3,
+             "Kannada": 4, "Bengali": 5, "Marathi": 6}
     for table, maximum in QUOTAS.items():
         taken = 0
-        for row in rows_by_table.get(table, []):
+        ranked = sorted(rows_by_table.get(table, []),
+            key=lambda r: (order.get(str(r.get("language_name")), 10),
+                           -(r.get("year") if isinstance(r.get("year"), int) else 0),
+                           str(r.get("title") or "")))
+        for row in ranked:
             qid = str(row.get("wikidata_qid") or "")
             title = str(row.get("title") or "").strip()
             year = row.get("year")
