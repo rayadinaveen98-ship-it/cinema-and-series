@@ -112,6 +112,13 @@ def card(candidate: dict, index: int) -> str:
         esc(candidate.get("title")) + '">'
         if thumb else '<div class="no-image">No usable thumbnail</div>'
     )
+    backdrop = candidate.get("backdrop_candidate") if isinstance(candidate.get("backdrop_candidate"), dict) else {}
+    wide_url = safe_url(backdrop.get("image_url"), IMAGE_HOSTS)
+    additional_backdrop = (
+        '<div class="backdrop-frame"><span>Landscape candidate</span><img src="' +
+        esc(wide_url) + '" loading="lazy" referrerpolicy="no-referrer" alt="Backdrop candidate"></div>'
+        if wide_url and candidate.get("poster_candidate") else ""
+    )
     attribution = esc(image.get("artist") or "Not provided")
     link = (
         '<a href="' + esc(file_url) + '" target="_blank" rel="noopener noreferrer">Open source article/file</a>'
@@ -125,6 +132,7 @@ def card(candidate: dict, index: int) -> str:
     return "\n".join([
         '<article class="tile">',
         '<div class="image-frame">' + picture + "</div>",
+        additional_backdrop,
         '<div class="content">',
         '<div class="eyebrow">#' + str(index) + " · " + esc(candidate.get("source_table")) + " · " + esc(shape) + "</div>",
         '<h2>' + esc(candidate.get("title")) + "</h2>",
@@ -169,6 +177,7 @@ h1 { font-size:clamp(25px,4vw,36px); letter-spacing:-.035em; }
 .image-frame { background:#0a0d12; height:350px; display:flex; justify-content:center; align-items:center; }
 .image-frame img { object-fit:contain; width:100%; height:100%; }
 .no-image { padding:24px; color:#9da8b5; }
+.backdrop-frame { padding:8px; font-size:11px; color:#b5bdc9; background:#0a0d12; } .backdrop-frame img { margin-top:6px; width:100%; aspect-ratio:16/9; object-fit:contain; }
 .content { padding:16px; }
 .eyebrow { font-size:11px; text-transform:uppercase; letter-spacing:.09em; color:#aab6c4; }
 h2 { font-size:19px; line-height:1.25; margin:10px 0; overflow-wrap:anywhere; }
