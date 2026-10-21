@@ -255452,7 +255452,7 @@
     "mode": "india_only"
   },
   "last_run": {
-    "timestamp_utc": "2026-10-21T05:17:48.947941+00:00",
+    "timestamp_utc": "2026-10-21T14:04:54.564069+00:00",
     "source_queue_qids": 19092,
     "category_qualified_queue": 18561,
     "production": {
@@ -255558,6 +255558,12 @@
     },
     {
       "timestamp": "2026-10-21T05:17:48.947941+00:00",
+      "production_status": "source_only",
+      "discovery_status": null,
+      "new_movies_added_today": 0
+    },
+    {
+      "timestamp": "2026-10-21T14:04:54.564069+00:00",
       "production_status": "source_only",
       "discovery_status": null,
       "new_movies_added_today": 0
