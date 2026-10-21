@@ -1,0 +1,142 @@
+name: VRT Indian Poster Batch 02
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/vrt-indian-poster-batch-02.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: cinema-production-artwork-publish
+  cancel-in-progress: false
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Test rights, identity and collision guards
+        run: |
+          python -m unittest tests.test_rights_verified_poster_batch tests.test_publish_commons_permissioned_pilot -v
+      - name: Connect existing D1 without creation or migration
+        shell: bash
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID" && test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+          mkdir -p data/generated/vrt02
+      - name: Find only exact-existing film identity records
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/vrt02
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT id,title,wikidata_qid,country_code,
+              CAST(substr(release_date,1,4) AS INTEGER) AS release_year FROM movies
+              WHERE title COLLATE NOCASE IN ('Yaanai','Lahiri Lahiri Lahirilo',
+                'Nasha Jurm Aur Gangsters','Vrithakrithiyulla Chathuram');" > "$ROOT/movies.json"
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT id,title,wikidata_qid,country_code,release_year FROM catalogue_titles
+              WHERE title COLLATE NOCASE IN ('Yaanai','Lahiri Lahiri Lahirilo',
+                'Nasha Jurm Aur Gangsters','Vrithakrithiyulla Chathuram');" > "$ROOT/catalogue.json"
+      - name: Validate live Commons VRT permission and license before writing
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/vrt02
+          python scripts/rights_verified_poster_batch.py \
+            --exact "$ROOT/movies.json" --catalogue "$ROOT/catalogue.json" --out-dir "$ROOT"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("data/generated/vrt02")
+          report=json.loads((root/"preview.json").read_text())
+          assert report["planned_sql_writes"]<=4 and report["published"]==0
+          assert all((root/x["sql_filename"]).is_file() for x in report["ready"])
+          print("PERMISSIONED_BATCH_PREVIEW="+json.dumps({
+              "ready":[x["title"] for x in report["ready"]],
+              "held":report["held"]},sort_keys=True),flush=True)
+          (root/"write-list.txt").write_text("\n".join(x["sql_filename"] for x in report["ready"])+"\n")
+          PY
+      - name: Apply only individual source-verified posters
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/vrt02
+          while IFS= read -r filename; do
+            [[ -n "$filename" ]] || continue
+            [[ "$filename" =~ ^vrts-[0-9]{16}\.sql$ ]] || exit 1
+            npx wrangler d1 execute cinema-and-series --remote --file "$ROOT/$filename" > "$ROOT/write.log"
+            echo "SUBMITTED_VERIFIED_POSTER=$filename"
+          done < "$ROOT/write-list.txt"
+      - name: Independently verify exact published assets and attribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/vrt02
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT l.source_table,l.source_id,l.media_type,l.presentation_role,
+              a.id AS asset_id,a.source_key,a.delivery_url,a.publication_state,
+              a.rights_basis,a.rights_reference,a.rights_verified_by,
+              a.takedown_status,a.attribution_required,a.attribution_text
+              FROM title_artwork_links l JOIN artwork_assets a ON l.asset_id=a.id
+              WHERE a.id IN ('commons-vrt-2022031910001078-poster',
+                'commons-vrt-2019011910002621-poster',
+                'commons-vrt-2023041510002599-poster',
+                'commons-vrt-2020051710001992-poster');" > "$ROOT/after.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          from scripts.publish_commons_permissioned_pilot import parse_d1
+          root=Path("data/generated/vrt02")
+          report=json.loads((root/"preview.json").read_text())
+          rows=parse_d1(root/"after.json")
+          verified=[]
+          for item in report["ready"]:
+              related=[r for r in rows if r["asset_id"]==item["asset_id"]]
+              expected={(x["table"],x["id"]) for x in item["source_ids"]}
+              actual={(x["source_table"],x["source_id"]) for x in related}
+              if not related or actual!=expected: raise SystemExit("Missing title link: "+item["title"])
+              for row in related:
+                  if not (row["source_key"]=="wikimedia_commons_vrt"
+                       and row["publication_state"]=="OPEN_LICENSE_VERIFIED"
+                       and row["rights_basis"]=="OPEN_LICENSE"
+                       and row["rights_reference"]==item["license"]
+                       and item["ticket"] in row["rights_verified_by"]
+                       and row["takedown_status"]=="clear"
+                       and row["attribution_required"]==1
+                       and "CC BY-SA 4.0" in row["attribution_text"]
+                       and row["delivery_url"].startswith(("https://thumb.wikimedia.org/","https://upload.wikimedia.org/"))):
+                      raise SystemExit("Rights evidence missing: "+item["title"])
+              verified.append(item["title"])
+          report["published"]=len(verified)
+          report["verified_titles"]=verified
+          (root/"verified.json").write_text(json.dumps(report,indent=2,sort_keys=True)+"\n")
+          print("VRT_BATCH_02_PUBLISHED="+json.dumps({
+              "count":len(verified),"titles":verified,"held":report["held"]},sort_keys=True),flush=True)
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a") as f:
+              f.write("## Verified Indian posters published\n\n")
+              f.write(str(len(verified))+" genuinely licensed posters, each linked to an exact existing D1 title.\n\n")
+              f.write("Held: "+json.dumps(report["held"])+"\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: vrt-indian-poster-batch-02-evidence
+          path: |
+            data/generated/vrt02/preview.json
+            data/generated/vrt02/verified.json
+          retention-days: 30
+          if-no-files-found: warn
