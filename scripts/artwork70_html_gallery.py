@@ -176,12 +176,11 @@ def render_gallery(report: dict) -> str:
             raise ValueError("Unexpected artwork review status")
         kind, label = kinds[row["action"]]
         poster_url = safe_url(row.get("poster_preview_url"), thumbnail=True)
+        backdrop_url = safe_url(row.get("backdrop_preview_url"), thumbnail=True)
         poster_page = safe_url(row.get("poster_page_url"))
         backdrop_page = safe_url(row.get("backdrop_page_url"))
         is_poster = bool(poster_url)
-        # A backdrop-only entry may provide a real image in the original
-        # audit, but this queue does not carry its thumbnail URL. Never
-        # fabricate or guess one: direct the reviewer to the source page.
+        preview_url = poster_url or backdrop_url
         search = " ".join(str(row.get(key) or "") for key in
                           ("title", "year", "language", "media_type", "wikidata_qid"))
         sections.append('<article class="card" data-kind="' + kind +
@@ -190,8 +189,8 @@ def render_gallery(report: dict) -> str:
                         ("Poster candidate" if is_poster else
                          "Backdrop source" if kind == "backdrop" else "No poster preview") +
                         '</span>')
-        if is_poster:
-            sections.append('<img src="' + esc(poster_url) + '" loading="lazy" decoding="async" '
+        if preview_url:
+            sections.append('<img src="' + esc(preview_url) + '" loading="lazy" decoding="async" '
                             'referrerpolicy="no-referrer" alt="' + esc(row["title"]) +
                             ' — unverified image candidate">')
         else:
