@@ -11,6 +11,7 @@ import argparse
 import json
 import re
 import sys
+import urllib.parse
 from collections import Counter
 from pathlib import Path
 
@@ -80,6 +81,30 @@ def shape(image: dict | None) -> str:
     return "unknown"
 
 
+def article_media_type(url: str) -> str | None:
+    """Only explicit film/series disambiguation is strong enough to flag a type."""
+    title = urllib.parse.unquote(str(url or "").split("/wiki/")[-1]).replace(" ", "_").lower()
+    match = re.search(
+        r"\((?:18\d{2}|19\d{2}|20\d{2})_(film|tv_series|television_series|web_series|miniseries)\)",
+        title,
+    )
+    if not match:
+        return None
+    return "movie" if match.group(1) == "film" else "series"
+
+
+def unrelated_filename_flag(title: str, file_name: str) -> bool:
+    """Review suspicious filenames, never assume an alternate title is false."""
+    stop = {"poster", "theatrical", "release", "official", "film", "telugu",
+            "movie", "image", "series", "title", "card", "for", "the", "and",
+            "2026", "2025", "2024", "2023", "2022"}
+    words = lambda s: {x for x in re.findall(r"[a-z]{3,}", urllib.parse.unquote(s).lower())
+                       if x not in stop}
+    title_words = words(title)
+    filename_words = words(file_name)
+    return len(title_words) >= 2 and len(filename_words) >= 1 and not title_words.intersection(filename_words)
+
+
 def attach_candidates(
     chosen: list[dict],
     article_images: dict[str, dict],
@@ -111,11 +136,24 @@ def attach_candidates(
                       page_url, re.IGNORECASE)
         item["article_year"] = int(m.group(1)) if m else None
         item["year_mismatch"] = bool(item["article_year"] and item["year"] != item["article_year"])
+        item["article_media_type"] = article_media_type(page_url)
+        item["media_type_mismatch"] = bool(
+            item["article_media_type"] and item["article_media_type"] != item["media_type"]
+        )
 
         item["file_name"] = (item["image"] or {}).get("pageimage_filename")
         item["match_basis"] = (item["image"] or {}).get("match_basis")
-        if item["year_mismatch"]:
+        item["poster_filename_review"] = bool(
+            item["poster_candidate"] and unrelated_filename_flag(
+                item["title"], str(item["file_name"] or "")
+            )
+        )
+        if item["media_type_mismatch"]:
+            item["status"] = "MEDIA_TYPE_MISMATCH_HOLD"
+        elif item["year_mismatch"]:
             item["status"] = "YEAR_MISMATCH_REVIEW"
+        elif item["poster_filename_review"]:
+            item["status"] = "POSTER_FILENAME_IDENTITY_REVIEW"
         elif item["poster_candidate"]:
             item["status"] = "POSTER_CANDIDATE_REVIEW"
         elif item["backdrop_candidate"]:
@@ -137,6 +175,8 @@ def attach_candidates(
         "backdrop_candidates": sum(bool(x["backdrop_candidate"]) for x in output),
         "visible_artwork_candidates": sum(bool(x["image"]) for x in output),
         "year_mismatch_holds": sum(bool(x["year_mismatch"]) for x in output),
+        "media_type_mismatch_holds": sum(bool(x["media_type_mismatch"]) for x in output),
+        "poster_filename_review_count": sum(bool(x["poster_filename_review"]) for x in output),
         "source_errors": errors,
         "warning": "Article preview is not a reusable artwork license; review the actual image, year and publication terms.",
         "candidates": output,
