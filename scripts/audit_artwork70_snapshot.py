@@ -30,9 +30,14 @@ def audit(snapshot: dict) -> dict:
             raise ValueError("Duplicate/invalid source identity")
         all_ids.add(identity)
         selected.append({
-            k: row.get(k) for k in
-            ("source_table","source_id","wikidata_qid","title","year",
-             "language","country","media_type")
+            **{k: row.get(k) for k in
+               ("source_table","source_id","wikidata_qid","title","year",
+                "language","country","media_type")},
+            "image":None,
+            "poster_candidate":None,
+            "backdrop_candidate":None,
+            "approved_for_publication":False,
+            "production_written":False,
         })
         image = row.get("image") or {}
         if image.get("source") == "wikipedia_article_pageimage":
