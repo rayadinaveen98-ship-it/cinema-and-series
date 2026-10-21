@@ -21,6 +21,15 @@ def commons_response(entry, license_name="CC BY-SA 4.0", ticket=True):
         "revisions":[{"slots":{"main":{"*":'{{PermissionOTRS|id='+entry["ticket"]+'}}' if ticket else 'All rights reserved'}}}]
     }}}}
 
+def probe(entry, license_name="CC BY-SA 4.0", ticket=True):
+    def fetch(url,params):
+        if params.get("action")=="parse":
+            return {"parse":{"title":"File:"+entry["file"],"text":{"*":
+                "<div class='VRT permission'>ticket #"+entry["ticket"]+"</div>"
+                if ticket else "<div>No permission</div>"}}}
+        return commons_response(entry,license_name=license_name,ticket=ticket)
+    return fetch
+
 class RightsVerifiedBatchTests(unittest.TestCase):
     def test_exact_qid_year_and_conflicting_identities(self):
         p=POSTERS[0]
@@ -33,24 +42,23 @@ class RightsVerifiedBatchTests(unittest.TestCase):
 
     def test_license_file_ticket_and_url_are_not_guessed(self):
         p=POSTERS[0]
-        ok=verified_metadata(p, lambda url,params:commons_response(p))
+        ok=verified_metadata(p,probe(p))
         self.assertEqual(ok["ticket"],p["ticket"])
         self.assertEqual(ok["license"],LICENSE)
-        for mock in [
-            commons_response(p,"Non-free"),
-            commons_response(p,ticket=False)
-        ]:
+        for settings in ({"license_name":"Non-free"},{"ticket":False}):
             with self.assertRaises(ValueError):
-                verified_metadata(p,lambda url,params,mock=mock:mock)
+                verified_metadata(p,probe(p,**settings))
         wrong=commons_response(p)
         wrong["query"]["pages"]["12"]["imageinfo"][0]["thumburl"]="https://example.org/spoof.jpg"
+        def wrong_host(url,params):
+            return wrong if params.get("action")=="query" else probe(p)(url,params)
         with self.assertRaises(ValueError):
-            verified_metadata(p,lambda url,params:wrong)
+            verified_metadata(p,wrong_host)
 
     def test_insert_only_provenance_and_exact_db_binding(self):
         p=POSTERS[1]
         row=movie(p)
-        image=verified_metadata(p,lambda url,params:commons_response(p))
+        image=verified_metadata(p,probe(p))
         statement=sql(p,[row],image)
         self.assertIn("OPEN_LICENSE_VERIFIED",statement)
         self.assertIn("INSERT OR IGNORE INTO artwork_assets",statement)
@@ -66,7 +74,7 @@ class RightsVerifiedBatchTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             records=[movie(POSTERS[0])]
             def fetch(url,params):
-                return commons_response(POSTERS[0])
+                return probe(POSTERS[0])(url,params)
             report=prepare([],records,Path(td),fetch=fetch)
             self.assertEqual(report["planned_sql_writes"],1)
             self.assertEqual(len(report["ready"]),1)

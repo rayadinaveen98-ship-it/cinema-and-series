@@ -93,11 +93,20 @@ def verified_metadata(entry: dict, fetch=_http_get_json) -> dict:
     height = int(details.get("thumbheight") or details.get("height") or 0)
     if width < 250 or height < 330 or height < width * 1.2:
         raise ValueError("not_a_portrait_poster")
-    rev = (page.get("revisions") or [{}])[0]
-    wiki = str((rev.get("slots") or {}).get("main", {}).get("*") or rev.get("*") or "")
-    if entry["ticket"] not in wiki or "PermissionOTRS" not in wiki and "PermissionVRT" not in wiki:
-        # A Commons file's stated CC license alone does not prove that the
-        # film copyright-holder actually granted it.
+    # VRT permission notices are often transcluded from permission templates
+    # or structured Commons file metadata; the raw file revision alone cannot
+    # reliably expose them. Verify the independently rendered Commons page.
+    rendered = fetch(COMMONS_API, {
+        "action":"parse", "page":name, "prop":"text",
+        "format":"json", "maxlag":"5",
+    })
+    parsed_page = rendered.get("parse") or {}
+    if parsed_page.get("title") != name:
+        raise ValueError("rendered_file_identity_mismatch")
+    html = str((parsed_page.get("text") or {}).get("*") or "")
+    if (entry["ticket"] not in html
+            or "VRT" not in html
+            or "permission" not in html.lower()):
         raise ValueError("copyright_holder_vrt_proof_missing")
     return {"url":url, "width":width, "height":height, "license":license_url,
             "source":"https://commons.wikimedia.org/wiki/File:" + urllib.parse.quote(entry["file"].replace(" ", "_")),
