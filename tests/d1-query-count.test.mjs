@@ -12,7 +12,7 @@ const bundled = await build({
 });
 const worker = (await import("data:text/javascript;base64," + Buffer.from(bundled.outputFiles[0].text).toString("base64"))).default;
 
-function fakeDb() {
+function fakeDb(artworkRow = null) {
   const queries = [];
   const film = {
     id: "movie-1", wikidata_qid: null, title: "Film", native_title: null,
@@ -37,6 +37,7 @@ function fakeDb() {
       return {
         bind() { return this; },
         async all() {
+          if (sql.includes("FROM title_artwork_links")) return { results: artworkRow ? [artworkRow] : [] };
           if (sql.includes("SELECT c.* FROM combined_catalogue")) return { results: [film] };
           if (sql.includes("SELECT s.* FROM series_titles")) return { results: [show] };
           return { results: [] };
@@ -55,8 +56,8 @@ function fakeDb() {
   return { db, queries };
 }
 
-async function request(path) {
-  const { db, queries } = fakeDb();
+async function request(path, artworkRow = null) {
+  const { db, queries } = fakeDb(artworkRow);
   // POST bypasses Worker edge caching for an isolated query-plan test;
   // handleRequest uses identical routing for GET and POST.
   const response = await worker.fetch(new Request("https://cinema.test" + path, { method: "POST" }), { DB: db }, { waitUntil() {} });
@@ -98,4 +99,29 @@ test("Series full metadata still returns all expected keys", async () => {
   assert.equal(data.metadataLevel, "full");
   assert.ok(data.facets?.kinds);
   assert.equal(data.stats.total, 1);
+});
+
+test("Approved open-license movie image returns both poster and clickable license credit", async () => {
+  const row = {
+    source_id: "movie-1", presentation_role: "poster",
+    asset_id: "commons-vrt-sample", asset_type: "poster",
+    source_key: "wikimedia_commons_vrt", source_asset_id: "Poster.jpg",
+    source_page_url: "https://commons.wikimedia.org/wiki/File:Poster.jpg",
+    delivery_url: "https://thumb.wikimedia.org/wikipedia/commons/film.jpg",
+    rights_reference: "https://creativecommons.org/licenses/by-sa/4.0/",
+    language_code: "", territory_code: "",
+    publication_state: "OPEN_LICENSE_VERIFIED",
+    rights_basis: "OPEN_LICENSE", hosting_mode: "PROVIDER_CDN",
+    attribution_required: 1,
+    attribution_text: "Film poster by rightsholder, CC BY-SA 4.0",
+    rights_verified_at: "2026-10-20T00:00:00Z",
+    valid_from: null, valid_until: null, takedown_status: "clear",
+    width: 680, height: 890, aspect_ratio: 0.764, quality_score: 1,
+  };
+  const { data, queries } = await request("/api/movies?scope=all&limit=10&meta=0", row);
+  assert.equal(queries.filter((sql) => sql.includes("FROM title_artwork_links")).length, 1);
+  assert.equal(data.movies[0].posterUrl, row.delivery_url);
+  assert.equal(data.movies[0].artworkSource, row.source_key);
+  assert.equal(data.movies[0].artworkAttribution, row.attribution_text);
+  assert.equal(data.movies[0].artworkLicenseUrl, row.rights_reference);
 });
