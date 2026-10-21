@@ -5,7 +5,9 @@ name: Publish First Rights-Verified Film Poster (Guarded)
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/publish-verified-first-poster.yml"]
+    paths:
+      - ".github/workflows/publish-verified-first-poster.yml"
+      - "scripts/publish_commons_permissioned_pilot.py"
   workflow_dispatch:
 
 concurrency:
