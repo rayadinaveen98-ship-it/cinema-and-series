@@ -10,9 +10,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import sys
 from collections import Counter
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from existing_title_artwork_pilot import (
     commons_by_filename, p18_by_qid, read_wrangle_rows,
 )
