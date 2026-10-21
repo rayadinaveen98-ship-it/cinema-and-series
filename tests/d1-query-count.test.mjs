@@ -64,9 +64,10 @@ async function request(path) {
   return { data: await response.json(), queries };
 }
 
-test("Movie page-only requires 2 D1 statements, never the 6 aggregate reads", async () => {
+test("Movie page-only uses 2 catalogue statements + 1 page-local artwork lookup", async () => {
   const { data, queries } = await request("/api/movies?scope=all&limit=60&offset=60&meta=0");
-  assert.equal(queries.length, 2);
+  assert.equal(queries.length, 3);
+  assert.equal(queries.filter((sql) => sql.includes("FROM title_artwork_links")).length, 1);
   assert.equal(data.movies.length, 1);
   assert.deepEqual(data.pagination, { limit: 60, offset: 60, total: 1, hasMore: false });
   assert.equal(data.metadataLevel, "page-only");
@@ -76,15 +77,16 @@ test("Movie page-only requires 2 D1 statements, never the 6 aggregate reads", as
 });
 test("Movie legacy full metadata remains backward compatible", async () => {
   const { data, queries } = await request("/api/movies?scope=all&limit=60");
-  assert.equal(queries.length, 8);
+  assert.equal(queries.length, 9);
   assert.equal(data.metadataLevel, "full");
   assert.ok(data.facets);
   assert.ok(data.stats);
   assert.ok(data.periodCounts);
 });
-test("Series page-only requires 2 statements, not 7", async () => {
+test("Series page-only uses 2 catalogue statements + 1 bounded artwork lookup", async () => {
   const { data, queries } = await request("/api/series?limit=18&meta=0");
-  assert.equal(queries.length, 2);
+  assert.equal(queries.length, 3);
+  assert.equal(queries.filter((sql) => sql.includes("FROM title_artwork_links")).length, 1);
   assert.equal(data.series.length, 1);
   assert.equal(data.metadataLevel, "page-only");
   assert.equal(Object.hasOwn(data, "facets"), false);
@@ -92,7 +94,7 @@ test("Series page-only requires 2 statements, not 7", async () => {
 });
 test("Series full metadata still returns all expected keys", async () => {
   const { data, queries } = await request("/api/series?limit=60");
-  assert.equal(queries.length, 7);
+  assert.equal(queries.length, 8);
   assert.equal(data.metadataLevel, "full");
   assert.ok(data.facets?.kinds);
   assert.equal(data.stats.total, 1);
