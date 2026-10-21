@@ -43,7 +43,7 @@ jobs:
               "/api/series?limit=60&offset=60&meta=0",
               "/api/movies?scope=all&official=1&limit=1&offset=0&meta=0",
               "/api/movies?scope=all&official=1&limit=200&offset=0&meta=0",
-              "/api/movies?scope=all&q=The%20Indian%20Priest&year=2016&limit=10&meta=0",
+              "/api/movies?scope=all&q=The%20Indian%20Priest&year=2016&limit=10&meta=0&artworkLicenseFresh=20261021v2",
           )
           root = os.environ["BASE_URL"].rstrip("/")
           failures = []
@@ -127,7 +127,7 @@ jobs:
                           break
           # One truly rights-verified Commons VRT poster must appear in the
           # actual deployed public API, not just in artwork database tables.
-          first_poster = pages.get("/api/movies?scope=all&q=The%20Indian%20Priest&year=2016&limit=10&meta=0")
+          first_poster = pages.get("/api/movies?scope=all&q=The%20Indian%20Priest&year=2016&limit=10&meta=0&artworkLicenseFresh=20261021v2")
           if first_poster is not None:
               matches = [row for row in first_poster.get("movies") or []
                          if row.get("wikidataQid") == "Q19508062"]
