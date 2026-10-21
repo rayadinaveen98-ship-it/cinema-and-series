@@ -430,6 +430,7 @@ env.DB.prepare(
         artworkSource: approvedArtwork.get(item.id)?.artworkSource ?? (item.poster_url ? "legacy" : visualArtwork.get(item.wikidata_qid ?? "")?.sourceName),
         artworkSourceUrl: approvedArtwork.get(item.id)?.artworkSourceUrl,
         artworkAttribution: approvedArtwork.get(item.id)?.artworkAttribution,
+        artworkLicenseUrl: approvedArtwork.get(item.id)?.artworkLicenseUrl,
         sourceCategory: item.source_category,
         sourceUrl: item.source_url,
       }));
@@ -620,6 +621,7 @@ env.DB.prepare(
           artworkSourceUrl: approved?.artworkSourceUrl ?? movie.artwork_source_url
             ?? (officialPoster ? officialUrl ?? undefined : wikimediaPoster?.sourceUrl ?? undefined),
           artworkAttribution: approved?.artworkAttribution,
+          artworkLicenseUrl: approved?.artworkLicenseUrl,
         };
       });
       const latestUpdate = [statsResult?.latest_updated_at, sourcesResult?.latest_updated_at].filter((value): value is string => Boolean(value)).sort().at(-1);
