@@ -1,13 +1,9 @@
 name: Fast Artwork — 50 Movies + 20 Series (Review Only)
 
-# Actual existing production IDs and visual discovery, never automatically
-# publishes non-free posters. Runs once when this workflow enters main.
+# Actual existing production IDs and visual discovery. This archived 70-title
+# pilot already completed; manual-only prevents accidental D1 quota consumption
+# whenever image review logic is updated. It never publishes nonfree posters.
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/artwork-fast-70.yml"
-      - "scripts/artwork_fast_70.py"
   workflow_dispatch:
 
 permissions:
