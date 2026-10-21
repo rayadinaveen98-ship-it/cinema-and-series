@@ -1,0 +1,89 @@
+name: Artwork V2 — Immediate Source-Only 500
+
+# Source-only scan: runs on merge NOW, independent of D1 quota.
+# 70 archived exact production identities + 430 Wikidata category leads.
+# The additional 430 are NOT confirmed as existing D1 catalogue records.
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/artwork-source-now.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: cinema-artwork-source-discovery
+  cancel-in-progress: false
+
+jobs:
+  discover-without-cloudflare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Run offline identity and nonpublication tests
+        run: |
+          python -m unittest tests.test_artwork_bulk_500_source_now \
+            tests.test_artwork_bulk_500 \
+            tests.test_artwork_fast_70 -v
+      - name: Restore actual 70 stored D1 identities (archived earlier)
+        uses: actions/download-artifact@v4
+        with:
+          name: cinema-fast-70-image-candidates
+          run-id: 39539163566
+          github-token: ${{ github.token }}
+          path: data/generated/artwork-source-now
+      - name: Load existing persistent Indian-film discovery checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin refs/heads/automation/india-growth-state
+          git show FETCH_HEAD:.automation/india-growth-state.json \
+            > data/generated/artwork-source-now/source-state.json
+          test -s data/generated/artwork-source-now/source-state.json
+      - name: Search exact-QID article artwork now; no Cloudflare connection
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/artwork-source-now
+          python scripts/artwork_bulk_500_source_now.py \
+            --archive70 "$ROOT/candidates.json" \
+            --source-state "$ROOT/source-state.json" \
+            --out "$ROOT/report.json" \
+            --csv "$ROOT/poster-leads.csv"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path("data/generated/artwork-source-now/report.json")
+          r=json.loads(p.read_text(encoding="utf-8"))
+          assert r["d1_reads"]==0 and r["d1_writes"]==0
+          assert r["published_in_app"]==0
+          assert r["rights_automatically_approved"]==0
+          assert len(r["candidates"])==r["selected"]
+          assert all(not c["approved_for_publication"] for c in r["candidates"])
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as output:
+              output.write("## Immediate Artwork V2 source scan (without D1)\n\n")
+              output.write(f"- Total source identities: **{r['selected']}**\n")
+              output.write(f"- Existing D1 identities from Oct 21 archive: **{r['from_existing_d1_archive']}**\n")
+              output.write(f"- Additional *unconfirmed* Indian film source identities: **{r['from_unconfirmed_source_queue']}**\n")
+              output.write(f"- New image poster leads discovered: **{r['new_external_poster_leads']}**\n")
+              output.write(f"- Total poster leads (including archive): **{r['total_candidate_posters_including_archived']}**\n")
+              output.write(f"- Source errors: {r['source_errors']}\n\n")
+              output.write("**NOT** 500 verified app titles or licensed posters. No images published. No D1 reads/writes.\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: artwork-v2-immediate-source-only-results
+          path: |
+            data/generated/artwork-source-now/report.json
+            data/generated/artwork-source-now/poster-leads.csv
+          if-no-files-found: warn
+          retention-days: 30
