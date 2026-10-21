@@ -122,6 +122,9 @@ jobs:
           if len(rows)!=1 or rows[0]["source_id"]!=expected:
               raise SystemExit("Publication/link mismatch, do not claim live success")
           item=rows[0]
+          print("LIVE_D1_LICENSE_REFERENCE="+str(item.get("rights_reference")),flush=True)
+          if item.get("rights_reference")!="https://creativecommons.org/licenses/by-sa/4.0/":
+              raise SystemExit("Approved image license reference missing/mismatched in D1")
           if (item["publication_state"]!="OPEN_LICENSE_VERIFIED" or
               item["rights_basis"]!="OPEN_LICENSE" or
               item["takedown_status"]!="clear" or
