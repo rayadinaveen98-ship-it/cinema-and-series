@@ -93,13 +93,10 @@ jobs:
           test -s "$ROOT/approved.sql"
           npx wrangler d1 execute cinema-and-series --remote --json \
             --file "$ROOT/approved.sql" > "$ROOT/write-result.json"
-          python - <<'PY'
-          from pathlib import Path
-          from scripts.publish_commons_permissioned_pilot import parse_d1
-          root=Path("data/generated/permissioned-poster")
-          result=parse_d1(root/"write-result.json")
-          print("APPROVED_ARTWORK_WRITE_STATEMENTS="+str(len(result)),flush=True)
-          PY
+          # Wrangler --file may print human progress before JSON on stdout.
+          # Do NOT parse that as an authoritative row count. The independent
+          # SELECT in the following step determines publication success.
+          echo "ARTWORK_SQL_SUBMITTED_WITH_EXIT_ZERO; awaiting independent D1 read-back"
 
       - name: Independent read-back verification from production
         if: steps.candidate.outputs.ready == 'true'
