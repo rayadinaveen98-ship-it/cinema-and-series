@@ -11,8 +11,11 @@ import html
 import json
 from pathlib import Path
 from urllib.parse import urlsplit
+import sys
 
-from artwork_review_queue_70 import make_queue
+# Works both as python scripts/artwork70_html_gallery.py and as an imported test.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from scripts.artwork_review_queue_70 import make_queue
 
 KNOWN_SITES = {
     "commons.wikimedia.org",
