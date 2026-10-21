@@ -22,14 +22,14 @@ class PermissionedFirstPosterTests(unittest.TestCase):
         def fake(url, params):
             self.assertEqual(params["titles"],"File:The Indian Priest Film Poster.jpg")
             return {"query":{"pages":{"12":{"title":"File:The Indian Priest Film Poster.jpg",
-                "imageinfo":[{"thumburl":"https://upload.wikimedia.org/thumb/Indian_Priest.jpg",
+                "imageinfo":[{"thumburl":"https://thumb.wikimedia.org/thumb/Indian_Priest.jpg",
                 "thumbwidth":680,"thumbheight":890,"extmetadata":{
                     "LicenseShortName":{"value":"CC BY-SA 4.0"},
                     "LicenseUrl":{"value":LICENSE_URL}}}]}}}}
         image=fetch_commons_image(fake)
         self.assertEqual(image["width"],680)
         self.assertEqual(image["height"],890)
-        self.assertTrue(image["url"].startswith("https://upload.wikimedia.org/"))
+        self.assertTrue(image["url"].startswith("https://thumb.wikimedia.org/"))
         self.assertEqual(image["vrt_ticket"],"2024032810002841")
         def counterfeit(url, params):
             output=fake(url,params)
