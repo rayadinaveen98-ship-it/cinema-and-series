@@ -33,6 +33,14 @@ class LivePublishedPosterAcceptanceTests(unittest.TestCase):
         self.assertTrue(result["poster_displayed_in_api"])
         self.assertEqual(result["linked_ids"],["wd-Q400"])
 
+    def test_hidden_year_duplicate_does_not_fail_public_api_acceptance(self):
+        film = item()
+        film["source_ids"].append({
+            "table":"movies","id":"movie-Q400","qid":"Q400"
+        })
+        result=verify_film(film,payload())
+        self.assertEqual(result["linked_ids"],["wd-Q400"])
+
     def test_wrong_qid_id_or_attribution_is_rejected(self):
         for film_change in (
             {"wikidataQid":"Q401"},{"id":"wrong-title"},
