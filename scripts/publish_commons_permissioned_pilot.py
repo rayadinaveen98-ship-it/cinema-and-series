@@ -84,8 +84,8 @@ def fetch_commons_image(fetch=None) -> dict:
         raise ValueError("Source license is not verified CC BY-SA 4.0")
     url = details.get("thumburl") or details.get("url") or ""
     parsed = urllib.parse.urlsplit(url)
-    if parsed.scheme != "https" or parsed.hostname != "upload.wikimedia.org":
-        raise ValueError("Image URL is not Wikimedia upload CDN")
+    if parsed.scheme != "https" or parsed.hostname not in ("upload.wikimedia.org", "thumb.wikimedia.org"):
+        raise ValueError("Image URL is not a trusted Wikimedia image CDN: " + str(parsed.hostname))
     width = int(details.get("thumbwidth") or details.get("width") or 0)
     height = int(details.get("thumbheight") or details.get("height") or 0)
     if not 200 <= width <= 5000 or not 200 <= height <= 5000 or height <= width:
