@@ -85,7 +85,7 @@ def article_media_type(url: str) -> str | None:
     """Only explicit film/series disambiguation is strong enough to flag a type."""
     title = urllib.parse.unquote(str(url or "").split("/wiki/")[-1]).replace(" ", "_").lower()
     match = re.search(
-        r"\((?:18\d{2}|19\d{2}|20\d{2})_(film|tv_series|television_series|web_series|miniseries)\)",
+        r"\((?:(?:18\d{2}|19\d{2}|20\d{2})_)?(film|tv_series|television_series|web_series|miniseries)\)",
         title,
     )
     if not match:
@@ -132,7 +132,7 @@ def attach_candidates(
         # Film disambiguation years in the source article URL are strong enough
         # to require an explicit identity/date review before publication.
         page_url = str((article or {}).get("file_page_url") or "")
-        m = re.search(r"\((18\d{2}|19\d{2}|20\d{2})_(?:film|TV_series|television_series)\)",
+        m = re.search(r"\((18\d{2}|19\d{2}|20\d{2})_(?:film|TV_series|television_series|web_series|miniseries)\)",
                       page_url, re.IGNORECASE)
         item["article_year"] = int(m.group(1)) if m else None
         item["year_mismatch"] = bool(item["article_year"] and item["year"] != item["article_year"])
