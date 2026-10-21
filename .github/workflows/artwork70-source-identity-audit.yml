@@ -8,6 +8,8 @@ on:
       - "scripts/artwork_fast_70.py"
       - "tests/test_artwork_fast_70.py"
       - "tests/test_audit_artwork70_snapshot.py"
+      - "scripts/artwork_review_queue_70.py"
+      - "tests/test_artwork_review_queue_70.py"
   pull_request:
     paths:
       - ".github/workflows/artwork70-source-identity-audit.yml"
@@ -15,6 +17,8 @@ on:
       - "scripts/artwork_fast_70.py"
       - "tests/test_artwork_fast_70.py"
       - "tests/test_audit_artwork70_snapshot.py"
+      - "scripts/artwork_review_queue_70.py"
+      - "tests/test_artwork_review_queue_70.py"
   workflow_dispatch:
 
 permissions:
@@ -33,7 +37,8 @@ jobs:
       - name: Test archive media identity and poster filename guards
         run: |
           python -m unittest tests.test_artwork_fast_70 \
-            tests.test_audit_artwork70_snapshot -v
+            tests.test_audit_artwork70_snapshot \
+            tests.test_artwork_review_queue_70 -v
       - name: Read saved 70-title image sample without Cloudflare
         uses: actions/download-artifact@v4
         with:
@@ -67,6 +72,30 @@ jobs:
               for row in report["review_blockers"]:
                   out.write(f"- **{row['title']}** — {row['status']} (QID {row['wikidata_qid']})\n")
           PY
+      - name: Produce licensed-artwork review queue from same archived sample
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/artwork70-source-audit
+          python scripts/artwork_review_queue_70.py \
+            --input "$ROOT/candidates.json" \
+            --json "$ROOT/review-queue.json" \
+            --csv "$ROOT/review-queue.csv"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          report=json.loads(Path("data/generated/artwork70-source-audit/review-queue.json").read_text())
+          assert report["selected_count"]==70
+          assert report["ready_for_publication"]==0
+          assert report["database_reads"]==0 and report["database_writes"]==0
+          assert report["publication_performed"] is False
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as output:
+              output.write("\n## Rights-first artwork review queue\n\n")
+              output.write(f"- Poster review leads: **{report['poster_leads']}**\n")
+              output.write(f"- Needs identity correction before image review: **{report['unresolved_identity_flags']}**\n")
+              output.write(f"- Automatically approved/published: **0**\n")
+              output.write("\nDownload the CSV/JSON artifacts to review source pages and permissions.\n")
+          PY
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -74,5 +103,7 @@ jobs:
           path: |
             data/generated/artwork70-source-audit/quality-report.json
             data/generated/artwork70-source-audit/identity-review.csv
+            data/generated/artwork70-source-audit/review-queue.csv
+            data/generated/artwork70-source-audit/review-queue.json
           retention-days: 30
           if-no-files-found: warn
