@@ -57,6 +57,7 @@ jobs:
               AND m.language_name IN ('Telugu','Tamil','Malayalam','Hindi','Kannada','Bengali','Marathi')
               AND m.wikidata_qid GLOB 'Q[0-9]*' AND m.title<>m.wikidata_qid
               AND COALESCE(m.poster_url,'')=''
+            ORDER BY m.release_date DESC
             LIMIT 300;" > "$ROOT/movies.json"
           npx wrangler d1 execute cinema-and-series --remote --json --command "
             SELECT c.id,c.wikidata_qid,c.title,c.release_year AS year,
