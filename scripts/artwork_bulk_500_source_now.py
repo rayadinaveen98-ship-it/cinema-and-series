@@ -21,6 +21,24 @@ from artwork_fast_70 import attach_candidates, shape
 from india_daily_autopilot import eligible_queue_items
 from existing_title_artwork_pilot import p18_by_qid, commons_by_filename
 from wikipedia_film_posters_pilot import article_sitelinks, film_page_images
+from wikimedia_paced_fetch import fetch as wikimedia_paced_fetch
+
+
+def paced_article_sitelinks(qids):
+    return article_sitelinks(qids, fetch=wikimedia_paced_fetch)
+
+
+def paced_film_page_images(links):
+    return film_page_images(links, fetch=wikimedia_paced_fetch)
+
+
+def paced_p18(qids):
+    return p18_by_qid(qids, fetch=wikimedia_paced_fetch)
+
+
+def paced_commons(filenames):
+    return commons_by_filename(filenames, fetch=wikimedia_paced_fetch)
+
 
 MAX_TOTAL = 500
 EXACT_ARCHIVE_COUNT = 70
@@ -83,8 +101,8 @@ def select_external(state: dict, archived_qids: set[str], max_new: int) -> list[
 
 
 def run(archive: dict, state: dict, *, total: int = MAX_TOTAL,
-        get_links=article_sitelinks, get_images=film_page_images,
-        get_p18=p18_by_qid, get_commons=commons_by_filename) -> dict:
+        get_links=paced_article_sitelinks, get_images=paced_film_page_images,
+        get_p18=paced_p18, get_commons=paced_commons) -> dict:
     rows = archive.get("candidates")
     if (archive.get("schema") != "existing-title-artwork-pilot-v1" or
             archive.get("d1_writes") != 0 or archive.get("publication_performed") is not False
