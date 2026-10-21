@@ -74,7 +74,6 @@ jobs:
             WHERE s.country_code='IN'
               AND s.language_name IN ('Telugu','Tamil','Malayalam','Hindi','Kannada','Bengali','Marathi')
               AND s.wikidata_qid GLOB 'Q[0-9]*'
-              AND COALESCE(s.poster_url,'')=''
             LIMIT 300;" > "$ROOT/series_titles.json"
 
       - name: Fetch matched film/series pageimages, separate portrait/backdrop candidates
