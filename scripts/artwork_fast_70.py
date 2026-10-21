@@ -85,7 +85,7 @@ def article_media_type(url: str) -> str | None:
     """Only explicit film/series disambiguation is strong enough to flag a type."""
     title = urllib.parse.unquote(str(url or "").split("/wiki/")[-1]).replace(" ", "_").lower()
     match = re.search(
-        r"\\((?:18\\d{2}|19\\d{2}|20\\d{2})_(film|tv_series|television_series|web_series|miniseries)\\)",
+        r"\((?:18\d{2}|19\d{2}|20\d{2})_(film|tv_series|television_series|web_series|miniseries)\)",
         title,
     )
     if not match:
