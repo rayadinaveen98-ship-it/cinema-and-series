@@ -1,0 +1,136 @@
+name: Artwork V2 — 500 Existing Titles
+
+# One deliberate post-quota run. Always behind the licensed-poster workflow,
+# never during the October 21 D1 limit, and never automatically in later years.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "10 2 22 10 *"
+
+concurrency:
+  group: cinema-production-artwork-publish
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  discover:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - name: Hold D1 until after October 22 quota reset
+        id: gate
+        shell: bash
+        run: |
+          TODAY="$(date -u +%F)"
+          if [[ "$TODAY" > "2026-10-21" && "$TODAY" < "2026-10-29" ]]; then
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            echo "Outside approved October 22-28 UTC discovery window. D1 untouched."
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.allowed == 'true'
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.allowed == 'true'
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        if: steps.gate.outputs.allowed == 'true'
+        with:
+          node-version: "22"
+      - name: Validate the bulk source matcher
+        if: steps.gate.outputs.allowed == 'true'
+        run: |
+          python -m unittest tests.test_artwork_bulk_500 tests.test_artwork_fast_70 -v
+      - name: Connect to existing database (no migration or creation)
+        if: steps.gate.outputs.allowed == 'true'
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID" && test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+          mkdir -p data/generated/artwork-bulk-500
+      - name: Capture bounded existing Indian-language identities
+        if: steps.gate.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/artwork-bulk-500
+          trap 'echo "D1 snapshot failed, no artwork published"; for f in "$ROOT"/movies.json "$ROOT"/catalogue_titles.json "$ROOT"/series_titles.json; do if [[ -s "$f" ]]; then head -c 500 "$f"; fi; done' ERR
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT m.id, m.wikidata_qid, m.title,
+              CAST(substr(m.release_date,1,4) AS INTEGER) AS year,
+              m.language_name, m.country_code, 0 AS has_poster
+            FROM movies m
+            WHERE m.country_code='IN'
+              AND m.language_name IN ('Telugu','Tamil','Malayalam','Kannada','Hindi','Bengali','Marathi')
+              AND m.wikidata_qid GLOB 'Q[0-9]*'
+              AND COALESCE(m.poster_url,'')=''
+              AND m.release_date >= '2015-01-01'
+            ORDER BY m.release_date DESC
+            LIMIT 380;" > "$ROOT/movies.json"
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT c.id, c.wikidata_qid, c.title, c.release_year AS year,
+              c.language_name, c.country_code, 0 AS has_poster
+            FROM catalogue_titles c
+            WHERE c.country_code='IN'
+              AND c.language_name IN ('Telugu','Tamil','Malayalam','Kannada','Hindi','Bengali','Marathi')
+              AND c.wikidata_qid GLOB 'Q[0-9]*'
+              AND c.release_year BETWEEN 2015 AND 2026
+            ORDER BY c.release_year DESC
+            LIMIT 330;" > "$ROOT/catalogue_titles.json"
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT s.id, s.wikidata_qid, s.title, s.first_air_year AS year,
+              s.language_name, s.country_code, 0 AS has_poster
+            FROM series_titles s
+            WHERE s.country_code='IN'
+              AND s.language_name IN ('Telugu','Tamil','Malayalam','Kannada','Hindi','Bengali','Marathi')
+              AND s.wikidata_qid GLOB 'Q[0-9]*'
+            ORDER BY s.first_air_year DESC
+            LIMIT 190;" > "$ROOT/series_titles.json"
+      - name: Discover official-poster candidates by exact Wikidata title identity
+        if: steps.gate.outputs.allowed == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/artwork-bulk-500
+          python scripts/artwork_bulk_500.py \
+            --movies "$ROOT/movies.json" \
+            --catalogue-titles "$ROOT/catalogue_titles.json" \
+            --series-titles "$ROOT/series_titles.json" \
+            --limit 500 --out "$ROOT/candidates.json" --csv "$ROOT/poster-leads.csv"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report=json.loads(Path("data/generated/artwork-bulk-500/candidates.json").read_text())
+          assert 1 <= report["selected_count"] <= 500
+          assert report["new_catalogue_records"] == 0
+          assert report["displayed_in_app"] == 0
+          assert report["publishable_posters"] == 0
+          assert report["d1_writes"] == 0 and report["publication_performed"] is False
+          assert all(x["approved_for_publication"] is False and not x["production_written"]
+                     for x in report["candidates"])
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as output:
+              output.write("## Artwork V2: first bulk title scan\n\n")
+              output.write(f"- Existing identities checked: **{report['selected_count']} / 500**\n")
+              output.write(f"- Portrait poster image leads found: **{report['poster_candidates']}**\n")
+              output.write(f"- Backdrop image leads found: **{report['backdrop_candidates']}**\n")
+              output.write(f"- Media-type mismatch holds: **{report['media_type_mismatch_holds']}**\n")
+              output.write(f"- Year mismatch holds: **{report['year_mismatch_holds']}**\n")
+              output.write(f"- Candidate artwork automatically published: **0**\n")
+              output.write(f"- Source error batches: {report['source_errors']}\n\n")
+              output.write("Candidates are discovery leads, not licensed images. Existing public artwork remains unchanged.\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.gate.outputs.allowed == 'true'
+        with:
+          name: cinema-artwork-v2-500-results
+          path: |
+            data/generated/artwork-bulk-500/candidates.json
+            data/generated/artwork-bulk-500/poster-leads.csv
+          retention-days: 30
+          if-no-files-found: warn
