@@ -1,7 +1,7 @@
 """Fast visible artwork candidates for actual 50+20 production identities."""
 import unittest
 
-from scripts.artwork_fast_70 import select, shape, run, attach_candidates
+from scripts.artwork_fast_70 import select, shape, run, attach_candidates, article_media_type, unrelated_filename_flag
 
 
 def row(prefix: str, number: int):
@@ -77,6 +77,55 @@ class ArtworkFast70Tests(unittest.TestCase):
         self.assertEqual(result["candidates"][0]["article_year"], 2025)
         self.assertEqual(result["candidates"][0]["status"], "YEAR_MISMATCH_REVIEW")
         self.assertFalse(result["candidates"][0]["approved_for_publication"])
+
+    def test_explicit_series_article_in_movie_catalogue_is_held(self):
+        film=row("m",991)
+        film["title"]="Panchanama"
+        film["year"]=2026
+        source={
+            "image_url":"https://upload.wikimedia.org/wikipedia/en/p/panchanama.jpg",
+            "file_page_url":"https://en.wikipedia.org/wiki/Panchanama_(2026_TV_series)",
+            "width":450,"height":640,
+            "pageimage_filename":"Panchanama_series.jpg",
+            "match_basis":"EXACT_PAGEPROP_WIKIBASE_ITEM",
+        }
+        out=attach_candidates(select({"movies":[film]}),{"Q991":source},{},{})
+        self.assertEqual(out["media_type_mismatch_holds"],1)
+        self.assertEqual(out["candidates"][0]["status"],"MEDIA_TYPE_MISMATCH_HOLD")
+        self.assertEqual(out["candidates"][0]["article_media_type"],"series")
+        self.assertFalse(out["candidates"][0]["approved_for_publication"])
+
+    def test_matching_series_article_in_series_table_is_not_wrongly_held(self):
+        row_series=row("s",992)
+        row_series["title"]="Panchanama"
+        row_series["year"]=2026
+        source={
+            "image_url":"https://upload.wikimedia.org/wikipedia/en/p/panchanama.jpg",
+            "file_page_url":"https://en.wikipedia.org/wiki/Panchanama_(2026_TV_series)",
+            "width":450,"height":640,
+            "pageimage_filename":"Panchanama_series.jpg",
+        }
+        out=attach_candidates(select({"series_titles":[row_series]}),{"Q992":source},{},{})
+        self.assertEqual(out["media_type_mismatch_holds"],0)
+        self.assertEqual(out["candidates"][0]["status"],"POSTER_CANDIDATE_REVIEW")
+
+    def test_unrelated_poster_filename_only_flags_review_not_false_license(self):
+        film=row("m",993)
+        film["title"]="Dharmasthala Niyojakavargam"
+        film["year"]=2026
+        source={
+            "image_url":"https://upload.wikimedia.org/wikipedia/en/v/vaarasthula.jpg",
+            "file_page_url":"https://en.wikipedia.org/wiki/Dharmasthala_Niyojakavargam",
+            "width":430,"height":620,
+            "pageimage_filename":"Theatrical_poster_for_the_Telugu_film_Vaarasthula.jpg",
+        }
+        out=attach_candidates(select({"movies":[film]}),{"Q993":source},{},{})
+        self.assertEqual(out["poster_filename_review_count"],1)
+        self.assertEqual(out["candidates"][0]["status"],"POSTER_FILENAME_IDENTITY_REVIEW")
+        self.assertFalse(out["candidates"][0]["approved_for_publication"])
+        self.assertFalse(unrelated_filename_flag("Peddi","Peddi_Poster.jpg"))
+        self.assertEqual(article_media_type("https://en.wikipedia.org/wiki/Dragon_(2025_film)"),"movie")
+        self.assertIsNone(article_media_type("https://en.wikipedia.org/wiki/Peddi"))
 
     def test_no_image_is_not_marked_as_publishable(self):
         selected=select({"movies":[row("m",333)]})
