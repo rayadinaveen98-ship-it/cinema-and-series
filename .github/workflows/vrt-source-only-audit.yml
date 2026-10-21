@@ -1,0 +1,28 @@
+name: Source-Only Wikimedia VRT Poster Audit
+on:
+  push:
+    branches: [main]
+    paths: [".github/workflows/vrt-source-only-audit.yml"]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  source-proof:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Test source identity guards
+        run: python -m unittest tests.test_rights_verified_poster_batch -v
+      - name: Verify actual Commons author permissions without D1
+        run: python scripts/vrt_source_preflight.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: verified-indian-movie-commons-source-proofs
+          path: data/generated/vrt-source-preflight.json
+          if-no-files-found: warn
+          retention-days: 30
