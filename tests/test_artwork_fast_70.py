@@ -53,7 +53,7 @@ class ArtworkFast70Tests(unittest.TestCase):
         result=run(rows,
             get_links=lambda qs:({qid:("enwiki","Title 777")},0),
             get_images=lambda link:({qid:article},0),
-            get_p18=lambda qs:{qid:"Backdrop.jpg"},
+            get_p18=lambda qs:({qid:"Backdrop.jpg"} if qid in qs else {}),
             get_commons=lambda names:{"backdrop.jpg":backdrop})
         self.assertEqual(result["selected_count"],1)
         self.assertEqual(result["poster_candidates"],1)
