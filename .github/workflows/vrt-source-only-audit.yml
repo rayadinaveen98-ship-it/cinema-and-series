@@ -2,7 +2,9 @@ name: Source-Only Wikimedia VRT Poster Audit
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/vrt-source-only-audit.yml"]
+    paths:
+      - ".github/workflows/vrt-source-only-audit.yml"
+      - "scripts/rights_verified_poster_batch.py"
   workflow_dispatch:
 permissions:
   contents: read
