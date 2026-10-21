@@ -5,6 +5,9 @@ on:
     paths:
       - ".github/workflows/vrt-indian-poster-batch-02.yml"
   workflow_dispatch:
+  # One-time: after free D1 row-read quota resets at midnight UTC.
+  schedule:
+    - cron: "25 0 22 10 *"
 
 concurrency:
   group: cinema-production-artwork-publish
@@ -20,17 +23,32 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
+      - name: Guard one-time quota-reset date; never retry in later years
+        id: date
+        shell: bash
+        run: |
+          if [[ "$(date -u +%F)" == "2026-10-22" ]]; then
+            echo "allowed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "allowed=false" >> "$GITHUB_OUTPUT"
+            echo "One-time import closed; no D1 access."
+          fi
       - uses: actions/checkout@v4
+        if: steps.date.outputs.allowed == 'true'
       - uses: actions/setup-python@v5
+        if: steps.date.outputs.allowed == 'true'
         with:
           python-version: "3.13"
       - uses: actions/setup-node@v4
+        if: steps.date.outputs.allowed == 'true'
         with:
           node-version: "22"
       - name: Test rights, identity and collision guards
+        if: steps.date.outputs.allowed == 'true'
         run: |
           python -m unittest tests.test_rights_verified_poster_batch tests.test_publish_commons_permissioned_pilot -v
       - name: Connect existing D1 without creation or migration
+        if: steps.date.outputs.allowed == 'true'
         shell: bash
         run: |
           test -n "$CLOUDFLARE_ACCOUNT_ID" && test -n "$CLOUDFLARE_API_TOKEN"
@@ -38,6 +56,7 @@ jobs:
           python scripts/cloudflare_bootstrap.py
           mkdir -p data/generated/vrt02
       - name: Find only exact-existing film identity records
+        if: steps.date.outputs.allowed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -53,6 +72,7 @@ jobs:
               WHERE title COLLATE NOCASE IN ('Yaanai','Lahiri Lahiri Lahirilo',
                 'Nasha Jurm Aur Gangsters','Vrithakrithiyulla Chathuram');" > "$ROOT/catalogue.json"
       - name: Validate live Commons VRT permission and license before writing
+        if: steps.date.outputs.allowed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -72,6 +92,7 @@ jobs:
           (root/"write-list.txt").write_text("\n".join(x["sql_filename"] for x in report["ready"])+"\n")
           PY
       - name: Apply only individual source-verified posters
+        if: steps.date.outputs.allowed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -83,6 +104,7 @@ jobs:
             echo "SUBMITTED_VERIFIED_POSTER=$filename"
           done < "$ROOT/write-list.txt"
       - name: Independently verify exact published assets and attribution
+        if: steps.date.outputs.allowed == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -133,7 +155,7 @@ jobs:
               f.write("Held: "+json.dumps(report["held"])+"\n")
           PY
       - uses: actions/upload-artifact@v4
-        if: always()
+        if: always() && steps.date.outputs.allowed == 'true'
         with:
           name: vrt-indian-poster-batch-02-evidence
           path: |
