@@ -103,9 +103,20 @@ def attach_candidates(
             if shape(source) == "backdrop" and not item["backdrop_candidate"]:
                 item["backdrop_candidate"] = source
         item["image"] = item["poster_candidate"] or item["backdrop_candidate"] or (viable[0] if viable else None)
+        # Exact Wikidata identity alone cannot correct a wrong catalogue year.
+        # Film disambiguation years in the source article URL are strong enough
+        # to require an explicit identity/date review before publication.
+        page_url = str((article or {}).get("file_page_url") or "")
+        m = re.search(r"\((18\d{2}|19\d{2}|20\d{2})_(?:film|TV_series|television_series)\)",
+                      page_url, re.IGNORECASE)
+        item["article_year"] = int(m.group(1)) if m else None
+        item["year_mismatch"] = bool(item["article_year"] and item["year"] != item["article_year"])
+
         item["file_name"] = (item["image"] or {}).get("pageimage_filename")
         item["match_basis"] = (item["image"] or {}).get("match_basis")
-        if item["poster_candidate"]:
+        if item["year_mismatch"]:
+            item["status"] = "YEAR_MISMATCH_REVIEW"
+        elif item["poster_candidate"]:
             item["status"] = "POSTER_CANDIDATE_REVIEW"
         elif item["backdrop_candidate"]:
             item["status"] = "BACKDROP_CANDIDATE_REVIEW"
@@ -125,6 +136,7 @@ def attach_candidates(
         "poster_candidates": sum(bool(x["poster_candidate"]) for x in output),
         "backdrop_candidates": sum(bool(x["backdrop_candidate"]) for x in output),
         "visible_artwork_candidates": sum(bool(x["image"]) for x in output),
+        "year_mismatch_holds": sum(bool(x["year_mismatch"]) for x in output),
         "source_errors": errors,
         "warning": "Article preview is not a reusable artwork license; review the actual image, year and publication terms.",
         "candidates": output,
