@@ -6,7 +6,11 @@ name: Artwork V2 — Immediate Source-Only 500
 on:
   push:
     branches: [main]
-    paths: [".github/workflows/artwork-source-now.yml"]
+    paths:
+      - ".github/workflows/artwork-source-now.yml"
+      - "scripts/artwork_bulk_500_source_now.py"
+      - "scripts/wikimedia_paced_fetch.py"
+      - "tests/test_wikimedia_paced_fetch.py"
   workflow_dispatch:
 
 permissions:
@@ -31,6 +35,7 @@ jobs:
       - name: Run offline identity and nonpublication tests
         run: |
           python -m unittest tests.test_artwork_bulk_500_source_now \
+            tests.test_wikimedia_paced_fetch \
             tests.test_artwork_bulk_500 \
             tests.test_artwork_fast_70 -v
       - name: Restore actual 70 stored D1 identities (archived earlier)
