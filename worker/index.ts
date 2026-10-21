@@ -1,4 +1,5 @@
 import { resolveVisualArtwork } from "./visual-artwork";
+import { publishedArtworkForPage, type PublishedArtwork } from "./published-artwork";
 import { catalogueMetadataNeeded } from "./catalogue-query-policy";
 interface Env {
   DB?: D1Database;
@@ -403,6 +404,12 @@ env.DB.prepare(
         ? await resolveVisualArtwork(rows.results.map((item) => item.wikidata_qid).filter((qid): qid is string => Boolean(qid)))
         : new Map();
 
+      let approvedArtwork = new Map<string, PublishedArtwork>();
+      try {
+        approvedArtwork = await publishedArtworkForPage(env.DB, "series_titles", rows.results);
+      } catch (error) {
+        console.warn("Optional approved series artwork lookup failed", error);
+      }
       const series = rows.results.map((item) => ({
         id: item.id,
         wikidataQid: item.wikidata_qid ?? undefined,
@@ -418,9 +425,11 @@ env.DB.prepare(
         seasonCount: item.season_count ?? undefined,
         episodeCount: item.episode_count ?? undefined,
         verificationStatus: item.verification_status,
-        posterUrl: item.poster_url ?? visualArtwork.get(item.wikidata_qid ?? "")?.posterUrl ?? undefined,
-        backdropUrl: item.backdrop_url ?? undefined,
-        artworkSource: item.poster_url ? "legacy" : visualArtwork.get(item.wikidata_qid ?? "")?.sourceName,
+        posterUrl: approvedArtwork.get(item.id)?.posterUrl ?? item.poster_url ?? visualArtwork.get(item.wikidata_qid ?? "")?.posterUrl ?? undefined,
+        backdropUrl: approvedArtwork.get(item.id)?.backdropUrl ?? item.backdrop_url ?? undefined,
+        artworkSource: approvedArtwork.get(item.id)?.artworkSource ?? (item.poster_url ? "legacy" : visualArtwork.get(item.wikidata_qid ?? "")?.sourceName),
+        artworkSourceUrl: approvedArtwork.get(item.id)?.artworkSourceUrl,
+        artworkAttribution: approvedArtwork.get(item.id)?.artworkAttribution,
         sourceCategory: item.source_category,
         sourceUrl: item.source_url,
       }));
@@ -570,12 +579,26 @@ env.DB.prepare(
         ? await resolveVisualArtwork(result.results.map((movie) => movie.wikidata_qid).filter((qid): qid is string => Boolean(qid)))
         : new Map();
 
+      const approvedArtwork = new Map<string, PublishedArtwork>();
+      const artworkTables = [
+        ["movies", result.results.filter((movie) => movie.date_precision === "day")],
+        ["catalogue_titles", result.results.filter((movie) => movie.date_precision === "year")],
+      ] as const;
+      await Promise.all(artworkTables.map(async ([table, titles]) => {
+        try {
+          const page = await publishedArtworkForPage(env.DB!, table, titles);
+          for (const [id, artwork] of page) approvedArtwork.set(id, artwork);
+        } catch (error) {
+          console.warn("Optional approved movie artwork lookup failed", table, error);
+        }
+      }));
       const movies = result.results.map((movie) => {
         const officialUrl = movie.date_precision === "day"
           ? officialUrls.get(movie.title) ?? movie.official_observation_url
           : undefined;
         const officialPoster = officialYoutubeArtwork(officialUrl);
         const wikimediaPoster = visualArtwork.get(movie.wikidata_qid ?? "");
+        const approved = approvedArtwork.get(movie.id);
         return {
           id: movie.id,
           wikidataQid: movie.wikidata_qid ?? undefined,
@@ -590,12 +613,13 @@ env.DB.prepare(
           releaseSource: movie.release_date_source,
           releaseSourceName: movie.release_source_name ?? undefined,
           releaseSourceUrl: movie.release_source_url ?? undefined,
-          posterUrl: movie.poster_url ?? officialPoster ?? wikimediaPoster?.posterUrl ?? undefined,
-          backdropUrl: movie.backdrop_url ?? undefined,
-          artworkSource: movie.artwork_source
+          posterUrl: approved?.posterUrl ?? movie.poster_url ?? officialPoster ?? wikimediaPoster?.posterUrl ?? undefined,
+          backdropUrl: approved?.backdropUrl ?? movie.backdrop_url ?? undefined,
+          artworkSource: approved?.artworkSource ?? movie.artwork_source
             ?? (officialPoster ? "official_youtube_thumbnail" : wikimediaPoster?.sourceName),
-          artworkSourceUrl: movie.artwork_source_url
+          artworkSourceUrl: approved?.artworkSourceUrl ?? movie.artwork_source_url
             ?? (officialPoster ? officialUrl ?? undefined : wikimediaPoster?.sourceUrl ?? undefined),
+          artworkAttribution: approved?.artworkAttribution,
         };
       });
       const latestUpdate = [statsResult?.latest_updated_at, sourcesResult?.latest_updated_at].filter((value): value is string => Boolean(value)).sort().at(-1);
