@@ -1,0 +1,139 @@
+name: Data Foundation V2 — Miniflare Local D1 Recovery Rehearsal
+
+# No Cloudflare credentials and no remote database resource is created.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-local-d1-rehearsal.yml"
+      - "scripts/foundation_local_d1_rehearsal.mjs"
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: data-foundation-local-d1-rehearsal
+  cancel-in-progress: false
+
+jobs:
+  disposable-local-d1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Assert continued production freeze and no remote D1 access
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          marker=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert marker["active"] is True
+          source=Path("scripts/foundation_local_d1_rehearsal.mjs").read_text()
+          assert 'from "miniflare"' in source
+          assert "d1Databases:" in source
+          assert "d1Persist:" in source
+          assert "wrangler d1 execute" not in source
+          assert "--remote" not in source
+          PY
+      - name: Install local D1 emulator
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          npm ls miniflare
+      - name: Validate guarded recovery logic and 17/3 hold classification
+        run: |
+          python -m unittest \
+            tests.test_foundation_filebacked_rollback \
+            tests.test_foundation_20_preflight \
+            tests.test_foundation_external_preflight -v
+      - name: Restore existing correction review packet
+        uses: actions/download-artifact@v4
+        with:
+          name: data-foundation-v2-20-film-review-packet
+          run-id: 39764251711
+          github-token: ${{ github.token }}
+          path: data/generated/local-d1/packet
+      - name: Restore existing external evidence and production read-only snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: data-foundation-v2-20-external-current-review
+          run-id: 39776850310
+          github-token: ${{ github.token }}
+          path: data/generated/local-d1/review
+      - name: Restore previously queried 20 existing production rows
+        uses: actions/download-artifact@v4
+        with:
+          name: data-foundation-v2-20-current-row-preflight
+          run-id: 39775564153
+          github-token: ${{ github.token }}
+          path: data/generated/local-d1/current
+      - name: Validate inputs and build an isolated 17-review / 3-hold fixture
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from scripts.foundation_filebacked_rollback import validated_rows, load_d1_rows_from_response
+          root=Path("data/generated/local-d1")
+          packet=json.loads((root/"packet/batch20-review.json").read_text())
+          review=json.loads((root/"review/checked20.json").read_text())
+          current=json.loads((root/"current/current-d1-20.json").read_text())
+          eligible,held=validated_rows(packet,review,current)
+          original=load_d1_rows_from_response(current)
+          assert len(eligible)==17 and len(held)==3 and len(original)==20
+          (root/"fixture.json").write_text(json.dumps({
+              "schema":"data-foundation-v2-local-d1-input-v1",
+              "eligible":eligible,"held":held,"original":original,
+              "db_reads_this_run":0,"production_writes":0,
+          },indent=2)+"\n")
+          print("LOCAL_D1_SOURCE_FIXTURE=20 existing rows, 17 reviewed, 3 held")
+          PY
+      - name: Run guarded batches through Miniflare's real D1 binding API
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/local-d1
+          node scripts/foundation_local_d1_rehearsal.mjs \
+            "$ROOT/fixture.json" "$ROOT/local-d1-proof.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          r=json.loads(Path("data/generated/local-d1/local-d1-proof.json").read_text())
+          assert r["schema"]=="data-foundation-v2-local-d1-rehearsal-v1"
+          assert r["reviewed_film_languages"]==17 and r["held_disputed_films"]==3
+          for key in ("full_original_record_inverse","held_and_unrelated_unchanged",
+                      "stale_forward_batch_atomic","newer_edit_inverse_batch_atomic",
+                      "miniflare_reopen_persists_state"):
+              assert r[key], "Failed local D1 gate: "+key
+          assert not r["cloudflare_remote_d1_rehearsed"]
+          assert not r["owner_approved_production_write"]
+          assert r["cloudflare_production_reads"]==r["cloudflare_production_writes"]==0
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Data Foundation V2 — real local D1 binding rehearsal\n\n")
+              f.write("- Database: **isolated Miniflare local D1** with production catalogue schema migrations 0017 + 0027\n")
+              f.write("- **17** existing reviewed language changes simulated; **3** disputed films held\n")
+              f.write("- **PASS**: exact source-field roundtrip and original row preservation\n")
+              f.write("- **PASS**: atomic rollback of 16 earlier changes after stale last-row precondition\n")
+              f.write("- **PASS**: competing edit blocks entire reverse batch\n")
+              f.write("- **PASS**: local D1 persistence survives emulator restart\n")
+              f.write("- Live D1 reads/writes: **0/0**; production approval: **NO**\n\n")
+              f.write("**Limitation:** no real remote staging D1 instance or whole-database Time Travel recovery tested. "
+                      "Full schema/migration parity and owner approval remain pending.\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: foundation-v2-miniflare-local-d1-proof
+          path: data/generated/local-d1/local-d1-proof.json
+          retention-days: 30
+          if-no-files-found: warn
