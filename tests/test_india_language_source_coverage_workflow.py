@@ -10,7 +10,10 @@ WORKFLOW = (Path(__file__).resolve().parents[1] / ".github/workflows"
 class SourceCoverageWorkflowTests(unittest.TestCase):
     def test_each_collection_audits_its_own_stage_and_checkpoint(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("--selection decade-balanced", workflow)
+        self.assertIn("python scripts/accelerate_india_language_source.py", workflow)
+        self.assertIn("--max-passes 8", workflow)
+        accelerator = (WORKFLOW.parents[2] / "scripts/accelerate_india_language_source.py").read_text(encoding="utf-8")
+        self.assertIn('selection="decade-balanced"', accelerator)
         self.assertIn("python scripts/audit_india_film_language_coverage.py", workflow)
         self.assertIn("--stage data/generated/india-language/film-stage.sqlite", workflow)
         self.assertIn("--checkpoint data/generated/india-language/checkpoint.json", workflow)
