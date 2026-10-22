@@ -41,6 +41,30 @@ matching the sampled record columns; it does **not** prove full-table schema,
 triggers, FKs, performance, or `wrangler`/D1 restore behavior. The SQLite backup
 is not a backup of the entire production catalogue.
 
+## Next gate: disposable Miniflare local D1 API rehearsal
+
+`scripts/foundation_local_d1_rehearsal.mjs` uses the actual D1 binding
+interface through **Miniflare**, applied to an isolated local database with
+the production `catalogue_titles` schema from migrations **0017 and 0027**.
+
+This test consumes the exact saved 20-row preflight snapshot and the
+17-reviewed/3-held decisions, then exercises:
+
+- Parameter-bound, conditional language + provenance updates;
+- Guard statements that trigger an SQL constraint error on stale values,
+  causing the **entire D1 batch** to abort rather than silently skip a row;
+- An exact guarded inverse after a successful 17-row batch;
+- An unrelated sentinel and three disputed rows, which must never change;
+- A forced stale last-row forward batch after 16 earlier writes;
+- A forced newer edit that prevents inverse from overwriting it;
+- Local D1 persistence across emulator restart.
+
+The local D1 test uses a **synthetic database UUID**, creates only temporary
+runner-local state, requires no Cloudflare credentials, and never issues
+`--remote` commands. It tests production catalogue table shape and indexes,
+but is **not** a real remote nonproduction D1 clone and does not verify
+Cloudflare Time Travel. Keep those separate gates open.
+
 ## Remaining mandatory gates before any real correction
 
 - [ ] Owner explicitly approves **a separate proposed correction PR** with
