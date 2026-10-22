@@ -11,10 +11,12 @@ import csv
 import json
 import re
 import sqlite3
+import sys
 from collections import Counter
 from pathlib import Path
 from urllib.parse import urlsplit
 
+sys.path.insert(0,str(Path(__file__).resolve().parent))
 from production_catalogue_quality import load_d1_rows
 
 QID = re.compile(r"Q[1-9][0-9]*\Z")
