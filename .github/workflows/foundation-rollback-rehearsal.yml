@@ -1,0 +1,110 @@
+name: Data Foundation V2 — Isolated Backup and Rollback Rehearsal
+
+# Source artifacts only. Deliberately NO D1 credentials or production SQL.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-rollback-rehearsal.yml"
+      - "scripts/foundation_filebacked_rollback.py"
+      - "tests/test_foundation_filebacked_rollback.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: foundation-v2-isolated-rollback
+  cancel-in-progress: false
+
+jobs:
+  test-disposable-sqlite:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Enforce production catalogue freeze
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          state=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert state["schema"]=="data-foundation-v2-freeze-v1" and state["active"] is True
+          PY
+      - name: Execute file-backed recovery and fail-closed regression tests
+        run: |
+          python -m unittest tests.test_foundation_filebacked_rollback \
+            tests.test_foundation_20_preflight \
+            tests.test_foundation_external_preflight -v
+      - name: Restore frozen 20-title before/after packet
+        uses: actions/download-artifact@v4
+        with:
+          name: data-foundation-v2-20-film-review-packet
+          run-id: 39764251711
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-recovery/packet
+      - name: Restore 17-reviewed / 3-held independent source check
+        uses: actions/download-artifact@v4
+        with:
+          name: data-foundation-v2-20-external-current-review
+          run-id: 39776850310
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-recovery/review
+      - name: Restore prior verified 20-row read-only D1 SELECT
+        uses: actions/download-artifact@v4
+        with:
+          name: data-foundation-v2-20-current-row-preflight
+          run-id: 39775564153
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-recovery/current
+      - name: Test backup, guarded forward, exact rollback and tamper rejection locally
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/foundation-recovery
+          python scripts/foundation_filebacked_rollback.py \
+            --packet "$ROOT/packet/batch20-review.json" \
+            --review "$ROOT/review/checked20.json" \
+            --current "$ROOT/current/current-d1-20.json" \
+            --out "$ROOT/recovery-proof.json"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report=json.loads(Path("data/generated/foundation-recovery/recovery-proof.json").read_text())
+          assert report["schema"]=="data-foundation-v2-filebacked-rollback-proof-v1"
+          assert report["supported_review_only"]==17 and report["disputed_held"]==3
+          for key in (
+            "full_row_exact_inverse", "sqlite_backup_created_and_verified",
+            "sqlite_restore_to_separate_file_verified",
+            "held_and_unrelated_rows_unchanged", "stale_forward_aborts_atomically",
+            "intervening_edit_blocks_inverse",
+          ):
+              assert report[key], f"Local recovery gate failed: {key}"
+          assert not report["cloudflare_d1_restore_tested"]
+          assert not report["cloudflare_d1_time_travel_bookmark_captured"]
+          assert not report["production_write_authorized"]
+          assert not report["sql_output_generated"]
+          assert report["production_reads_this_run"]==report["production_writes"]==0
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Data Foundation V2 — isolated rollback safety rehearsal\n\n")
+              f.write("- Supported films simulated: **17**; disputed titles held: **3**\n")
+              f.write("- **PASS**: real file-backed SQLite backup and independently restored file\n")
+              f.write("- **PASS**: parameterized guarded updates + exact full-row inverse\n")
+              f.write("- **PASS**: atomic cancellation on stale originals; inverse does not erase newer edits\n")
+              f.write("- **PASS**: held titles and unrelated rows remain unchanged\n")
+              f.write("- Cloudflare reads/writes: **0 / 0**; production write approval: **NO**\n\n")
+              f.write("**Limit:** SQLite fixture is not a complete D1 clone or a verified Cloudflare restore. "
+                      "A nonproduction D1 rehearsal, fresh pre-write validation, current recovery bookmark "
+                      "and explicit owner approval are still required.\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: foundation-v2-isolated-rollback-proof
+          path: data/generated/foundation-recovery/recovery-proof.json
+          if-no-files-found: warn
+          retention-days: 30
