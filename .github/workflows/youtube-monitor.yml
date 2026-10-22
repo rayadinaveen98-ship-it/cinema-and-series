@@ -25,6 +25,10 @@ concurrency:
 
 jobs:
   monitor:
+    # DATA FOUNDATION V2 FREEZE (2026-10-22): no catalogue growth, poster,
+    # source monitor, or background production write until explicitly restored.
+    # Deliberately job-level: skips D1 access on schedule, push and dispatch.
+    if: ${{ false }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:

@@ -16,6 +16,9 @@ permissions:
 
 jobs:
   discover:
+    # DATA FOUNDATION V2 FREEZE (2026-10-22): no poster or artwork operations
+    # until the integrity baseline is certified and deliberately reauthorized.
+    if: ${{ false }}
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
