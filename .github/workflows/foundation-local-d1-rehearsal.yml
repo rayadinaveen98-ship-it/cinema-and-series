@@ -42,7 +42,7 @@ jobs:
           assert 'from "miniflare"' in source
           assert "d1Databases:" in source
           assert "resourcePersistencePath:" in source
-          assert "workers:[" in source
+          assert "convertV4MiniflareOptions" in source
           assert "wrangler d1 execute" not in source
           assert "--remote" not in source
           PY
