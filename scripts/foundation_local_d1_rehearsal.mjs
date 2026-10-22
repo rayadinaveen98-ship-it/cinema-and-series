@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import {readFileSync,writeFileSync,mkdtempSync,rmSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {Miniflare} from "miniflare";
+import {Miniflare,convertV4MiniflareOptions} from "miniflare";
 
 const FIELDS=["id","wikidata_qid","title","release_year","country_code","language_name"];
 const HELD=new Set(["Q20967570","Q109519684","Q20649744"]);
@@ -18,15 +18,12 @@ const ROWS="SELECT * FROM catalogue_titles ORDER BY wikidata_qid";
 function require(x,m){assert.ok(x,m);}
 function oldParams(row){return FIELDS.map(k=>row.before[k]);}
 function sourceUrl(row){return "https://www.wikidata.org/wiki/"+row.before.wikidata_qid;}
-function options(persist){return {
- resourcePersistencePath:persist,
- workers:[{
-   name:"foundation-d1-local-qa", modules:true,
-   compatibilityDate:"2026-10-22",
-   script:'export default {fetch(){return new Response("local QA only")}}',
-   d1Databases:{DB:"00000000-0000-4000-8000-000000000017"}
- }]
-};}
+function options(persist){return convertV4MiniflareOptions({
+ modules:true,compatibilityDate:"2026-10-22",
+ script:'export default {fetch(){return new Response("local QA only")}}',
+ d1Databases:{DB:"00000000-0000-4000-8000-000000000017"},
+ resourcePersistencePath:persist
+});}
 function checkInput(x){
  require(x?.schema==="data-foundation-v2-local-d1-input-v1","Invalid fixture schema");
  require(x.db_reads_this_run===0 && x.production_writes===0,"Production operations not allowed");
