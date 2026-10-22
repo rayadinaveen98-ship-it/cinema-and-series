@@ -41,6 +41,8 @@ jobs:
           source=Path("scripts/foundation_local_d1_rehearsal.mjs").read_text()
           assert 'from "miniflare"' in source
           assert "d1Databases:" in source
+          app=json.loads(Path("wrangler.jsonc").read_text())
+          assert 'compatibilityDate:"'+app["compatibility_date"]+'"' in source
           assert "resourcePersistencePath:" in source
           assert "convertV4MiniflareOptions" in source
           assert "wrangler d1 execute" not in source
