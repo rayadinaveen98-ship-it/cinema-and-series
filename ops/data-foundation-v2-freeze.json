@@ -1,0 +1,34 @@
+{
+  "schema": "data-foundation-v2-freeze-v1",
+  "active": true,
+  "start_utc_date": "2026-10-22",
+  "intent": "protect verified 70175-title baseline before corrections",
+  "scope": [
+    "no new movie or series records",
+    "no poster discovery or publication",
+    "no UI or feature changes",
+    "no background catalogue imports",
+    "no uncontrolled D1 metadata writes"
+  ],
+  "allowed": [
+    "read-only production health audits and aggregates",
+    "source-only film language evidence for existing identities",
+    "test and CI workflows",
+    "live app read-only traffic"
+  ],
+  "excluded": [
+    "existing production API reads",
+    "read-only schema/audit jobs"
+  ],
+  "review_required_before_unfreeze": true,
+  "source_counts_utc": "2026-10-22T09:31:11Z",
+  "source_reference": "https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/39755977413",
+  "baseline": {
+    "films_deduplicated": 51872,
+    "series": 18303,
+    "total": 70175,
+    "language_unknown": 50380,
+    "language_known": 19795
+  },
+  "note": "Static job-level pause; restore explicitly per workflow after baseline review, never automatically on completion of unrelated P1."
+}
