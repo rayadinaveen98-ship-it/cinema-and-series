@@ -1,0 +1,80 @@
+name: Data Foundation V2 — Live Original-Language Sample (Read Only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-live-p364-sample.yml"
+      - "scripts/foundation_live_p364_sample.py"
+      - "tests/test_foundation_live_p364_sample.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: cinema-foundation-live-sample
+  cancel-in-progress: false
+
+jobs:
+  verify-source-sample:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate source-only verification guardrails
+        run: |
+          python -m unittest tests.test_foundation_live_p364_sample \
+            tests.test_foundation_language_review tests.test_wikimedia_paced_fetch -v
+      - name: Restore saved existing-title review proposals (NO D1)
+        uses: actions/download-artifact@v4
+        with:
+          name: foundation-v2-existing-title-review
+          run-id: 39760123503
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-live-sample
+      - name: Verify source sample, no production database access
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/foundation-live-sample
+          python scripts/foundation_live_p364_sample.py \
+            --input "$ROOT/language-review.json" \
+            --out "$ROOT/current-source-review.json" \
+            --csv "$ROOT/current-source-review.csv"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          report=json.loads(Path("data/generated/foundation-live-sample/current-source-review.json").read_text())
+          assert report["population_proposals"]==6048
+          assert report["sample_count"]==80
+          assert len(report["review_queue"])==80
+          assert len(set(x["wikidata_qid"] for x in report["review_queue"]))==80
+          assert report["no_database_access"] and report["d1_reads"]==0
+          assert report["d1_writes"]==0 and report["automatically_approved"]==0
+          assert not report["sql_generated"]
+          assert all(x["review_only"] is True and not x["production_written"] for x in report["review_queue"])
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Data Foundation V2 — independently checked existing films\n\n")
+              f.write("No D1 reads/writes, no SQL, no new films, no poster or UI changes.\n\n")
+              f.write(f"- Existing proposals: **{report['population_proposals']:,}**\n")
+              f.write(f"- Balanced sample checked: **{report['sample_count']}** (8 each of 10 languages)\n")
+              f.write(f"- Provider error batches: **{report['source_error_batches']}**\n\n")
+              f.write("| Recheck outcome | Titles |\n|---|---:|\n")
+              for reason,count in sorted(report["decisions"].items()):
+                  f.write(f"| {reason} | {count} |\n")
+              f.write("\nSuccessful rechecks only corroborate current Wikidata item statements. **Every proposed production correction still requires further review and authorization.**\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: foundation-v2-live-p364-80-existing-films
+          path: |
+            data/generated/foundation-live-sample/current-source-review.json
+            data/generated/foundation-live-sample/current-source-review.csv
+          retention-days: 30
+          if-no-files-found: warn
