@@ -47,7 +47,7 @@ jobs:
           PY
       - name: Install local D1 emulator
         run: |
-          npm ci --ignore-scripts --no-audit --no-fund
+          npm install --no-audit --no-fund
           npm ls miniflare
       - name: Validate guarded recovery logic and 17/3 hold classification
         run: |
