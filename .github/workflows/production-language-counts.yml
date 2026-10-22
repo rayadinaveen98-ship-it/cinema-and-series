@@ -1,0 +1,119 @@
+name: Production Catalogue — Language Counts (Read Only)
+
+# One-off reporting query. Does not run on app commits or on a schedule.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/production-language-counts.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cinema-production-language-counts
+  cancel-in-progress: false
+
+jobs:
+  count:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate language accounting
+        run: python -m unittest tests.test_report_production_languages -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Bind existing D1 database without migration or writing
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID" && test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+          mkdir -p data/generated/production-language-counts
+      - name: Read deduplicated language-country group counts (three aggregate queries)
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/production-language-counts
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT COALESCE(NULLIF(TRIM(country_code),''),'XX') AS country_code,
+                   COALESCE(NULLIF(TRIM(language_name),''),'Unknown') AS language,
+                   COUNT(*) AS title_count
+            FROM movies
+            WHERE TRIM(title)<>'' AND (wikidata_qid IS NULL OR title<>wikidata_qid)
+            GROUP BY country_code,language
+            ORDER BY title_count DESC;" > "$ROOT/movies.json"
+
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT COALESCE(NULLIF(TRIM(ct.country_code),''),'XX') AS country_code,
+                   COALESCE(NULLIF(TRIM(ct.language_name),''),'Unknown') AS language,
+                   COUNT(*) AS title_count
+            FROM catalogue_titles ct
+            WHERE TRIM(ct.title)<>''
+              AND (ct.wikidata_qid IS NULL OR ct.title<>ct.wikidata_qid)
+              AND (ct.wikidata_qid IS NULL
+                   OR NOT EXISTS (
+                     SELECT 1 FROM movies m
+                     WHERE m.wikidata_qid=ct.wikidata_qid
+                       AND TRIM(m.title)<>'' AND m.title<>m.wikidata_qid))
+            GROUP BY country_code,language
+            ORDER BY title_count DESC;" > "$ROOT/catalogue_titles.json"
+
+          npx wrangler d1 execute cinema-and-series --remote --json --command "
+            SELECT COALESCE(NULLIF(TRIM(country_code),''),'XX') AS country_code,
+                   COALESCE(NULLIF(TRIM(language_name),''),'Unknown') AS language,
+                   COUNT(*) AS title_count
+            FROM series_titles
+            WHERE TRIM(title)<>''
+              AND (wikidata_qid IS NULL OR title<>wikidata_qid)
+            GROUP BY country_code,language
+            ORDER BY title_count DESC;" > "$ROOT/series_titles.json"
+      - name: Consolidate clear film, series and Indian-language breakdown
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/production-language-counts
+          python scripts/report_production_languages.py \
+            --movies "$ROOT/movies.json" \
+            --catalogue-titles "$ROOT/catalogue_titles.json" \
+            --series-titles "$ROOT/series_titles.json" \
+            --json "$ROOT/report.json" \
+            --csv "$ROOT/language-counts.csv"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          report=json.loads(Path("data/generated/production-language-counts/report.json").read_text())
+          assert report["database_writes"]==0
+          assert report["film_count"]+report["series_count"]==report["title_count"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as output:
+              output.write("## Verified production language breakdown\n\n")
+              output.write(f"- Films (deduplicated): **{report['film_count']:,}**\n")
+              output.write(f"- Series: **{report['series_count']:,}**\n")
+              output.write(f"- Total: **{report['title_count']:,}**\n")
+              output.write(f"- Languages incl. unknown: **{report['language_count_including_unknown']}**\n")
+              output.write(f"- Indian films: **{report['indian_films']:,}**; series: **{report['indian_series']:,}**\n\n")
+              output.write("| Language | Films | Series | Total | Indian films | Indian series |\n")
+              output.write("|---|---:|---:|---:|---:|---:|\n")
+              for row in report["languages"]:
+                  output.write(f"| {row['language']} | {row['films']:,} | {row['series']:,} | {row['total']:,} | {row['indian_films']:,} | {row['indian_series']:,} |\n")
+              output.write("\nLanguage is currently recorded metadata, not necessarily independently verified original language. No D1 writes.\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cinema-and-series-language-counts-production
+          path: |
+            data/generated/production-language-counts/report.json
+            data/generated/production-language-counts/language-counts.csv
+          if-no-files-found: warn
+          retention-days: 30
