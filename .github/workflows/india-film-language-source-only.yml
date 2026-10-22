@@ -7,6 +7,8 @@ on:
       - ".github/workflows/india-film-language-source-only.yml"
       - "scripts/india_film_language_evidence.py"
       - "tests/test_india_film_language_evidence.py"
+      - "scripts/accelerate_india_language_source.py"
+      - "tests/test_accelerate_india_language_source.py"
       - "scripts/triage_india_film_languages.py"
       - "tests/test_triage_india_film_languages.py"
       - "scripts/recheck_india_film_language_evidence.py"
@@ -35,7 +37,7 @@ jobs:
         with:
           python-version: "3.13"
       - name: Validate film-language evidence and safe resumability
-        run: python -m unittest tests.test_india_film_language_evidence tests.test_recheck_india_film_language_evidence -v
+        run: python -m unittest tests.test_india_film_language_evidence tests.test_recheck_india_film_language_evidence tests.test_accelerate_india_language_source -v
       - name: Restore expanded 1940–2026 film identities where available
         shell: bash
         run: |
@@ -98,16 +100,32 @@ jobs:
               summary.write(f"Deferred source entities: **{report['deferred_entities']}**; source throttle/error: **{report['halted_reason'] or 'none'}**.\n\n")
           PY
 
-      - name: Collect at most 475 new film-language source records (NO D1 ACCESS)
+      - name: Accelerated checkpointed source collection — up to 4000 films (NO D1)
         shell: bash
         run: |
-          python scripts/india_film_language_evidence.py \
+          set -euo pipefail
+          python scripts/accelerate_india_language_source.py \
             --stage data/generated/india-language/film-stage.sqlite \
             --checkpoint data/generated/india-language/checkpoint.json \
-            --max-films 475 \
-            --selection decade-balanced \
+            --max-passes 8 \
             --out-report data/generated/india-language/report.json \
-            --out-proposals data/generated/india-language/proposals.json
+            --out-proposals data/generated/india-language/proposals.json \
+            --out-accelerator data/generated/india-language/acceleration-report.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          r=json.loads(Path("data/generated/india-language/acceleration-report.json").read_text())
+          assert r["source_only"] and not r["production_d1_access"]
+          assert r["d1_reads"]==r["d1_writes"]==r["production_updates"]==0
+          assert r["checked_this_run"]<=4000 and r["passes_completed"]<=8
+          assert r["checkpoint_persisted"]
+          print("SOURCE_ACCELERATION_VALIDATED="+json.dumps({
+              "checked":r["checked_this_run"],
+              "pending":r["remaining_source_qids"],
+              "strict_p364":r["strict_original_language_evidence"],
+              "stop":r["halted_reason"]
+          },sort_keys=True),flush=True)
+          PY
 
       - name: Persist checkpoint on separate automation branch
         if: always()
@@ -216,6 +234,7 @@ jobs:
           name: india-film-language-source-evidence
           path: |
             data/generated/india-language/report.json
+            data/generated/india-language/acceleration-report.json
             data/generated/india-language/proposals.json
             data/generated/india-language/coverage-report.json
             data/generated/india-language/language-review-queue.json
