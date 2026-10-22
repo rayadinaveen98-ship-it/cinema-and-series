@@ -1,0 +1,128 @@
+name: Data Foundation V2 — 20 Film Live Preflight (Read Only)
+
+# The only production operation is one bounded SELECT of 20 unique indexed QIDs.
+# No series or catalogue imports, no schema migration, no writes, no poster work.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-20-preflight.yml"
+      - "scripts/foundation_20_preflight.py"
+      - "data/reviews/foundation-v2-independent-sources-20.json"
+      - "tests/test_foundation_20_preflight.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: cinema-foundation-20-readonly-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Require active Data Foundation V2 freeze
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          d=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert d["active"] and d["schema"]=="data-foundation-v2-freeze-v1"
+          PY
+      - name: Run independent-source and rollback safety tests
+        run: python -m unittest tests.test_foundation_20_preflight -v
+      - name: Download immutable 20-film before-and-after review packet
+        uses: actions/download-artifact@v4
+        with:
+          name: data-foundation-v2-20-film-review-packet
+          run-id: 39764251711
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-20-preflight
+      - name: Validate evidence and construct one index-bounded SELECT
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/foundation-20-preflight
+          python scripts/foundation_20_preflight.py \
+            --packet "$ROOT/batch20-review.json" \
+            --sources data/reviews/foundation-v2-independent-sources-20.json \
+            --query-file "$ROOT/safe-select.sql" \
+            --out "$ROOT/live-preflight.json" \
+            --csv "$ROOT/live-preflight.csv"
+          python - <<'PY'
+          from pathlib import Path
+          q=Path("data/generated/foundation-20-preflight/safe-select.sql").read_text()
+          assert q.lstrip().startswith("SELECT ")
+          assert q.count("'Q")==20
+          assert q.count(";")==1
+          assert "UPDATE " not in q and "INSERT " not in q and "DELETE " not in q
+          PY
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install existing Wrangler without migrations
+        run: |
+          test -n "$CLOUDFLARE_ACCOUNT_ID" && test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+      - name: Read exactly 20 existing catalogue rows by unique QID index
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/foundation-20-preflight
+          QUERY="$(cat "$ROOT/safe-select.sql")"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "$QUERY" > "$ROOT/current-d1-20.json"
+      - name: Check each current row and simulate reversible correction only in memory
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/foundation-20-preflight
+          python scripts/foundation_20_preflight.py \
+            --packet "$ROOT/batch20-review.json" \
+            --sources data/reviews/foundation-v2-independent-sources-20.json \
+            --live-json "$ROOT/current-d1-20.json" \
+            --query-file "$ROOT/safe-select.sql" \
+            --out "$ROOT/live-preflight.json" \
+            --csv "$ROOT/live-preflight.csv"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads(Path("data/generated/foundation-20-preflight/live-preflight.json").read_text())
+          assert r["total"]==20 and r["d1_writes"]==0 and r["automatic_updates"]==0
+          assert not r["owner_approved"] and not r["generated_write_sql"]
+          assert r["rollback_simulation"]["rollback_restores_all_original_rows"]
+          assert r["rollback_simulation"]["production_writes"]==0
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Existing 20-film data correction preflight (no writes)\n\n")
+              f.write(f"- Exact database rows queried by indexed QID: **20**\n")
+              f.write(f"- D1 rows read (reported): **{r['production_query_row_reads']}**\n")
+              f.write("- D1 rows written: **0**, SQL update/migration: **none**\n")
+              f.write("- In-memory rollback test restores original records: **passed**\n")
+              f.write("- Production rollback performed: **no**\n\n")
+              f.write("| Review status | Films |\n|---|---:|\n")
+              for status,count in sorted(r["status_counts"].items()):
+                  f.write(f"| {status} | {count} |\n")
+              f.write("\nAll proposals are still **unapproved**. Research corroboration is not authoritative studio certification.\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: data-foundation-v2-20-current-row-preflight
+          path: |
+            data/generated/foundation-20-preflight/live-preflight.json
+            data/generated/foundation-20-preflight/live-preflight.csv
+            data/generated/foundation-20-preflight/current-d1-20.json
+          if-no-files-found: warn
+          retention-days: 30
