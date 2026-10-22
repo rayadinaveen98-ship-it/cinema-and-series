@@ -26,6 +26,9 @@ LANGUAGES = (
     "Bengali", "Odia", "Marathi", "Punjabi", "Gujarati",
 )
 FILM_QID = "Q11424"
+# Identity-scoped label equivalents. These are not string-only guesses:
+# equivalence applies ONLY to the exact Wikidata language item Q9610.
+LANGUAGE_QID_ALIASES = {"Q9610": {"Bengali", "Bangla"}}
 QID = re.compile(r"Q[1-9][0-9]*\Z")
 DATE = re.compile(r"^[+-](\d{4,5})-")
 HEADERS = ("wikidata_qid", "source_id", "title", "year", "proposed_language",
@@ -149,7 +152,15 @@ def recheck_item(row: dict, entity: dict | None, language_labels: dict[str,str])
     result["language_qid"] = language_qid
     label = language_labels.get(language_qid, "")
     result["source_language"] = label
-    if not known(label) or norm(label) != norm(row["proposed_language"]):
+    # Compare the actual language QID before interpreting display labels.
+    # Q9610 is the Bengali/Bangla language; the upstream English label is
+    # currently Bangla while our reviewed, historically captured label is Bengali.
+    variants = LANGUAGE_QID_ALIASES.get(language_qid, set())
+    source_and_proposal_same = (
+        norm(label) == norm(row["proposed_language"]) or
+        bool(variants and label in variants and row["proposed_language"] in variants)
+    )
+    if not known(label) or not source_and_proposal_same:
         result["decision"] = "HOLD_CURRENT_SOURCE_LANGUAGE_MISMATCH"
         return result
     result["decision"] = "SOURCE_RECHECK_PASSED_REVIEW_REQUIRED"
