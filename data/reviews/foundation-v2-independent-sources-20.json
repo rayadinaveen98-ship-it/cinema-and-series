@@ -47,7 +47,7 @@
     {
       "wikidata_qid": "Q20967570",
       "language": "Tamil",
-      "status": "HOLD_HOLD_YEAR_CONFLICT",
+      "status": "HOLD_YEAR_CONFLICT",
       "independent_source_url": "https://tamil.filmibeat.com/movies/asurakulam.html",
       "evidence_description": "Filmibeat lists 2017; Times of India lists 2015 for Asurakulam; film identity/year unresolved",
       "wikipedia_or_wikidata_used_for_independent_source": false,
@@ -59,7 +59,7 @@
     {
       "wikidata_qid": "Q18602695",
       "language": "Malayalam",
-      "status": "HOLD_HOLD_NO_INDEPENDENT_SOURCE",
+      "status": "HOLD_NO_INDEPENDENT_SOURCE",
       "independent_source_url": null,
       "evidence_description": "No reliable independently corroborating 1989 Vashyamanthram film source located",
       "wikipedia_or_wikidata_used_for_independent_source": false,
@@ -131,7 +131,7 @@
     {
       "wikidata_qid": "Q21161228",
       "language": "Bengali",
-      "status": "HOLD_HOLD_CHRONOLOGY_REVIEW",
+      "status": "HOLD_CHRONOLOGY_REVIEW",
       "independent_source_url": "https://www.indianfilmhistory.com/movie/jekhane-ashray-2009",
       "evidence_description": "Source states 2009 but credits actress Mahua Roy Choudhury who died in 1985; determine whether old footage/posthumous work before approving",
       "wikipedia_or_wikidata_used_for_independent_source": false,
