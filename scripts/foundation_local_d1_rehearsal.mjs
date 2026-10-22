@@ -19,7 +19,7 @@ function require(x,m){assert.ok(x,m);}
 function oldParams(row){return FIELDS.map(k=>row.before[k]);}
 function sourceUrl(row){return "https://www.wikidata.org/wiki/"+row.before.wikidata_qid;}
 function options(persist){return convertV4MiniflareOptions({
- modules:true,compatibilityDate:"2026-10-22",
+ modules:true,compatibilityDate:"2026-09-16",
  script:'export default {fetch(){return new Response("local QA only")}}',
  d1Databases:{DB:"00000000-0000-4000-8000-000000000017"},
  resourcePersistencePath:persist
