@@ -44,40 +44,10 @@ def stable_hash(payload: object) -> str:
                                      separators=(",", ":")).encode("utf-8")).hexdigest()
 
 
-def build(review: dict, live: dict, movies: list[dict],
-          catalogue: list[dict], series: list[dict]) -> dict:
-    require(review.get("schema") == "foundation-v2-language-review-v1"
-            and review.get("d1_writes") == 0
-            and review.get("publication_performed") is False
-            and review.get("automatic_corrections") == 0,
-            "Original evidence review is not immutable/source-only")
-    require(live.get("schema") == "data-foundation-v2-live-p364-sample-v1"
-            and live.get("d1_reads") == 0 and live.get("d1_writes") == 0
-            and live.get("automatically_approved") == 0
-            and live.get("sql_generated") is False
-            and live.get("source_error_batches") == 0
-            and live.get("sample_count") == 80
-            and live.get("population_proposals") == 6048,
-            "Live corroboration audit is incomplete or mutable")
-
-    films, overlap = movie_projection(movies, catalogue)
-    require(len(films) == 51872 and len(series) == 18303
-            and overlap == 998, "Production snapshot does not match frozen baseline")
-    unknown = sum(not known(x.get("language_name")) for x in films)
-    unknown += sum(not known(x.get("language_name")) for x in series)
-    require(unknown == 50380, "Unknown language coverage drift")
-
-    # Exact-date rows outrank year-only rows if an overlap exists.
-    index = {}
-    for row in films:
-        qid = str(row.get("wikidata_qid") or "")
-        if qid:
-            require(qid not in index, "Ambiguous duplicate QID in canonical film view")
-            index[qid] = row
+def select_twenty(review: dict, live: dict) -> tuple[list[dict], set[str]]:
     proposals = {row["wikidata_qid"]: row for row in review["proposals"]}
     require(len(proposals) == len(review["proposals"]) == 6048,
             "Frozen source proposals unexpectedly changed")
-
     by_language = defaultdict(list)
     seen_sample_qids = set()
     for sample in live.get("review_queue") or []:
@@ -113,6 +83,42 @@ def build(review: dict, live: dict, movies: list[dict],
         chosen.extend([records[2], records[6]])
     require(len(chosen) == 20 and len({r["wikidata_qid"] for r in chosen}) == 20,
             "20-film selection drift")
+
+    return chosen, seen_sample_qids
+
+
+def build(review: dict, live: dict, movies: list[dict],
+          catalogue: list[dict], series: list[dict]) -> dict:
+    require(review.get("schema") == "foundation-v2-language-review-v1"
+            and review.get("d1_writes") == 0
+            and review.get("publication_performed") is False
+            and review.get("automatic_corrections") == 0,
+            "Original evidence review is not immutable/source-only")
+    require(live.get("schema") == "data-foundation-v2-live-p364-sample-v1"
+            and live.get("d1_reads") == 0 and live.get("d1_writes") == 0
+            and live.get("automatically_approved") == 0
+            and live.get("sql_generated") is False
+            and live.get("source_error_batches") == 0
+            and live.get("sample_count") == 80
+            and live.get("population_proposals") == 6048,
+            "Live corroboration audit is incomplete or mutable")
+
+    films, overlap = movie_projection(movies, catalogue)
+    require(len(films) == 51872 and len(series) == 18303
+            and overlap == 998, "Production snapshot does not match frozen baseline")
+    unknown = sum(not known(x.get("language_name")) for x in films)
+    unknown += sum(not known(x.get("language_name")) for x in series)
+    require(unknown == 50380, "Unknown language coverage drift")
+
+    # Exact-date rows outrank year-only rows if an overlap exists.
+    index = {}
+    for row in films:
+        qid = str(row.get("wikidata_qid") or "")
+        if qid:
+            require(qid not in index, "Ambiguous duplicate QID in canonical film view")
+            index[qid] = row
+    proposals = {row["wikidata_qid"]: row for row in review["proposals"]}
+    chosen, seen_sample_qids = select_twenty(review, live)
 
     items = []
     for sample in chosen:
