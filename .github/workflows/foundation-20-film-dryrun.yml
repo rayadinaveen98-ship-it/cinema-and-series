@@ -1,0 +1,113 @@
+name: Data Foundation V2 — 20 Film Correction Preview (No D1)
+
+# Single reproducible dry run on merge. The live database freeze remains active.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-20-film-dryrun.yml"
+      - "scripts/foundation_20_film_dryrun.py"
+      - "tests/test_foundation_20_film_dryrun.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: data-foundation-20-film-review
+  cancel-in-progress: false
+
+jobs:
+  prepare-preview:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 22
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Confirm original production freeze remains active
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          marker=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert marker["schema"]=="data-foundation-v2-freeze-v1" and marker["active"]
+          PY
+      - name: Test strict 20-film selection and snapshot safeguards
+        run: |
+          python -m unittest \
+            tests.test_foundation_20_film_dryrun \
+            tests.test_foundation_live_p364_sample \
+            tests.test_foundation_language_review -v
+      - name: Restore frozen production data only (no live D1)
+        uses: actions/download-artifact@v4
+        with:
+          name: catalogue-quality-v1
+          run-id: 39758915343
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-20/frozen
+      - name: Restore 6048 original-language source proposals
+        uses: actions/download-artifact@v4
+        with:
+          name: foundation-v2-existing-title-review
+          run-id: 39760123503
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-20/source-proposals
+      - name: Restore independently rechecked 80 Wikidata claims
+        uses: actions/download-artifact@v4
+        with:
+          name: foundation-v2-live-p364-80-existing-films
+          run-id: 39761744390
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-20/live-sample
+      - name: Prepare exact before-after-rollback manifest, without SQL
+        shell: bash
+        run: |
+          set -euo pipefail
+          R=data/generated/foundation-20
+          python scripts/foundation_20_film_dryrun.py \
+            --review "$R/source-proposals/language-review.json" \
+            --live "$R/live-sample/current-source-review.json" \
+            --movies "$R/frozen/quality-movies.json" \
+            --catalogue "$R/frozen/quality-catalogue-movies.json" \
+            --series "$R/frozen/quality-series.json" \
+            --out "$R/batch20-review.json" \
+            --csv "$R/batch20-review.csv" \
+            --markdown "$R/README.md"
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          from collections import Counter
+          report=json.loads(Path("data/generated/foundation-20/batch20-review.json").read_text())
+          assert report["batch_size"]==20
+          assert report["production_reads"]==report["production_writes"]==0
+          assert not report["ready_for_production_write"]
+          assert not report["sql_generated"]
+          assert all(not x["human_approval"] and
+                     x["source_independent_confirmation"]=="NOT_YET_OBTAINED"
+                     and x["status"].startswith("HOLD_") for x in report["items"])
+          counts=Counter(x["proposed"]["language_name"] for x in report["items"])
+          assert len(counts)==10 and set(counts.values())=={2}
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as output:
+              output.write("## Data Foundation V2: 20-film protected correction preview\n\n")
+              output.write(f"- Existing film proposals considered: **{report['population_proposals']:,}**\n")
+              output.write(f"- Live source sample checked: **{report['sample_rechecked']}**\n")
+              output.write(f"- Before/after and rollback plans: **{report['batch_size']}**\n")
+              output.write("- Production D1 operations: **0**; SQL scripts produced: **none**\n")
+              output.write("- Independent second-source confirmation: **pending**\n")
+              output.write("- Owner-approved production changes: **0**\n\n")
+              output.write("The review artifact includes exact IDs, QIDs, title/year guards, current and proposed languages, rollback values and immutable fingerprints. **No production correction has been applied.**\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: data-foundation-v2-20-film-review-packet
+          path: |
+            data/generated/foundation-20/batch20-review.json
+            data/generated/foundation-20/batch20-review.csv
+            data/generated/foundation-20/README.md
+          retention-days: 30
+          if-no-files-found: warn
