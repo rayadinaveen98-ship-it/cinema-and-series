@@ -1,0 +1,32 @@
+{
+  "schema": "foundation-v2-prewrite-live-status-v1",
+  "checked_utc": "2026-10-22T15:40:10Z",
+  "github_run_url": "https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/39806879485",
+  "frozen_catalogue_records": 70175,
+  "active_production_freeze": true,
+  "existing_film_records_live_checked": 20,
+  "supported_for_owner_review": 17,
+  "disputed_held": 3,
+  "held_qids": [
+    "Q20967570",
+    "Q20649744",
+    "Q109519684"
+  ],
+  "source_evidence_status": "17 source-supported review candidates only; independent evidence is not an automatic production authorization",
+  "current_before_values_match": true,
+  "production_reads": "20-row bounded SELECT and read-only Time Travel bookmark control-plane GET",
+  "cloudflare_bookmark": "captured_read_only; actual token intentionally unpublished; must capture new bookmark immediately before any future correction",
+  "full_row_encrypted_recovery_snapshot": "BLOCKED: FOUNDATION_BACKUP_KEY_B64 repository secret not yet configured",
+  "plaintext_backup_published": false,
+  "public_report_only": true,
+  "production_d1_writes": 0,
+  "corrections_applied": 0,
+  "production_update_authorized": false,
+  "required_next_steps": [
+    "Owner stores 32-byte base64 AES-GCM backup key as repository Actions secret FOUNDATION_BACKUP_KEY_B64 and retains private recovery copy",
+    "Rerun the read-only final prewrite workflow and verify sealed recovery JSON was uploaded with AES-GCM authentication check",
+    "Privately test decrypting the sealed backup",
+    "Perform fresh full-row prewrite validation and capture a new Cloudflare bookmark immediately before an explicitly approved production change",
+    "Obtain explicit owner approval for exact 17 QIDs before any production write"
+  ]
+}
