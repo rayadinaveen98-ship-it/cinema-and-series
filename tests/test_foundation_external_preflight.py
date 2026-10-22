@@ -64,7 +64,7 @@ class EvidencePreflightTests(unittest.TestCase):
     def test_duplicate_db_qid_and_missing_db_qid_are_held(self):
         p,e,rows=fixtures()
         rows.pop(1)
-        rows.append(dict(rows[2]))
+        rows.append(dict(rows[1]))
         r=build(p,e,rows)
         self.assertEqual(r["held"],2)
         self.assertEqual(r["results"][1]["production_status"],"HOLD_MISSING_OR_MULTIPLE_CURRENT_ROWS")
