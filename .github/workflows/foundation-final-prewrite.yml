@@ -1,0 +1,146 @@
+name: Data Foundation V2 — Final Read Only Approval Preflight
+
+# Never updates production. One final 20-ID SELECT, optional encrypted backup,
+# and read-only Cloudflare D1 bookmark. Explicit owner approval remains separate.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-final-prewrite.yml"
+      - "scripts/foundation_final_prewrite.py"
+      - "tests/test_foundation_final_prewrite.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: foundation-v2-final-approval-readonly
+  cancel-in-progress: false
+
+jobs:
+  readonly-checkpoint:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
+      REPORT_DIR: data/generated/foundation-final-prewrite
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Confirm production freeze remains active
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          flag=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert flag["active"] is True
+          code=Path("scripts/foundation_final_prewrite.py").read_text()
+          assert "SELECT * FROM catalogue_titles" in code
+          assert '"write_approved": False' in code
+          assert '"production_writes": 0' in code
+          assert 'AESGCM' in code
+          PY
+      - name: Install dependencies for read-only preflight and authenticated backup
+        run: |
+          python -m pip install "cryptography>=44,<50"
+          npm install --no-audit --no-fund
+      - name: Verify zero-write preflight and tamper-resistant backup tests
+        run: |
+          python -m unittest \
+            tests.test_foundation_final_prewrite \
+            tests.test_foundation_filebacked_rollback -v
+      - name: Restore frozen 20-film before-value packet
+        uses: actions/download-artifact@v4
+        with:
+          name: data-foundation-v2-20-film-review-packet
+          run-id: 39764251711
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-final-prewrite/packet
+      - name: Restore independent 17-supported and 3-held review
+        uses: actions/download-artifact@v4
+        with:
+          name: data-foundation-v2-20-external-current-review
+          run-id: 39776850310
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-final-prewrite/review
+      - name: Bind existing production database, without migrations
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID" && test -n "$CLOUDFLARE_API_TOKEN"
+          python scripts/cloudflare_bootstrap.py
+      - name: Prepare exactly one 20-QID read-only SELECT
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/foundation_final_prewrite.py query \
+            --packet "$REPORT_DIR/packet/batch20-review.json" \
+            --query-out "$REPORT_DIR/private-select.sql"
+          python - <<'PY'
+          from pathlib import Path
+          sql=Path("data/generated/foundation-final-prewrite/private-select.sql").read_text()
+          assert sql.startswith("SELECT * FROM catalogue_titles WHERE")
+          assert sql.count("'Q")==20
+          assert ";" not in sql.rstrip("; \n")
+          PY
+      - name: Read 20 CURRENT full-column rows (no writes)
+        shell: bash
+        run: |
+          set -euo pipefail
+          QUERY="$(cat "$REPORT_DIR/private-select.sql")"
+          npx wrangler d1 execute cinema-and-series --remote --json \
+            --command "$QUERY" > "$REPORT_DIR/private-current20.json"
+      - name: Validate identity, capture read-only bookmark, seal if key is present
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/foundation_final_prewrite.py report \
+            --packet "$REPORT_DIR/packet/batch20-review.json" \
+            --review "$REPORT_DIR/review/checked20.json" \
+            --current "$REPORT_DIR/private-current20.json" \
+            --summary "$REPORT_DIR/approval-summary.json" \
+            --sealed "$REPORT_DIR/sealed-recovery.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path("data/generated/foundation-final-prewrite")
+          r=json.loads((root/"approval-summary.json").read_text())
+          assert r["schema"]=="foundation-v2-final-approval-preflight-v1"
+          assert r["reviewed_candidates"]==17 and r["held_disputed_films"]==3
+          assert r["current_rows_checked"]==20 and r["production_writes"]==0
+          assert not r["write_approved"] and not r["ready_to_write"]
+          assert len(r["candidates"])==20
+          if r["backup_sealed_and_uploaded_by_workflow"]:
+              assert (root/"sealed-recovery.json").exists()
+          else:
+              assert not (root/"sealed-recovery.json").exists()
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Data Foundation V2 — final read-only correction gate\n\n")
+              f.write(f"- CURRENT full-column rows verified: **{r['current_rows_checked']}**\n")
+              f.write(f"- Existing films supported for *review*: **{r['reviewed_candidates']}**\n")
+              f.write(f"- Disputed films held: **{r['held_disputed_films']}**\n")
+              f.write(f"- Cloudflare Time Travel bookmark: **{r['bookmark_status']}**\n")
+              f.write(f"- Encrypted full-row backup: **{r['encryption']}**\n")
+              f.write("- Cloudflare D1 writes: **0**; owner approval: **NO**\n\n")
+              f.write("This is NOT write authorization. Backups/bookmarks are only valid for a future correction after fresh pre-write rechecks and owner confirmation.\n")
+          PY
+      - name: Upload ONLY review hashes and encrypted snapshot (never plaintext)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: foundation-v2-final-17-review-approval-package
+          path: |
+            data/generated/foundation-final-prewrite/approval-summary.json
+            data/generated/foundation-final-prewrite/sealed-recovery.json
+          if-no-files-found: warn
+          retention-days: 30
