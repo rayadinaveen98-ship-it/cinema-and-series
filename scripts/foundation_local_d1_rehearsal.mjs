@@ -55,10 +55,23 @@ async function batch(db,items,reverse=false){
  for(let i=1;i<results.length;i+=2)
    require(results[i].meta?.changes===1,"Expected one changed row per D1 update");
 }
+async function applySchemaMigration(db,path){
+ // D1 exec() interprets comment-only lines as empty SQL statements.
+ // These migration files contain ordinary CREATE/ALTER/INDEX commands;
+ // discard whole-line "--" comments, then execute each statement safely.
+ const sql=readFileSync(path,"utf8").split("\n")
+   .filter(line=>!line.trimStart().startsWith("--")).join("\n");
+ const commands=sql.split(";").map(x=>x.trim()).filter(Boolean);
+ require(commands.length>0,"Empty local catalogue migration: "+path);
+ for(const command of commands){
+   require(/^(CREATE|ALTER)\s/i.test(command),"Unexpected migration command");
+   await db.prepare(command).run();
+ }
+}
 async function seed(db,original){
- await db.exec(readFileSync("migrations/0017_year_precision_catalogue.sql","utf8"));
- await db.exec(readFileSync("migrations/0027_catalogue_title_language_provenance.sql","utf8"));
- await db.exec(CHECK_TABLE);
+ await applySchemaMigration(db,"migrations/0017_year_precision_catalogue.sql");
+ await applySchemaMigration(db,"migrations/0027_catalogue_title_language_provenance.sql");
+ await db.prepare(CHECK_TABLE).run();
  const insert="INSERT INTO catalogue_titles(id,wikidata_qid,title,release_year,country_code,language_name,source_category,source_url) VALUES(?,?,?,?,?,?,?,?)";
  for(const r of original)
    await one(db,insert,...FIELDS.map(k=>r[k]),"foundation-local-qa","https://www.wikidata.org/wiki/"+r.wikidata_qid);
