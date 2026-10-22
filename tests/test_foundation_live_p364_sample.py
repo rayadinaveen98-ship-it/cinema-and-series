@@ -76,6 +76,24 @@ class FoundationLiveSampleTests(unittest.TestCase):
         self.assertEqual(recheck_item(row,None,{"Q123":"Telugu"})["decision"],
                          "HOLD_IDENTITY_MISSING_OR_REDIRECTED")
 
+    def test_bengali_bangla_equivalent_only_for_language_qid_q9610(self):
+        row=proposal("Bengali",4040)
+        self.assertEqual(
+            recheck_item(row,film_entity(row,original="Q9610"),{"Q9610":"Bangla"})["decision"],
+            "SOURCE_RECHECK_PASSED_REVIEW_REQUIRED",
+        )
+        # Same strings from an unrelated item must never be accepted.
+        self.assertEqual(
+            recheck_item(row,film_entity(row,original="Q99999"),{"Q99999":"Bangla"})["decision"],
+            "HOLD_CURRENT_SOURCE_LANGUAGE_MISMATCH",
+        )
+        # A wrongly labeled proposed language is still held.
+        wrong=proposal("Hindi",4041)
+        self.assertEqual(
+            recheck_item(wrong,film_entity(wrong,original="Q9610"),{"Q9610":"Bangla"})["decision"],
+            "HOLD_CURRENT_SOURCE_LANGUAGE_MISMATCH",
+        )
+
     def test_non_deprecated_claims_only(self):
         e={"claims":{"P364":[claim("Q1"),{**claim("Q2"),"rank":"deprecated"}]}}
         self.assertEqual(claims_qids(e,"P364"),{"Q1"})
