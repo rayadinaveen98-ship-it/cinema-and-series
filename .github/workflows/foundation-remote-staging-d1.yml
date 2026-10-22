@@ -1,0 +1,139 @@
+name: Data Foundation V2 — Disposable Remote D1 Staging Rehearsal
+
+# One-time merge trigger or explicitly requested manual retry.
+# Unlike production catalogue jobs, it creates and cleans up a new uniquely
+# named remote QA database, never writes cinema-and-series production.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-remote-staging-d1.yml"
+      - "scripts/foundation_remote_staging_d1.py"
+      - "tests/test_foundation_remote_staging_d1.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: cinema-foundation-disposable-remote-d1
+  cancel-in-progress: false
+
+jobs:
+  remote-staging-only:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      FOUNDATION_ROOT: data/generated/foundation-remote-staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify catalogue freeze and no production binding in remote test
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          state=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert state["active"] is True
+          source=Path("scripts/foundation_remote_staging_d1.py").read_text()
+          assert 'PREFIX = "foundation-v2-qa-"' in source
+          assert 'PRODUCTION = "cinema-and-series"' in source
+          assert 'def cleanup_exact_stage(' in source
+          assert 'staging_d1_deleted' in source
+          assert 'production_d1_writes' in source
+          PY
+      - name: Install Wrangler CLI for isolated QA D1 control plane only
+        run: npm install --no-audit --no-fund
+      - name: Test remote staging target isolation and SQL preconditions
+        run: |
+          python -m unittest \
+            tests.test_foundation_remote_staging_d1 \
+            tests.test_foundation_filebacked_rollback \
+            tests.test_foundation_20_preflight -v
+      - name: Restore frozen original 20-film correction packet
+        uses: actions/download-artifact@v4
+        with:
+          name: data-foundation-v2-20-film-review-packet
+          run-id: 39764251711
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-remote-staging/packet
+      - name: Restore externally reviewed 17-supported / 3-held decisions
+        uses: actions/download-artifact@v4
+        with:
+          name: data-foundation-v2-20-external-current-review
+          run-id: 39776850310
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-remote-staging/review
+      - name: Restore saved production READ-ONLY 20-record selection
+        uses: actions/download-artifact@v4
+        with:
+          name: data-foundation-v2-20-current-row-preflight
+          run-id: 39775564153
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-remote-staging/current
+      - name: Run guard-tested correction+rollback only in disposable remote staging
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT="$FOUNDATION_ROOT"
+          python scripts/foundation_remote_staging_d1.py run \
+            --packet "$ROOT/packet/batch20-review.json" \
+            --review "$ROOT/review/checked20.json" \
+            --current "$ROOT/current/current-d1-20.json" \
+            --root "$ROOT/qa" \
+            --state "$ROOT/private-staging-identity.json" \
+            --config "$ROOT/qa/wrangler.qa.jsonc" \
+            --output "$ROOT/remote-stage-proof.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          report=json.loads(Path("data/generated/foundation-remote-staging/remote-stage-proof.json").read_text())
+          assert report["schema"]=="foundation-v2-disposable-remote-d1-v1"
+          assert report["tested_existing_film_rows"]==20
+          assert report["reviewed_language_changes"]==17
+          assert report["disputed_films_untouched"]==3
+          assert report["staging_forward_and_inverse"]
+          assert report["stale_batch_atomic"]
+          assert report["competing_edit_inverse_atomic"]
+          assert report["staging_d1_deleted"]
+          assert report["production_d1_reads"]==report["production_d1_writes"]==0
+          assert not report["production_correction_authorized"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Data Foundation V2 — disposable remote staging D1 recovery\n\n")
+              f.write("- Remote test database created with a unique **foundation-v2-qa-...** name\n")
+              f.write("- **17** existing film language corrections simulated; **3** conflicting films held\n")
+              f.write("- Full before/after/rollback identity checks: **PASS**\n")
+              f.write("- Stale forward and competing-edit inverse transaction aborts: **PASS**\n")
+              f.write("- Staging database UUID and confirmed **deletion**: PASS\n")
+              f.write("- Production D1 reads/writes: **0/0**; no user-approved production correction\n\n")
+              f.write("Limit: this uses a 20-record staging slice, NOT an entire production clone. "
+                      "Production full-row prewrite backup, fresh guards and owner approval remain mandatory.\n")
+          PY
+      - name: Always confirm cleanup of only this job's uniquely identified staging DB
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          STATE="$FOUNDATION_ROOT/private-staging-identity.json"
+          if [ -f "$STATE" ]; then
+            python scripts/foundation_remote_staging_d1.py cleanup --state "$STATE"
+          else
+            echo "No created staging DB state to clean up"
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: foundation-v2-disposable-remote-d1-recovery-proof
+          path: data/generated/foundation-remote-staging/remote-stage-proof.json
+          if-no-files-found: warn
+          retention-days: 30

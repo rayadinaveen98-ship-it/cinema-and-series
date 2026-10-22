@@ -65,6 +65,44 @@ runner-local state, requires no Cloudflare credentials, and never issues
 but is **not** a real remote nonproduction D1 clone and does not verify
 Cloudflare Time Travel. Keep those separate gates open.
 
+## Remote staging D1 test — disposal and strict scope
+
+The workflow `.github/workflows/foundation-remote-staging-d1.yml` exercises
+the 20-record correction preview in a **new, disposable remote D1 database**
+using the account's GitHub secret. It does **not** access the existing
+`cinema-and-series` production database beyond listing its control-plane
+identity to ensure that the scratch UUID is different. It neither deploys
+the app nor updates production data.
+
+Safety controls in `scripts/foundation_remote_staging_d1.py`:
+
+- Unique scratch name `foundation-v2-qa-<GitHub run ID>-<attempt>`
+  with numeric validation; never use the production database name.
+- Before creation, check Cloudflare's D1 account database count. If the
+  account has more than eight databases, **abort without creating a QA DB**
+  to reserve a free slot on a possible Free account.
+- Record the newly created database's UUID and verify it differs from
+  production; generate a temporary Wrangler config binding **only that
+  UUID**, never the production DB.
+- Apply production `catalogue_titles` migrations 0017 and 0027 to scratch
+  only; seed 20 archived records plus one unrelated sentinel.
+- Run a 17-record guarded update/inverse and an intentional failed forward
+  and inverse. Fail on partial updates or accidental edits to held films.
+- Delete scratch by its exact UUID-verified name in a finally block; GitHub
+  also runs a second `if: always()` cleanup step. Refuse deletion if the
+  control-plane UUID doesn't match the one created by the current run.
+- Persist only a non-sensitive JSON result; do not archive secret-bearing
+  runner configuration or the original production snapshot in this workflow.
+
+If cleanup cannot be verified, the workflow is **not successful**. Use the
+run's unique name and account D1 dashboard to investigate orphan staging
+resources; do not delete any other database.
+
+Because this test uses only a 20-record copy, it does not certify the whole
+70,175-record production schema or demonstrate a safe full production
+Time Travel restore. Production changes remain blocked pending separate
+backup, fresh before-value checks, and owner authorization.
+
 ## Remaining mandatory gates before any real correction
 
 - [ ] Owner explicitly approves **a separate proposed correction PR** with
