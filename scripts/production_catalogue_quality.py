@@ -162,8 +162,11 @@ def analyze_catalogue(
     findings: list[dict[str, Any]] = []
     films, overlap = movie_projection(movies, catalogue)
     shows = [row for row in series if norm(row.get("title"))]
+    # Match the live catalogue projection: year-only duplicates superseded by
+    # an exact-date movie should not generate an extra metadata warning.
+    projected_catalogue = [row for row in films if row.get("_projection") == "catalogue"]
 
-    add_common_findings(findings, catalogue, "catalogue_movie", "release_year")
+    add_common_findings(findings, projected_catalogue, "catalogue_movie", "release_year")
     add_common_findings(findings, shows, "series", "first_air_year")
 
     for row in movies:
@@ -183,7 +186,7 @@ def analyze_catalogue(
                 release_date=row.get("release_date"),
             ))
 
-    for row in catalogue:
+    for row in projected_catalogue:
         if not known(row.get("source_url")):
             findings.append(finding("PROVENANCE.SOURCE_LOCATOR_MISSING", "S1", "catalogue_movie", row))
 
@@ -302,6 +305,9 @@ def analyze_catalogue(
             "projected_movies": film_count,
             "projected_series": show_count,
             "projected_total": film_count + show_count,
+            "projected_unknown_language_titles": sum(
+                not known(row.get("language_name")) for row in films
+            ) + sum(not known(row.get("language_name")) for row in shows),
         },
         "coverage": {"movies": movie_coverage, "series": series_coverage},
         "india_priority_languages": priority,
