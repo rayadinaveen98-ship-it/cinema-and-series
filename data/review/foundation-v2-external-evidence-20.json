@@ -1,0 +1,216 @@
+{
+  "schema": "data-foundation-v2-external-evidence-20-v1",
+  "reviewed_at_utc_date": "2026-10-22",
+  "intent": "External-source scrutiny of 20 frozen EXISTING film identities. No automatic database corrections.",
+  "evidence_policy": "Only external broadcaster, streamer, film catalogue or independent publisher URLs; Wikipedia/Wikidata alone cannot count as independent corroboration. SUPPORT means candidate may advance to production preflight, not approval.",
+  "external_sources_are_not_official_studio_certs": true,
+  "proposed_writes": 0,
+  "records": [
+    {
+      "wikidata_qid": "Q11037173",
+      "frozen_release_year": 1988,
+      "title_short": "Mera Muqaddar",
+      "proposed_language": "Hindi",
+      "source_url": "https://www.imdb.com/title/tt0427525/",
+      "decision": "SUPPORT",
+      "review_note": "IMDb details: 1988; Hindi; cast matches",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q48671161",
+      "frozen_release_year": 2017,
+      "title_short": "Mirror Game",
+      "proposed_language": "Hindi",
+      "source_url": "https://www.netflix.com/in/title/80216271",
+      "decision": "SUPPORT",
+      "review_note": "Netflix 2017 Hindi-language title and cast",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q16311224",
+      "frozen_release_year": 1979,
+      "title_short": "Nee Sirithal Naan Sirippen",
+      "proposed_language": "Tamil",
+      "source_url": "https://www.moviebuff.com/nee-sirithal-naan-sirippen",
+      "decision": "SUPPORT",
+      "review_note": "Moviebuff exact Tamil-language 1979 release and director",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q20967570",
+      "frozen_release_year": 2017,
+      "title_short": "Asurakulam",
+      "proposed_language": "Tamil",
+      "source_url": "https://www.moviebuff.com/asurakulam",
+      "decision": "HOLD_YEAR_CONFLICT",
+      "review_note": "Moviebuff marks unreleased/TBA; 2015 reported elsewhere; database year 2017 not substantiated",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q18602695",
+      "frozen_release_year": 1989,
+      "title_short": "Vashyamanthram",
+      "proposed_language": "Malayalam",
+      "source_url": "https://m3db.com/film/vashyamanthram",
+      "decision": "SUPPORT",
+      "review_note": "Independent Malayalam film and music catalogue lists 1989 Malayalam film",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q38805227",
+      "frozen_release_year": 2017,
+      "title_short": "Lechmi",
+      "proposed_language": "Malayalam",
+      "source_url": "https://www.netflix.com/in/title/80998564",
+      "decision": "SUPPORT",
+      "review_note": "Netflix lists 2017 Malayalam-language film, matching cast",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q18128318",
+      "frozen_release_year": 1988,
+      "title_short": "Murali Krishnudu",
+      "proposed_language": "Telugu",
+      "source_url": "https://tv.apple.com/in/movie/murali-krishnudu/umc.cmc.1tk15l3i042wydtqnzsqprmvu",
+      "decision": "SUPPORT",
+      "review_note": "Apple TV 1988 original audio Telugu, matching cast",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q30645676",
+      "frozen_release_year": 2017,
+      "title_short": "Jaya Janaki Nayaka",
+      "proposed_language": "Telugu",
+      "source_url": "https://tv.apple.com/in/movie/jaya-janaki-nayaka/umc.cmc.jlnu67t2dxil7z28uz50qm2z",
+      "decision": "SUPPORT",
+      "review_note": "Apple TV 2017 original audio Telugu, correct lead cast",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q17078270",
+      "frozen_release_year": 1998,
+      "title_short": "Nishyabda",
+      "proposed_language": "Kannada",
+      "source_url": "https://chiloka.com/movie/nishyabda-1998",
+      "decision": "SUPPORT",
+      "review_note": "Kannada-specialist Chiloka year, director, release and original language",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q39073510",
+      "frozen_release_year": 2017,
+      "title_short": "Jani",
+      "proposed_language": "Kannada",
+      "source_url": "https://www.zee5.com/movies/details/jani/0-0-232744",
+      "decision": "SUPPORT",
+      "review_note": "ZEE5 2017 Kannada-language release and director",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q21161228",
+      "frozen_release_year": 2009,
+      "title_short": "Jekhane Ashray",
+      "proposed_language": "Bengali",
+      "source_url": "https://www.indianfilmhistory.com/movie/jekhane-ashray-2009",
+      "decision": "SUPPORT",
+      "review_note": "Indian Film History 2009 Bengali release, director and cast; investigate old-cast anomaly separately",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q64768301",
+      "frozen_release_year": 2019,
+      "title_short": "Shankar Mudi",
+      "proposed_language": "Bengali",
+      "source_url": "https://www.imdb.com/title/tt10602172/",
+      "decision": "SUPPORT",
+      "review_note": "IMDb 2019 Bengali film with director Aniket Chattopadhyay",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q21334837",
+      "frozen_release_year": 2015,
+      "title_short": "Ishq Tu Hi Tu",
+      "proposed_language": "Odia",
+      "source_url": "https://www.moviebuff.com/ishq-tu-hi-tu",
+      "decision": "SUPPORT",
+      "review_note": "Moviebuff Oriya/Odia title in 2015 with matching cast; Oriya is old English language label",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q109519684",
+      "frozen_release_year": 2021,
+      "title_short": "Mr. Romeo",
+      "proposed_language": "Odia",
+      "source_url": "https://www.odiapedia.com/cinema/film/mr-romeo-2021",
+      "decision": "HOLD_WEAK_INDEPENDENT_IDENTITY",
+      "review_note": "Odiapedia cites Odia Wikipedia; other titles named Mr Romeo incl dubbed 2014, need true independent 2021 broadcaster original",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q19824575",
+      "frozen_release_year": 2015,
+      "title_short": "A Paying Ghost",
+      "proposed_language": "Marathi",
+      "source_url": "https://www.rottentomatoes.com/m/a_paying_ghost",
+      "decision": "SUPPORT",
+      "review_note": "Rotten Tomatoes original language Marathi and 2015 director",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q105756400",
+      "frozen_release_year": 2018,
+      "title_short": "Wagherya",
+      "proposed_language": "Marathi",
+      "source_url": "https://www.zee5.com/movies/details/wagherya/0-0-23248",
+      "decision": "SUPPORT",
+      "review_note": "ZEE5 Marathi original language, 2018 and director",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q20649744",
+      "frozen_release_year": 2015,
+      "title_short": "Saadey CM Saab",
+      "proposed_language": "Punjabi",
+      "source_url": "https://timesofindia.indiatimes.com/entertainment/punjabi/movie-details/saadey-cm-saab/movieshow/61218930.cms",
+      "decision": "HOLD_YEAR_CONFLICT",
+      "review_note": "Confirmed theatrical release 27 May 2016; archive says 2015. Producer teaser and contemporary press corroborate 2016.",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q58411339",
+      "frozen_release_year": 2018,
+      "title_short": "Bhajjo Veero Ve",
+      "proposed_language": "Punjabi",
+      "source_url": "https://tv.apple.com/in/movie/bhajjo-veero-ve/umc.cmc.4f7x6crnzb47kfx5detnjcjw9",
+      "decision": "SUPPORT",
+      "review_note": "Apple TV original audio Punjabi 2018, matching cast",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q28127631",
+      "frozen_release_year": 2016,
+      "title_short": "Polam Pol",
+      "proposed_language": "Gujarati",
+      "source_url": "https://www.imdb.com/title/tt5356596/",
+      "decision": "SUPPORT",
+      "review_note": "IMDb release 12 Feb 2016 and original Gujarati language",
+      "production_update_authorized": false
+    },
+    {
+      "wikidata_qid": "Q77890237",
+      "frozen_release_year": 2019,
+      "title_short": "Montu Ni Bittu",
+      "proposed_language": "Gujarati",
+      "source_url": "https://www.rottentomatoes.com/m/montu_ni_bittu",
+      "decision": "SUPPORT",
+      "review_note": "Rotten Tomatoes 2019 original language Gujarati and director",
+      "production_update_authorized": false
+    }
+  ],
+  "other_references": {
+    "asurakulam_year_conflict": "https://timesofindia.indiatimes.com/entertainment/tamil/movie-details/asurakulam/movieshow/61285927.cms",
+    "saadey_release_year_2016": "https://www.youtube.com/watch?v=w1Xh6fSCg6w",
+    "saadey_release_contemporary": "https://www.tribuneindia.com/news/archive/saadey-cm-saab-star-cast-comes-calling-to-city-241246",
+    "mr_romeo_dubbed_name_collision": "https://www.zee5.com/movies/details/mr-romeo/0-0-288590"
+  }
+}
