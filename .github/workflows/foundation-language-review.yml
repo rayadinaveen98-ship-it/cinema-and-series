@@ -1,0 +1,120 @@
+name: Data Foundation V2 — Source Evidence Review (No D1)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-language-review.yml"
+      - "scripts/foundation_language_review.py"
+      - "tests/test_foundation_language_review.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: cinema-foundation-offline-language-review
+  cancel-in-progress: false
+
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 18
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Test identity-matching and fail-closed source rules
+        run: python -m unittest tests.test_foundation_language_review -v
+      - name: Restore immutable production audit snapshot without live D1
+        uses: actions/download-artifact@v4
+        with:
+          name: catalogue-quality-v1
+          run-id: 39758915343
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-review/snapshot
+      - name: Restore existing source-only film-language checkpoint
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/foundation-review
+          git fetch --no-tags origin refs/heads/automation/india-language-evidence
+          git show FETCH_HEAD:.automation/india-language-evidence.json \
+            > data/generated/foundation-review/checkpoint.json
+          test -s data/generated/foundation-review/checkpoint.json
+      - name: Match strict P364 original languages against existing catalogue IDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/foundation-review
+          python scripts/foundation_language_review.py \
+            --movies "$ROOT/snapshot/quality-movies.json" \
+            --catalogue "$ROOT/snapshot/quality-catalogue-movies.json" \
+            --series "$ROOT/snapshot/quality-series.json" \
+            --checkpoint "$ROOT/checkpoint.json" \
+            --out "$ROOT/language-review.json" \
+            --csv "$ROOT/language-review.csv"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path("data/generated/foundation-review")
+          report=json.loads((root/"language-review.json").read_text())
+          counts=report["counts"]
+          assert report["read_only"] and report["d1_reads_this_run"]==0 and report["d1_writes"]==0
+          assert not report["publication_performed"] and report["automatic_corrections"]==0
+          assert counts["projected_films"]==51872, "snapshot unexpectedly changed"
+          assert counts["series_records"]==18303, "snapshot unexpectedly changed"
+          assert counts["films_unknown_language"]+counts["series_unknown_language"]==50380
+          assert all(r["claim_property"]=="P364" and r["status"]=="REVIEW_REQUIRED"
+                     and r["source_url"].endswith("/"+r["wikidata_qid"])
+                     for r in report["proposals"])
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as out:
+              out.write("## Data Foundation V2 — source evidence review\n\n")
+              out.write("No live database access, no title inserts, no SQL generated, no writes.\n\n")
+              out.write(f"- Frozen baseline: **{counts['projected_films']:,} films + {counts['series_records']:,} series**\n")
+              out.write(f"- Unknown languages: **{counts['films_unknown_language']+counts['series_unknown_language']:,}**\n")
+              out.write(f"- Existing source-checkpoint records: **{counts['source_checkpoint_records']:,}**\n")
+              out.write(f"- Matching source-only P364 review proposals: **{counts['review_proposals']:,}**\n")
+              out.write(f"- Source records held for identity/evidence conflicts: **{counts['held_evidence_rows']:,}**\n\n")
+              out.write("Candidate proposals are not verified facts or approved database changes. No automatic correction.\n")
+          PY
+      - name: Save exact archived rows of the known duplicate for human investigation
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          root=Path("data/generated/foundation-review")
+          data=json.loads((root/"snapshot/quality-movies.json").read_text())
+          rows=[r for batch in data for r in (batch.get("results") or [])
+                if r.get("wikidata_qid") in ("Q137368489","Q137537086")]
+          assert len(rows)==2, "Expected exactly two previously reviewed duplicate candidates"
+          dossier={
+            "schema":"foundation-v2-duplicate-identity-dossier-v1",
+            "case":"Mamta Child Factory (2025)",
+            "classification":"POTENTIAL_DUPLICATE_UNRESOLVED",
+            "film_rows":rows,
+            "external_evidence":[
+              "https://www.imdb.com/title/tt32260076/",
+              "https://www.mid-day.com/entertainment/bollywood-news/article/cbfc-issues-show-cause-notice-to-mamta-child-factory-mohsin-khan-reacts-23600835",
+              "https://www.mid-day.com/entertainment/bollywood-news/article/mamta-child-factory-skips-theatrical-release-to-stream-this-platform-23607027"
+            ],
+            "ambiguous_relation":"Marathi Delivery Boy (2024) and Hindi Mamta Child Factory (2025) share script and cast; this does not authorize conflating their film identities.",
+            "decision":"HOLD: compare both Wikidata items' statements and external IDs against the same release before any merge or deletion",
+            "production_writes":0,
+          }
+          (root/"mamta-identity-review.json").write_text(json.dumps(dossier,indent=2,ensure_ascii=False)+"\n")
+          print("DUPLICATE_DOSSIER_SAVED=2 candidate rows; no deletion")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: foundation-v2-existing-title-review
+          path: |
+            data/generated/foundation-review/language-review.json
+            data/generated/foundation-review/language-review.csv
+            data/generated/foundation-review/mamta-identity-review.json
+          retention-days: 30
+          if-no-files-found: warn
