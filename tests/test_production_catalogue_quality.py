@@ -31,6 +31,48 @@ class ProductionCatalogueQualityTests(unittest.TestCase):
         self.assertEqual(report["counts"]["projected_movies"], 1)
         self.assertEqual(report["counts"]["catalogue_movie_overlap_removed"], 1)
 
+    def test_overlapping_year_movie_does_not_double_count_unknown_language(self):
+        movies = [{
+            "id": "m1", "wikidata_qid": "Q11", "title": "Film",
+            "language_name": "Unknown", "country_code": "IN",
+            "release_date": "2025-01-01", "release_date_source": "wikidata",
+        }]
+        catalogue = [{
+            "id": "c1", "wikidata_qid": "Q11", "title": "Film",
+            "language_name": "Unknown", "country_code": "IN",
+            "release_year": 2025, "source_url": "",
+        }]
+        shows = [{
+            "id": "s1", "wikidata_qid": "Q12", "title": "Show",
+            "language_name": "Unknown", "country_code": "IN",
+            "first_air_year": None, "source_url": "https://example.test/show",
+            "series_kind": "series", "lifecycle_status": "unknown",
+        }]
+        report = analyze_catalogue(movies, catalogue, shows)
+        self.assertEqual(report["counts"]["projected_total"], 2)
+        self.assertEqual(report["counts"]["catalogue_movie_overlap_removed"], 1)
+        self.assertEqual(report["counts"]["projected_unknown_language_titles"], 2)
+        self.assertEqual(
+            report["finding_summary"]["by_rule"]["METADATA.LANGUAGE_UNKNOWN"], 2)
+        self.assertEqual(
+            report["finding_summary"]["by_rule"].get("PROVENANCE.SOURCE_LOCATOR_MISSING", 0), 0)
+
+    def test_unknown_metadata_count_reconciles_with_projected_coverage(self):
+        films = [{
+            "id": "m1", "wikidata_qid": "Q5", "title": "Known",
+            "country_code": "IN", "language_name": "Tamil",
+            "release_date": "2020-01-01", "release_date_source": "official",
+        }]
+        catalogue = [{
+            "id": "c2", "wikidata_qid": "Q6", "title": "Unknown language",
+            "country_code": "IN", "language_name": "Unknown",
+            "release_year": 2019, "source_url": "https://example.test",
+        }]
+        r = analyze_catalogue(films, catalogue, [])
+        self.assertEqual(r["counts"]["projected_unknown_language_titles"], 1)
+        self.assertEqual(r["coverage"]["movies"]["language"]["numerator"], 1)
+        self.assertEqual(r["finding_summary"]["by_rule"]["METADATA.LANGUAGE_UNKNOWN"], 1)
+
     def test_cross_type_qid_collision_is_critical(self):
         movies = [{
             "id": "m42", "wikidata_qid": "Q42", "title": "Collision",
