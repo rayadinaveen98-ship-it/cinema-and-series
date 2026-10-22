@@ -13,7 +13,9 @@ import csv
 import json
 from collections import Counter, defaultdict
 from pathlib import Path
+import sys
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from production_catalogue_quality import load_d1_rows
 
 TABLES = ("movies", "catalogue_titles", "series_titles")
