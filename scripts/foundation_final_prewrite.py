@@ -23,7 +23,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from production_catalogue_quality import load_d1_rows
-from foundation_filebacked_rollback import validated_rows
+from foundation_filebacked_rollback import validated_rows, load_d1_rows_from_response
 
 PRODUCTION = "cinema-and-series"
 SCHEMA = "foundation-v2-final-approval-preflight-v1"
@@ -99,7 +99,7 @@ def make_report(packet: dict, reviewed: dict, raw: list[dict],
                 key_b64: str | None) -> tuple[dict, dict | None]:
     # Reuse the exact 17/3 source and archived before-value gates.
     eligible, held = validated_rows(packet, reviewed, raw)
-    rows = load_d1_rows(raw)
+    rows = load_d1_rows_from_response(raw)
     require(len(rows) == 20, "Expected exactly 20 current full production rows")
     require(all(len(r) > len(BEFORE_KEYS) for r in rows),
             "This is not a full-column production row snapshot")
