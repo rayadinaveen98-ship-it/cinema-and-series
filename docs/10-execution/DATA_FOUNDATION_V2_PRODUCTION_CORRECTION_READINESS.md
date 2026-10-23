@@ -424,3 +424,48 @@ catalogue remains frozen at **70,175** titles.
 Documentation:
 https://developers.cloudflare.com/workers/wrangler/configuration/
 https://developers.cloudflare.com/workers/local-development/
+
+
+## Fourth scratch-only remote D1 attempt — switching the execution harness
+
+The fourth owner-dispatched canary
+[39965409700](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/39965409700)
+confirmed that scratch creation, one-file schema initialization,
+database-resident proof, local CI checks and quota preflight succeeded.
+The `wrangler dev --remote` **legacy Worker preview never satisfied the
+authenticated health check**, even after Preview URLs were enabled.
+The unconditional cleanup confirmed the scratch D1 deleted. No film or series
+canary phase ran and **zero production corrections were made**.
+
+Cloudflare currently recommends **`wrangler dev` with per-binding
+`"remote": true`** for connecting a locally executed Worker to the actual
+remote D1 database. D1 supports this mode:
+https://developers.cloudflare.com/workers/local-development/bindings-per-env/
+https://developers.cloudflare.com/d1/best-practices/local-development/
+
+The disposable test runner is therefore updated to:
+
+- Run the synthetic Worker **locally**, not in the legacy remote preview,
+  while explicitly binding the verified scratch D1 with `remote:true`.
+- Reject configs without that exact `remote:true` setting before any
+  remote schema SQL or Worker startup. The scratch name and UUID must still
+  exactly match the newly created account resource and never production.
+- Keep authenticated, read-only health checking **against the actual
+  remote D1 marker**. A locally simulated D1 will not contain the marker
+  installed using `wrangler d1 execute --remote` and cannot pass.
+- Preserve six one-time no-retry forward/inverse/stale/conflict phase calls,
+  exact original-row restoration, remote account quota preflight, cleanup
+  and secret-free stage diagnostics.
+
+**What this proves if successful:** that the actual D1 Worker Binding API
+`db.batch()` can perform the guarded test against a real disposable
+Cloudflare D1 database via the documented remote-binding proxy.
+
+**What it does NOT prove:** performance or restrictions when the JavaScript
+Worker itself executes on Cloudflare's edge, nor all 16,681 corrections
+against remote D1, nor live-row freshness, evidentiary approval or
+production authorization. A later full edge environment staging check is
+still necessary before any production language update is considered.
+
+The user must explicitly launch a **new manual scratch-only run** after
+tests/merge; this change does not automatically create remote databases.

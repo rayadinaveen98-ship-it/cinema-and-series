@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Manual-only, ephemeral Worker Binding remote D1 canary on synthetic QA rows.
+"""Manual-only, ephemeral LOCAL Worker with genuine remote D1 binding canary.
 
 NEVER bind or query the production D1 database. The only Cloudflare D1 name
 usable for write SQL starts with foundation-v2-qa-<run ID>-<attempt>, must be
 NEWLY CREATED by this run, UUID checked against production, and cleaned up.
-The temporary worker is remote-dev preview only; no production deployment.
+The Worker executes locally, but D1 requests reach the disposable remote\nCloudflare database. No remote Worker preview or production deployment.
 
 This runner deliberately submits the actual test POST only ONCE. Ambiguous
 network responses cause cleanup, never a retry of changes.
@@ -103,6 +103,9 @@ def safe_config(name: str, stage_uuid: str, prod_uuid: str, token: str) -> dict:
             "binding": "DB",
             "database_name": name,
             "database_id": stage_uuid,
+            # Cloudflare Wrangler >= 4.37: local Worker + actual remote D1
+            # binding. No legacy remote Worker preview deployment.
+            "remote": True,
         }],
         "vars": {
             "FOUNDATION_ONLY_MODE": "isolated-nonproduction-D1",
@@ -141,8 +144,9 @@ def assert_remote_scratch_config(stage: str, config: Path) -> None:
         require(isinstance(binding, list) and len(binding) == 1,
                 "Exactly one D1 binding is required")
         item = binding[0]
-        require(item["binding"] == "DB" and item["database_name"] == stage,
-                "Wrong scratch binding name")
+        require(item["binding"] == "DB" and item["database_name"] == stage
+                and item.get("remote") is True,
+                "Remote D1 binding is required; local D1 fallback forbidden")
         require(UUID.fullmatch(item["database_id"]) is not None
                 and UUID.fullmatch(vars_["FOUNDATION_PRODUCTION_UUID"]) is not None
                 and item["database_id"].lower() ==
@@ -223,7 +227,9 @@ def bind_scratch_proof(stage: str, config: Path, stage_uuid: str,
 
 def once_remote_probe(config: Path, token: str) -> dict:
     command = [
-        "npx", "wrangler", "dev", "--remote", "--config", str(config),
+        # The Worker executes locally, but remote:true binds the actual
+        # disposable Cloudflare D1. Avoid legacy dev --remote preview upload.
+        "npx", "wrangler", "dev", "--config", str(config),
         "--ip", "127.0.0.1", "--port", "8787",
     ]
     stage_log("preview_start")
