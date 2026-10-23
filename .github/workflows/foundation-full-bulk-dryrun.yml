@@ -1,0 +1,99 @@
+name: Data Foundation V2 - Full Bulk Correction Dry Run (Zero D1)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-full-bulk-dryrun.yml"
+      - "scripts/foundation_bulk_correction_rehearsal.py"
+      - "tests/test_foundation_bulk_correction_rehearsal.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: foundation-v2-full-bulk-dryrun
+  cancel-in-progress: false
+
+jobs:
+  full-bulk-disposable-rehearsal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Validate read-only and frozen catalogue safeguards
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install "cryptography>=44,<50"
+          python -m unittest tests.test_foundation_bulk_correction_rehearsal -v
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          marker=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert marker["active"] is True
+          # No Cloudflare credentials, wrangler, production SQL or deployment
+          source=Path("scripts/foundation_bulk_correction_rehearsal.py").read_text()
+          assert 'production_update_approved":False' in source
+          assert 'production_writes":0' in source
+          PY
+      - name: Download immutable independently verified AES-GCM backup
+        uses: actions/download-artifact@v4
+        with:
+          name: foundation-v2-16681-candidate-encrypted-recovery
+          run-id: 39935377448
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-full-bulk-dryrun
+      - name: Simulate 16,681 guarded updates in 100-record atomic batches
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/foundation-full-bulk-dryrun
+          python scripts/foundation_bulk_correction_rehearsal.py \
+            --sealed "$ROOT/encrypted-recovery.json" \
+            --batch-size 100 \
+            --out "$ROOT/safe-plan.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          result=json.loads(Path("data/generated/foundation-full-bulk-dryrun/safe-plan.json").read_text())
+          assert result["schema"]=="foundation-v2-full-bulk-batch-rehearsal-v1"
+          assert result["archive_full_rows"]==16681
+          assert result["candidate_tables"]=={"catalogue_titles":11667,"series_titles":5014}
+          assert result["maximum_batch_size"]==100
+          assert result["proposed_operations"]==168
+          assert result["all_forward_updates_applied_in_disposable_fixture"] is True
+          assert result["all_full_original_rows_restored_exactly"] is True
+          assert result["stale_forward_aborts_without_partial_writes"] is True
+          assert result["competing_edit_blocks_inverse"] is True
+          assert result["unrelated_control_rows_preserved"] is True
+          assert result["production_reads"]==result["production_writes"]==0
+          assert not result["production_update_approved"]
+          assert not result["production_sql_generated"]
+          assert sum(x["candidate_count"] for x in result["per_batch_digests"])==16681
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Data Foundation V2 — Entire 16,681 existing titles correction rehearsal\n\n")
+              f.write("- All 16,681 AES-authenticated source rows validated: **PASS**\n")
+              f.write("- Film table: **11,667** / Series table: **5,014**\n")
+              f.write("- Atomic 100-record correction batches: **168**\n")
+              f.write("- Exact full-row guarded inverse after all corrections: **PASS**\n")
+              f.write("- Forced stale last-row rollback and newer-edit protection: **PASS**\n")
+              f.write("- Real catalogue/series schema + unrelated canaries: **PASS**\n")
+              f.write("- Production reads/writes: **0 / 0**\n\n")
+              f.write("Not a production correction. Source evidence remains unverified by studios; "
+                      "fresh live row preconditions and explicit owner batch approval are mandatory.\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: foundation-v2-16681-safe-batch-rehearsal
+          path: data/generated/foundation-full-bulk-dryrun/safe-plan.json
+          if-no-files-found: error
+          retention-days: 30
