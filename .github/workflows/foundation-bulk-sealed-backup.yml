@@ -1,14 +1,6 @@
 name: Data Foundation V2 - Bulk Sealed Recovery (Read Only)
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/foundation-bulk-sealed-backup.yml"
-      - "scripts/foundation_bulk_sealed_backup.py"
-      - "scripts/foundation_bulk_qid_selects.py"
-      - "tests/test_foundation_bulk_sealed_backup.py"
-      - "tests/test_foundation_bulk_qid_selects.py"
   workflow_dispatch:
 
 permissions:
@@ -24,9 +16,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
     env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
       ROOT: data/generated/foundation-bulk-recovery
     steps:
       - uses: actions/checkout@v4
@@ -36,11 +25,16 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Install cryptography and Wrangler before any secrets are scoped
+        run: |
+          python -m pip install "cryptography>=44,<50"
+          npm install --no-audit --no-fund
       - name: Check owner key before ANY database access
+        env:
+          FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
         shell: bash
         run: |
           set -euo pipefail
-          python -m pip install "cryptography>=44,<50"
           python -m unittest tests.test_foundation_bulk_sealed_backup tests.test_foundation_bulk_qid_selects -v
           python scripts/foundation_bulk_sealed_backup.py check-key
       - name: Confirm frozen baseline
@@ -74,11 +68,13 @@ jobs:
             --series "$ROOT/series/series-bulk-review.json" \
             --folder "$ROOT/queries"
       - name: Read matching CURRENT production rows without writes
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
           test -n "$CLOUDFLARE_ACCOUNT_ID" && test -n "$CLOUDFLARE_API_TOKEN"
-          npm install --no-audit --no-fund
           python scripts/cloudflare_bootstrap.py
           mkdir -p "$ROOT/private-reads"
           for table in catalogue_titles series_titles; do
@@ -93,6 +89,10 @@ jobs:
               --out "$ROOT/private-current-$table.json"
           done
       - name: Encrypt current rows with AES-256-GCM and publish only ciphertext
+        env:
+          FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail

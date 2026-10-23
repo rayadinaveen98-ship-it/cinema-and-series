@@ -21,8 +21,6 @@ jobs:
   prepare-locked-168-batch-review:
     runs-on: ubuntu-24.04
     timeout-minutes: 14
-    env:
-      FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -48,6 +46,8 @@ jobs:
           github-token: ${{ github.token }}
           path: data/generated/foundation-owner-manifest
       - name: Authenticated private decrypt and exact 168-batch checksum plan
+        env:
+          FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
         shell: bash
         run: |
           set -euo pipefail
