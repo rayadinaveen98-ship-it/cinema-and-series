@@ -191,14 +191,43 @@ export async function probeActualBinding(env,phase){
     }:{})
   };
 }
+export async function probeScratchHealth(env){
+  // Read only. A generic HTTP 404 is NOT sufficient proof a remote preview
+  // has started; this response proves the actual scratch D1 is bound.
+  assertScratchBinding(env);
+  const marker=await env.DB.prepare(
+    "SELECT stage_name,stage_uuid,access_nonce,stage_phase "+
+    "FROM foundation_v2_stage_proof WHERE id=1"
+  ).first();
+  require(marker?.stage_name===env.FOUNDATION_STAGE_NAME &&
+    marker?.stage_uuid?.toLowerCase()===
+      env.FOUNDATION_STAGE_UUID.toLowerCase() &&
+    marker?.access_nonce===env.FOUNDATION_EPHEMERAL_TOKEN &&
+    marker?.stage_phase==="new",
+    "Read-only staging health proof failed");
+  return {
+    schema:"foundation-v2-worker-binding-health-v1",
+    scratch_binding_verified:true,
+    scratch_write_performed:false,
+    production_database_writes:0
+  };
+}
+
 export default {
   async fetch(request,env){
     try{
-      if(request.method!=="POST" ||
-         new URL(request.url).pathname!=="/__foundation_staging_probe" ||
-         !env.FOUNDATION_EPHEMERAL_TOKEN ||
+      const pathname=new URL(request.url).pathname;
+      if(!env.FOUNDATION_EPHEMERAL_TOKEN ||
          request.headers.get("x-foundation-ephemeral-token") !==
             env.FOUNDATION_EPHEMERAL_TOKEN){
+        return Response.json({error:"not_found"},{status:404});
+      }
+      if(request.method==="GET" &&
+         pathname==="/__foundation_staging_probe_health"){
+        return Response.json(await probeScratchHealth(env));
+      }
+      if(request.method!=="POST" ||
+         pathname!=="/__foundation_staging_probe"){
         return Response.json({error:"not_found"},{status:404});
       }
       const phase=request.headers.get("x-foundation-probe-phase");

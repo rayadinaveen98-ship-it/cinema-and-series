@@ -79,6 +79,8 @@ class ProbePhaseFailure(ValueError):
 
 
 ENDPOINT = "http://127.0.0.1:8787/__foundation_staging_probe"
+HEALTH_ENDPOINT = ENDPOINT + "_health"
+HEALTH_SCHEMA = "foundation-v2-worker-binding-health-v1"
 
 
 def safe_config(name: str, stage_uuid: str, prod_uuid: str, token: str) -> dict:
@@ -94,6 +96,9 @@ def safe_config(name: str, stage_uuid: str, prod_uuid: str, token: str) -> dict:
         "compatibility_date": "2026-09-16",
         "compatibility_flags": ["nodejs_compat"],
         "workers_dev": False,
+        # Preview URLs can be enabled without enabling the public workers.dev
+        # production route; Cloudflare otherwise defaults previews to disabled.
+        "preview_urls": True,
         "d1_databases": [{
             "binding": "DB",
             "database_name": name,
@@ -228,19 +233,33 @@ def once_remote_probe(config: Path, token: str) -> dict:
     )
     try:
         ready = False
-        for _ in range(45):
-            require(proc.poll() is None, "Remote preview worker failed to start")
+        for _ in range(75):
+            require(proc.poll() is None, "Remote preview worker exited before readiness")
             try:
-                # Only health-poll unauthorized GET requests; zero DB writes.
-                urllib.request.urlopen(ENDPOINT, timeout=3)
-            except urllib.error.HTTPError as exc:
-                if exc.code == 404:
+                # An authenticated, READ-ONLY health request proves the remote
+                # Worker has reached the scratch D1 marker. HTTP 404 alone
+                # must NEVER be considered successful preview readiness.
+                req = urllib.request.Request(
+                    HEALTH_ENDPOINT, method="GET",
+                    headers={"x-foundation-ephemeral-token": token}
+                )
+                with urllib.request.urlopen(req, timeout=4) as response:
+                    data = json.loads(response.read(2000))
+                if (data.get("schema") == HEALTH_SCHEMA
+                    and data.get("scratch_binding_verified") is True
+                    and data.get("scratch_write_performed") is False
+                    and data.get("production_database_writes") == 0):
                     ready = True
                     break
-            except (urllib.error.URLError, TimeoutError):
+            except urllib.error.HTTPError as exc:
+                if exc.code == 409:
+                    raise ValueError(
+                        "Remote preview responded but rejected scratch identity") from None
+            except (urllib.error.URLError, TimeoutError,
+                    json.JSONDecodeError, OSError):
                 pass
             time.sleep(1)
-        require(ready, "Remote preview was not accessible as isolated worker")
+        require(ready, "Authenticated remote scratch D1 health never became ready")
         stage_log("preview_ready")
         payload = None
         # Free Workers: 50 D1 read subrequests per invocation. This test
