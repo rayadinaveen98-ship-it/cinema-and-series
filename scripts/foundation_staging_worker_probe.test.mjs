@@ -41,7 +41,7 @@ async function setup(){
       "id INTEGER PRIMARY KEY CHECK(id=1),stage_name TEXT NOT NULL,"+
       "stage_uuid TEXT NOT NULL,access_nonce TEXT NOT NULL,"+
       "stage_phase TEXT NOT NULL DEFAULT 'new')").run();
-    await db.prepare("INSERT INTO foundation_v2_stage_proof VALUES (1,?,?,?)")
+    await db.prepare("INSERT INTO foundation_v2_stage_proof (id,stage_name,stage_uuid,access_nonce) VALUES (1,?,?,?)")
       .bind("foundation-v2-qa-39946487548-1",STAGE_UUID,
         "local-test-only-not-valid-in-cloudflare").run();
     return {
