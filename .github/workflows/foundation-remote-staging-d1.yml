@@ -1,15 +1,9 @@
 name: Data Foundation V2 — Disposable Remote D1 Staging Rehearsal
 
-# One-time merge trigger or explicitly requested manual retry.
+# Explicit manual dispatch only; never auto-create remote databases on push.
 # Unlike production catalogue jobs, it creates and cleans up a new uniquely
 # named remote QA database, never writes cinema-and-series production.
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/foundation-remote-staging-d1.yml"
-      - "scripts/foundation_remote_staging_d1.py"
-      - "tests/test_foundation_remote_staging_d1.py"
   workflow_dispatch:
 
 permissions:
@@ -25,8 +19,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
       FOUNDATION_ROOT: data/generated/foundation-remote-staging
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +43,7 @@ jobs:
           assert 'def cleanup_exact_stage(' in source
           assert 'staging_d1_deleted' in source
           assert 'production_d1_writes' in source
+          assert 'foundation_remote_account_preflight.py' in Path('.github/workflows/foundation-remote-staging-d1.yml').read_text()
           PY
       - name: Install Wrangler CLI for isolated QA D1 control plane only
         run: npm install --no-audit --no-fund
@@ -60,6 +53,26 @@ jobs:
             tests.test_foundation_remote_staging_d1 \
             tests.test_foundation_filebacked_rollback \
             tests.test_foundation_20_preflight -v
+      - name: Read-only D1 account capacity and quota headroom gate
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_foundation_remote_account_preflight -v
+          python scripts/foundation_remote_account_preflight.py \
+            --out "$FOUNDATION_ROOT/account-preflight.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          x=json.loads((Path(os.environ["FOUNDATION_ROOT"])/"account-preflight.json").read_text())
+          assert x["canary_capacity_indicated_not_authorized"] is True, (
+              "Not enough proved account headroom for a remote canary")
+          assert x["free_database_slots"] >= 2
+          assert x["production_d1_reads"] == x["production_d1_writes"] == 0
+          assert x["remote_staging_database_created"] is False
+          PY
       - name: Restore frozen original 20-film correction packet
         uses: actions/download-artifact@v4
         with:
@@ -82,6 +95,9 @@ jobs:
           github-token: ${{ github.token }}
           path: data/generated/foundation-remote-staging/current
       - name: Run guard-tested correction+rollback only in disposable remote staging
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -121,6 +137,9 @@ jobs:
           PY
       - name: Always confirm cleanup of only this job's uniquely identified staging DB
         if: always()
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
