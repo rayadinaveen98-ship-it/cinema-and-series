@@ -4,7 +4,8 @@
  * Only hashes/counts make it into the downloadable artifact.
  */
 import {readFileSync,writeFileSync,mkdirSync} from "node:fs";
-import {dirname} from "node:path";
+import {dirname,resolve} from "node:path";
+import {pathToFileURL} from "node:url";
 import {createHash} from "node:crypto";
 import {checkRows,hashOfBatch} from "./foundation_d1_guarded_executor.mjs";
 
@@ -69,7 +70,7 @@ function manifest(snapshot,{batchSize=100}={}){
 export {manifest};
 
 const args=process.argv.slice(2);
-if(args.length>0){
+if(process.argv[1] && import.meta.url===pathToFileURL(resolve(process.argv[1])).href){
   require(args.length===2,"Expected private input JSON and public-safe output path");
   const snapshot=JSON.parse(readFileSync(args[0],"utf8"));
   const result=manifest(snapshot);
