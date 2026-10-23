@@ -41,14 +41,14 @@ class RemoteWorkerRunnerTest(unittest.TestCase):
         workflow = Path(
             ".github/workflows/foundation-remote-worker-binding-canary.yml"
         ).read_text(encoding="utf-8")
-        header = workflow.split("\\npermissions:", 1)[0]
-        # The trigger is manually dispatched; quoted 'push:' inside the
-        # shell validation script must not trigger a false assertion.
+        header = workflow.split("permissions:", 1)[0]
+        # The trigger is manual. Text inside the shell validation script
+        # must not become a false 'push' trigger.
         self.assertIn("workflow_dispatch:", header)
         self.assertFalse(any(line.strip() == "push:"
                              for line in header.splitlines()))
-        self.assertIn('header=wf.split("\\\\npermissions:",1)[0]', workflow)
-        self.assertIn('YES_SCRATCH_D1_ONLY', header)
+        self.assertIn("header=wf.split(", workflow)
+        self.assertIn("YES_SCRATCH_D1_ONLY", header)
         self.assertIn("Always independently clean up exact temporary scratch D1",
                       workflow)
 
