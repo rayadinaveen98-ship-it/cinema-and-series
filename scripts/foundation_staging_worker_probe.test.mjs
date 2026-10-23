@@ -183,3 +183,44 @@ test("phase skipping, replay and invalid phases must not mutate scratch D1",asyn
       "seed");
   }finally{await x.close();}
 });
+
+test("authenticated preview readiness proves the actual scratch D1 without writes",async()=>{
+  const x=await setup();
+  try{
+    const path="https://test.invalid/__foundation_staging_probe_health";
+    const unauthenticated=await worker.fetch(new Request(path),x.env);
+    assert.equal(unauthenticated.status,404);
+    const request=new Request(path,{
+      headers:{"x-foundation-ephemeral-token":x.env.FOUNDATION_EPHEMERAL_TOKEN}
+    });
+    const response=await worker.fetch(request,x.env);
+    assert.equal(response.status,200);
+    const result=await response.json();
+    assert.equal(result.schema,"foundation-v2-worker-binding-health-v1");
+    assert.equal(result.scratch_binding_verified,true);
+    assert.equal(result.scratch_write_performed,false);
+    assert.equal(result.production_database_writes,0);
+    for(const table of ["catalogue_titles","series_titles"]){
+      assert.equal((await x.db.prepare(
+        "SELECT count(*) AS n FROM "+table).first()).n,0);
+    }
+    assert.equal((await x.db.prepare(
+      "SELECT stage_phase FROM foundation_v2_stage_proof WHERE id=1"
+    ).first()).stage_phase,"new");
+  }finally{await x.close();}
+});
+
+test("preview health rejects mismatched scratch proof instead of treating 404 as ready",async()=>{
+  const x=await setup();
+  try{
+    await x.db.prepare("UPDATE foundation_v2_stage_proof SET stage_uuid=? WHERE id=1")
+      .bind(PROD_UUID).run();
+    const response=await worker.fetch(new Request(
+      "https://test.invalid/__foundation_staging_probe_health",{
+        headers:{"x-foundation-ephemeral-token":x.env.FOUNDATION_EPHEMERAL_TOKEN}
+      }),x.env);
+    assert.equal(response.status,409);
+    assert.equal((await x.db.prepare(
+      "SELECT count(*) AS n FROM catalogue_titles").first()).n,0);
+  }finally{await x.close();}
+});
