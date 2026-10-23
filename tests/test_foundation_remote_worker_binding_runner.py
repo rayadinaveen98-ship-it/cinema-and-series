@@ -18,6 +18,7 @@ class RemoteWorkerRunnerTest(unittest.TestCase):
         result=safe_config(QA,STAGE,PROD,TOKEN)
         self.assertEqual(result["d1_databases"][0]["database_id"],STAGE)
         self.assertEqual(result["d1_databases"][0]["database_name"],QA)
+        self.assertIs(result["d1_databases"][0]["remote"],True)
         self.assertEqual(result["main"],
                          str(Path("scripts/foundation_staging_worker_probe.mjs").resolve()))
         self.assertFalse(result["workers_dev"])
@@ -54,6 +55,22 @@ class RemoteWorkerRunnerTest(unittest.TestCase):
         self.assertIn("YES_SCRATCH_D1_ONLY", header)
         self.assertIn("Always independently clean up exact temporary scratch D1",
                       workflow)
+
+    def test_local_worker_connects_only_to_remote_d1_binding(self):
+        import inspect
+        from scripts.foundation_remote_worker_binding_runner import (
+            safe_config, once_remote_probe, assert_remote_scratch_config
+        )
+        cfg = safe_config(QA, STAGE, PROD, TOKEN)
+        self.assertIs(cfg["d1_databases"][0]["remote"], True)
+        code = inspect.getsource(once_remote_probe)
+        self.assertIn('"npx", "wrangler", "dev", "--config"', code)
+        self.assertNotIn('"dev", "--remote"', code)
+        self.assertIn("HEALTH_ENDPOINT", code)
+        self.assertIn("probe_", code)
+        self.assertIn('item.get("remote") is True',
+                      inspect.getsource(assert_remote_scratch_config))
+        self.assertFalse(cfg["workers_dev"])
 
     def test_preview_readiness_requires_authenticated_real_scratch_health(self):
         from scripts.foundation_remote_worker_binding_runner import (
