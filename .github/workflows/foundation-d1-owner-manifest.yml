@@ -1,0 +1,95 @@
+name: Foundation V2 - Locked Owner Correction Manifest (Zero D1)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-d1-owner-manifest.yml"
+      - "scripts/foundation_d1_approval_manifest.mjs"
+      - "scripts/foundation_d1_guarded_executor.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: foundation-v2-owner-approval-manifest
+  cancel-in-progress: false
+
+jobs:
+  prepare-locked-168-batch-review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 14
+    env:
+      FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Confirm still-frozen production baseline
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          assert json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())["active"] is True
+          PY
+          python -m pip install "cryptography>=44,<50"
+      - name: Download only the independently verified encrypted 16,681-row recovery artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: foundation-v2-16681-candidate-encrypted-recovery
+          run-id: 39935377448
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-owner-manifest
+      - name: Authenticated private decrypt and exact 168-batch checksum plan
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/foundation-owner-manifest
+          python scripts/foundation_verify_bulk_sealed_backup.py \
+            "$ROOT/encrypted-recovery.json" \
+            --export-plaintext "$ROOT/private-recovery.json" \
+            > /dev/null
+          node scripts/foundation_d1_approval_manifest.mjs \
+            "$ROOT/private-recovery.json" \
+            "$ROOT/owner-review.json"
+          rm -f "$ROOT/private-recovery.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          path=Path("data/generated/foundation-owner-manifest/owner-review.json")
+          result=json.loads(path.read_text(encoding="utf-8"))
+          assert result["total_language_corrections_requested"]==16681
+          assert result["reviewed_existing_films"]==11667
+          assert result["reviewed_existing_series"]==5014
+          assert result["total_batches"]==168
+          assert len(result["batches"])==168
+          assert all(x["records"]<=100 and not x["production_write_performed"] for x in result["batches"])
+          assert sum(x["records"] for x in result["batches"])==16681
+          assert len(result["manifest_sha256"])==64
+          assert result["production_approval_granted"] is False
+          assert result["production_write_switch_enabled"] is False
+          assert result["production_reads"]==result["production_writes"]==0
+          assert not Path("data/generated/foundation-owner-manifest/private-recovery.json").exists()
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as s:
+              s.write("## Foundation V2 — exact production correction approval manifest\n\n")
+              s.write("- Proposed existing-title language corrections: **16,681**\n")
+              s.write("- Film/series: **11,667 / 5,014**\n")
+              s.write("- Atomic exact-original-row batches: **168** (max 100)\n")
+              s.write(f"- Locked manifest SHA-256: \`{result['manifest_sha256']}\`\n")
+              s.write("- Current status: **OWNER APPROVAL REQUIRED / PRODUCTION WRITES DISABLED**\n")
+              s.write("- No live database calls, no plaintext recovery artifact, and no corrections applied.\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: foundation-v2-owner-review-168-locked-batches
+          path: data/generated/foundation-owner-manifest/owner-review.json
+          retention-days: 30
+          if-no-files-found: error
