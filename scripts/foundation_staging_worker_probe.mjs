@@ -77,7 +77,19 @@ function itemsFor(table,rows){
 const same=(a,b)=>JSON.stringify(a)===JSON.stringify(b);
 export async function probeActualBinding(env){
   assertScratchBinding(env);
-  const db=env.DB, snapshots={};
+  const db=env.DB;
+  // This marker exists ONLY in a newly created staging database. A malicious
+  // or accidental production D1 binding lacks it and fails before any insert.
+  const marker=await db.prepare(
+    "SELECT stage_name,stage_uuid,access_nonce FROM foundation_v2_stage_proof "+
+    "WHERE id=1"
+  ).first();
+  require(marker?.stage_name===env.FOUNDATION_STAGE_NAME &&
+    marker?.stage_uuid?.toLowerCase()===
+      env.FOUNDATION_STAGE_UUID?.toLowerCase() &&
+    marker?.access_nonce===env.FOUNDATION_EPHEMERAL_TOKEN,
+    "Actual bound database has not proved disposable QA identity");
+  const snapshots={};
   for(const table of TABLES){
     const ids=await seed(db,table);
     snapshots[table]={ids,before:await readRows(db,table,ids)};
