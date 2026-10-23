@@ -8,6 +8,7 @@ on:
       - "scripts/foundation_bulk_sealed_backup.py"
       - "scripts/foundation_bulk_qid_selects.py"
       - "tests/test_foundation_bulk_sealed_backup.py"
+      - "tests/test_foundation_bulk_qid_selects.py"
   workflow_dispatch:
 
 permissions:
@@ -40,7 +41,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m pip install "cryptography>=44,<50"
-          python -m unittest tests.test_foundation_bulk_sealed_backup -v
+          python -m unittest tests.test_foundation_bulk_sealed_backup tests.test_foundation_bulk_qid_selects -v
           python scripts/foundation_bulk_sealed_backup.py check-key
       - name: Confirm frozen baseline
         shell: bash
