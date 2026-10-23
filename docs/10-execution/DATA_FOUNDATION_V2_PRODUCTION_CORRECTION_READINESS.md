@@ -180,3 +180,27 @@ and https://developers.cloudflare.com/d1/platform/pricing/
 A complete remote staging test is **still required** and should remain
 separate from automatic push and scheduled workflows until explicit
 resource/quota checks and cleanup control have passed.
+
+
+## Backup custody / secrets review — 23 October 2026
+
+The authenticated, **encrypted** 16,681-record historical recovery artifact
+from run [39935377448](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/39935377448)
+is currently retained in GitHub Actions **only until 22 November 2026**.
+The owner must privately export it plus the *matching secret key* to a durable
+location outside Actions before expiration. Never put the AES key in an
+issue, chat, public commit, or attached public documentation. The artifact
+is encrypted, but it is still a historical candidate-row recovery snapshot,
+not a full backup of the 70,175-title production D1 database.
+
+CI jobs that decrypt the recovery artifact must expose
+`FOUNDATION_BACKUP_KEY_B64` only to their specific authenticated decryption /
+sealing step, never to `npm install`, `pip install`, checkout, setup or
+unrelated tests. The original read-only production bulk backup workflow must
+remain **manual-dispatch-only** while the catalogue freeze is active.
+Cloudflare account/API credentials are likewise scoped to the read-only
+selection or encryption/bookmark steps, not package installation.
+
+None of these safeguards authorize production writes. A fresh full original-row
+snapshot and fresh recovery bookmark immediately before any future approved
+correction are still mandatory.
