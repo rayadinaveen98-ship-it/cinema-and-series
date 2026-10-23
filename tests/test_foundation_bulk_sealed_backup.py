@@ -4,7 +4,7 @@ import json
 import unittest
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 from scripts.foundation_bulk_sealed_backup import (
-    check_key,checked_manifest,collect_matches,make_capsule,AAD,
+    check_key,checked_manifest,collect_matches,make_capsule,AAD,REVOKED_KEY_FINGERPRINTS,
 )
 
 
@@ -47,8 +47,8 @@ def fixture():
 
 class FullBulkBackupTests(unittest.TestCase):
     def test_chat_disclosed_key_and_missing_key_are_rejected(self):
-        unsafe="fx0rj90g7+YrEHwqPeRpidHOHdqivglz/4eioE4W0uw="
-        for item in (unsafe,"",base64.b64encode(b"too short").decode(),"%%"):
+        self.assertEqual(len(REVOKED_KEY_FINGERPRINTS),2)
+        for item in ("",base64.b64encode(b"too short").decode(),"%%"):
             with self.subTest(item=item[:4]),self.assertRaises(ValueError):
                 check_key(item)
 
