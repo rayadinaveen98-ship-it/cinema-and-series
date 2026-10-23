@@ -1,0 +1,48 @@
+name: Foundation V2 - D1 Account Gate Offline QA
+
+on:
+  push:
+    branches: [main, feat/foundation-v2-remote-account-preflight]
+    paths:
+      - ".github/workflows/foundation-d1-account-preflight-offline-qa.yml"
+      - ".github/workflows/foundation-d1-account-readonly-preflight.yml"
+      - ".github/workflows/foundation-remote-staging-d1.yml"
+      - "scripts/foundation_remote_account_preflight.py"
+      - "tests/test_foundation_remote_account_preflight.py"
+  pull_request:
+    paths:
+      - ".github/workflows/foundation-d1-account-preflight-offline-qa.yml"
+      - ".github/workflows/foundation-d1-account-readonly-preflight.yml"
+      - ".github/workflows/foundation-remote-staging-d1.yml"
+      - "scripts/foundation_remote_account_preflight.py"
+      - "tests/test_foundation_remote_account_preflight.py"
+
+permissions:
+  contents: read
+
+jobs:
+  no-credentials-no-cloudflare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Offline account and quota fail-closed tests
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_foundation_remote_account_preflight -v
+          python -m py_compile scripts/foundation_remote_account_preflight.py
+      - name: Assert remote staging cannot auto-create a database on push
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          wf=Path(".github/workflows/foundation-remote-staging-d1.yml").read_text()
+          header=wf.split("permissions:",1)[0]
+          assert "workflow_dispatch:" in header and "push:" not in header
+          assert "foundation_remote_account_preflight.py" in wf
+          assert "Always confirm cleanup" in wf
+          assert "secrets." not in wf.split("    steps:",1)[0]
+          print("REMOTE_D1_CANARY_MANUAL_ONLY=pass")
+          PY

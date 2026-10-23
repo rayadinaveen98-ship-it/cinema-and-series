@@ -1,0 +1,76 @@
+name: Foundation V2 - D1 Read-only Account Preflight
+
+# Control-plane D1 listing and account-wide GraphQL metrics only.
+# NEVER creates D1, sends SQL, deploys or authorizes production writes.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-d1-account-readonly-preflight.yml"
+      - ".github/workflows/foundation-remote-staging-d1.yml"
+      - "scripts/foundation_remote_account_preflight.py"
+      - "tests/test_foundation_remote_account_preflight.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-v2-d1-account-preflight-read-only
+  cancel-in-progress: false
+
+jobs:
+  account-capacity-and-usage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Wrangler without any Cloudflare credential
+        run: npm install --no-audit --no-fund
+      - name: Validate all fail-closed account and daily quota guards offline
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_foundation_remote_account_preflight -v
+          python -m py_compile scripts/foundation_remote_account_preflight.py
+      - name: Query ONLY Cloudflare database list and account-wide D1 analytics
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/foundation_remote_account_preflight.py \
+            --out data/generated/foundation-d1-account-preflight/safe-summary.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p=Path("data/generated/foundation-d1-account-preflight/safe-summary.json")
+          r=json.loads(p.read_text())
+          assert r["production_d1_reads"] == r["production_d1_writes"] == 0
+          assert r["production_sql_executed"] is False
+          assert r["remote_staging_database_created"] is False
+          assert r["full_staging_authorized"] is False
+          assert r["production_corrections_authorized"] is False
+          with open(__import__("os").environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Data Foundation V2 - read-only Cloudflare account preflight\n\n")
+              f.write(f"- D1 databases in account: **{r['database_count']}**\n")
+              f.write(f"- Remaining Free-plan write estimate: **{r['free_rows_written_remaining_estimate']:,}**\n")
+              f.write(f"- Remaining Free-plan read estimate: **{r['free_rows_read_remaining_estimate']:,}**\n")
+              f.write(f"- Provisional small-canary headroom: **{r['canary_capacity_indicated_not_authorized']}**\n")
+              f.write("- No D1 SQL, staging creation, or production writes.\n")
+              f.write("- Usage analytics may lag; current manual approval remains mandatory.\n")
+          PY
+      - name: Upload safe counts only, never credentials or database UUIDs
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-v2-d1-account-readonly-preflight
+          path: data/generated/foundation-d1-account-preflight/safe-summary.json
+          if-no-files-found: error
+          retention-days: 7
