@@ -207,8 +207,7 @@ export async function applyApprovedInverseBatch(db,originalItems,afterRows,appro
     const where=columns.map(c=>c+" IS ?").join(" AND ");
     statements.push(db.prepare(
       "SELECT CASE WHEN EXISTS (SELECT 1 FROM "+item.table+" WHERE "+where+
-      ") THEN 1 ELSE json_extract('foundation_inverse_guard_abort','
-) END AS ok"
+      ") THEN 1 ELSE json_extract('foundation_inverse_guard_abort','$') END AS ok"
     ).bind(...expected));
     statements.push(db.prepare(
       "UPDATE "+item.table+
