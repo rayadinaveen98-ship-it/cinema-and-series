@@ -13,6 +13,8 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
+import tempfile
 from pathlib import Path
 import secrets
 import subprocess
@@ -67,11 +69,21 @@ def safe_failure_diagnostic(label: str, cleanup_confirmed: bool,
         "contains_private_data": False,
     }
 
+class ProbePhaseFailure(ValueError):
+    """Non-sensitive, allowlisted failure location, no HTTP or D1 detail."""
+    def __init__(self, stage: str):
+        require(stage in SAFE_PHASES and stage.startswith("probe_"),
+                "Invalid probe phase failure stage")
+        self.stage = stage
+        super().__init__("Remote scratch test rejected a bounded phase")
+
+
 ENDPOINT = "http://127.0.0.1:8787/__foundation_staging_probe"
 
 
 def safe_config(name: str, stage_uuid: str, prod_uuid: str, token: str) -> dict:
-    require(name.startswith(PREFIX) and name != PRODUCTION and
+    require(re.fullmatch(r"foundation-v2-qa-[1-9][0-9]{5,14}-[1-9][0-9]{0,3}", name)
+            is not None and name != PRODUCTION and
             UUID.fullmatch(stage_uuid) and UUID.fullmatch(prod_uuid) and
             stage_uuid.lower() != prod_uuid.lower(),
             "Refusing malformed or production-equivalent stage")
@@ -112,22 +124,71 @@ def parse_migrations(path: Path) -> list[str]:
     return statements
 
 
+def assert_remote_scratch_config(stage: str, config: Path) -> None:
+    """Mandatory on-disk binding proof before ANY remote scratch SQL."""
+    require(re.fullmatch(
+        r"foundation-v2-qa-[1-9][0-9]{5,14}-[1-9][0-9]{0,3}",
+        stage) is not None, "Remote stage name not an exact scratch identity")
+    try:
+        cfg = json.loads(config.read_text(encoding="utf-8"))
+        binding = cfg["d1_databases"]
+        vars_ = cfg["vars"]
+        require(isinstance(binding, list) and len(binding) == 1,
+                "Exactly one D1 binding is required")
+        item = binding[0]
+        require(item["binding"] == "DB" and item["database_name"] == stage,
+                "Wrong scratch binding name")
+        require(UUID.fullmatch(item["database_id"]) is not None
+                and UUID.fullmatch(vars_["FOUNDATION_PRODUCTION_UUID"]) is not None
+                and item["database_id"].lower() ==
+                    vars_["FOUNDATION_STAGE_UUID"].lower()
+                and item["database_id"].lower() !=
+                    vars_["FOUNDATION_PRODUCTION_UUID"].lower()
+                and vars_["FOUNDATION_STAGE_NAME"] == stage
+                and vars_["FOUNDATION_ONLY_MODE"] ==
+                    "isolated-nonproduction-D1",
+                "Remote scratch configuration identity mismatch")
+    except (KeyError, IndexError, TypeError, json.JSONDecodeError) as exc:
+        raise ValueError("Remote scratch config missing validated D1 identity") from exc
+
+
 def seed_schema_only(stage: str, config: Path) -> None:
-    # Fixed, separately reviewed migration files. No saved production rows,
-    # real film metadata, credentials or backups are ever uploaded.
-    for file_index, file in enumerate(MIGRATIONS):
-        # Only the allowlisted schema ordinal is logged; no SQL or UUID.
-        print("FOUNDATION_REMOTE_CANARY_SCHEMA_FILE=" + str(file_index + 1),
-              flush=True)
-        for stmt in parse_migrations(Path(file)):
-            proc = subprocess.run(
-                ["npx", "wrangler", "d1", "execute", stage,
-                 "--remote", "--config", str(config),
-                 "--yes", "--json", "--command", stmt],
-                capture_output=True, text=True, timeout=120,
-            )
-            require(proc.returncode == 0,
-                    "Isolated staging schema initialization failed")
+    """Use ONE bounded remote invocation for the complete trusted schema.
+
+    Earlier sequential invocations caused dozens of Wrangler process startups
+    and network round trips. This fixed-script batch contains only allowlisted
+    CREATE/ALTER and one trusted series-language provenance UPDATE. No user
+    supplied metadata, production records, secrets, or live bindings are used.
+    """
+    assert_remote_scratch_config(stage, config)
+    statements = [
+        stmt for migration in MIGRATIONS
+        for stmt in parse_migrations(Path(migration))
+    ]
+    require(statements and len(statements) <= 60,
+            "Unexpected full scratch migration statement count")
+    source = ";\n".join(statements) + ";\n"
+    config.parent.mkdir(parents=True, exist_ok=True)
+    scratch_sql = None
+    try:
+        with tempfile.NamedTemporaryFile(
+                mode="w", encoding="utf-8", suffix=".sql",
+                prefix="foundation-only-schema-", dir=config.parent,
+                delete=False) as file:
+            scratch_sql = Path(file.name)
+            file.write(source)
+        scratch_sql.chmod(0o600)
+        proc = subprocess.run(
+            ["npx", "wrangler", "d1", "execute", stage,
+             "--remote", "--config", str(config),
+             "--yes", "--json", "--file", str(scratch_sql)],
+            capture_output=True, text=True, timeout=170,
+        )
+        require(proc.returncode == 0,
+                "Isolated staging full-schema initialization failed")
+    finally:
+        if scratch_sql is not None:
+            scratch_sql.unlink(missing_ok=True)
 
 
 def bind_scratch_proof(stage: str, config: Path, stage_uuid: str,
@@ -141,6 +202,7 @@ def bind_scratch_proof(stage: str, config: Path, stage_uuid: str,
     require(stage.startswith(PREFIX) and stage != PRODUCTION and
             UUID.fullmatch(stage_uuid) and len(token) >= 32,
             "Refusing unsafe scratch marker")
+    assert_remote_scratch_config(stage, config)
     execute(stage, config, command=(
         "CREATE TABLE foundation_v2_stage_proof("
         "id INTEGER PRIMARY KEY CHECK(id=1),"
@@ -199,15 +261,16 @@ def once_remote_probe(config: Path, token: str) -> dict:
             try:
                 with urllib.request.urlopen(req, timeout=140) as response:
                     payload = json.loads(response.read(20000))
+                require(payload.get("schema") == RESULT_SCHEMA and
+                        payload.get("phase") == phase and
+                        payload.get("phase_passed") is True and
+                        payload.get("production_database_writes") == 0 and
+                        payload.get("production_corrections_authorized") is False,
+                        "Scratch phase verification failed; stop without retry")
             except Exception:
-                raise ValueError(
-                    "Remote scratch D1 phase returned ambiguous/failed response; no retry")
-            require(payload.get("schema") == RESULT_SCHEMA and
-                    payload.get("phase") == phase and
-                    payload.get("phase_passed") is True and
-                    payload.get("production_database_writes") == 0 and
-                    payload.get("production_corrections_authorized") is False,
-                    "Scratch phase verification failed; stop without retry")
+                # Do not pass sensitive HTTP/Worker exception strings onward.
+                # Never retry a phase after an uncertain remote response.
+                raise ProbePhaseFailure("probe_" + phase) from None
         require(payload is not None and payload.get("stage_completed") is True,
                 "Remote scratch phase sequence did not finish")
         required = (
@@ -299,6 +362,8 @@ def main() -> None:
         stage_log(last_stage)
     except Exception as exc:
         problem = exc
+        if isinstance(exc, ProbePhaseFailure):
+            last_stage = exc.stage
     finally:
         if args.state.exists():
             try:
