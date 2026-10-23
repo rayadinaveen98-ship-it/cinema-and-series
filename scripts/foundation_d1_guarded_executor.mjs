@@ -54,8 +54,8 @@ export function checkRows(items,{limit=100}={}) {
     const keys=Object.keys(row);
     require(keys.length>=10 && keys.every(k=>ALLOWED_COLUMNS[table].has(k)),
       "Unexpected or incomplete D1 source row");
-    for(const key of ("id","wikidata_qid","title","language_name","language_source",
-                      "language_source_url","updated_at")){
+    for(const key of ["id","wikidata_qid","title","language_name","language_source",
+                      "language_source_url","updated_at"]){
       require(Object.hasOwn(row,key),"Incomplete field-level snapshot: "+key);
     }
     const qid=row.wikidata_qid;
