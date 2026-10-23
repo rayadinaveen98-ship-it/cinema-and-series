@@ -257,3 +257,58 @@ Cloudflare reference:
 - https://developers.cloudflare.com/d1/platform/limits/
 - https://developers.cloudflare.com/d1/platform/pricing/
 - https://developers.cloudflare.com/d1/observability/metrics-analytics/
+
+
+## Actual Worker-binding remote D1 canary preparation — 23 Oct 2026
+
+The original disposable 17-film remote Wrangler test uses SQL files. Even when
+that experiment succeeds, it must NOT be presented as proof of transactional
+behavior for the real Worker D1 `db.batch()` executor.
+
+A distinct, safer, **manual-dispatch-only** end-to-end path is now prepared:
+
+- `scripts/foundation_staging_worker_probe.mjs` uses the **actual guarded
+  `applyApprovedBatch()` and `applyApprovedInverseBatch()` functions** through
+  a D1 Worker Binding, with only synthetic **3 film + 3 series** candidates and
+  an untouched control record in each table. It checks full-row inverse, a
+  stale-last-row abort, a conflicting-edit inverse abort and exact restoration.
+- The Worker has **no production entrypoint/deployment**. Its request requires
+  a high-entropy ephemeral header token; arbitrary GET/paths cannot execute.
+  An exact `foundation-v2-qa-<GitHub run>-<attempt>` staging name and a
+  UUID unequal to production are mandatory.
+- More importantly, the actual bound D1 database must contain a
+  `foundation_v2_stage_proof` record matching the scratch name, UUID and
+  ephemeral nonce, **created only on the newly provisioned scratch DB**.
+  Environment variables or a misleading Wrangler config are not sufficient.
+  No such marker is created in production.
+- `scripts/foundation_remote_worker_binding_runner.py` creates a temporary
+  database, pins only its verified UUID into a private preview config,
+  applies the current film+series migrations, writes the scratch proof, starts
+  a **temporary remote development preview** rather than deploying the live
+  Worker, calls the canary POST once, stops preview, confirms exact-ID scratch
+  deletion, and erases the temporary config containing the ephemeral nonce.
+  An uncertain response is never retried.
+- `.github/workflows/foundation-remote-worker-binding-canary.yml` runs
+  **only when explicitly dispatched with YES_SCRATCH_D1_ONLY** and only after
+  fresh account-wide read/write quota preflight. CI has a second always-run
+  scratch-cleanup step. Its artifacts contain non-sensitive counts and pass
+  flags, never database records, keys, UUIDs or access tokens.
+- The Worker and Python runner have independent credential-free local tests.
+
+**Current status:** code and local tests prepared; do NOT call this remote
+canary completed until the explicit manual GitHub Actions run succeeds. It
+still does **not** validate all 16,681 rows against remote Cloudflare D1,
+retention of an owner-accessible backup, production row freshness, independent
+studio confirmation, or owner-approved production changes. No production write
+workflow has been enabled. The 70,175-title freeze remains.
+
+### Operational caution
+
+Cloudflare remote development previews are temporary infrastructure on
+Cloudflare's network. The test code must never be redeployed as the production
+Worker or bound to `cinema-and-series`. Unexpected behaviour should trigger
+cleanup and stop, not automatic retries or broadened credentials.
+
+References:
+- https://developers.cloudflare.com/d1/worker-api/d1-database/
+- https://developers.cloudflare.com/workers/local-development/
