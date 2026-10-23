@@ -37,6 +37,12 @@ async function setup(){
         await db.prepare(sql).run();
       }
     }
+    await db.prepare("CREATE TABLE foundation_v2_stage_proof ("+
+      "id INTEGER PRIMARY KEY CHECK(id=1),stage_name TEXT NOT NULL,"+
+      "stage_uuid TEXT NOT NULL,access_nonce TEXT NOT NULL)").run();
+    await db.prepare("INSERT INTO foundation_v2_stage_proof VALUES (1,?,?,?)")
+      .bind("foundation-v2-qa-39946487548-1",STAGE_UUID,
+        "local-test-only-not-valid-in-cloudflare").run();
     return {
       db,
       env:{
@@ -116,5 +122,33 @@ test("scratch Worker Binding atomic forward, full inverse and both conflict case
     const second=await worker.fetch(
       request(x.env.FOUNDATION_EPHEMERAL_TOKEN),x.env);
     assert.equal(second.status,409,"Repeat canary must refuse duplicate QA records");
+  }finally{await x.close();}
+});
+
+test("missing database-resident proof rejects a fake scratch Worker binding",async()=>{
+  const x=await setup();
+  try{
+    await x.db.prepare("DELETE FROM foundation_v2_stage_proof").run();
+    const response=await worker.fetch(
+      request(x.env.FOUNDATION_EPHEMERAL_TOKEN),x.env);
+    assert.equal(response.status,409);
+    assert.equal((await x.db.prepare(
+      "SELECT count(*) AS n FROM catalogue_titles").first()).n,0);
+    assert.equal((await x.db.prepare(
+      "SELECT count(*) AS n FROM series_titles").first()).n,0);
+  }finally{await x.close();}
+});
+
+test("mismatched database-resident UUID blocks worker writes",async()=>{
+  const x=await setup();
+  try{
+    await x.db.prepare(
+      "UPDATE foundation_v2_stage_proof SET stage_uuid=? WHERE id=1"
+    ).bind(PROD_UUID).run();
+    const response=await worker.fetch(
+      request(x.env.FOUNDATION_EPHEMERAL_TOKEN),x.env);
+    assert.equal(response.status,409);
+    assert.equal((await x.db.prepare(
+      "SELECT count(*) AS n FROM catalogue_titles").first()).n,0);
   }finally{await x.close();}
 });
