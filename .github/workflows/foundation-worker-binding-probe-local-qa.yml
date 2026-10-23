@@ -7,6 +7,7 @@ on:
       - main
       - feat/foundation-v2-worker-binding-remote-canary-prep
       - fix/foundation-v2-split-scratch-worker-probe
+      - fix/foundation-v2-remote-canary-safe-stage-diagnostics
       - fix/foundation-v2-self-referential-manual-canary-check
     paths:
       - ".github/workflows/foundation-worker-binding-probe-local-qa.yml"
