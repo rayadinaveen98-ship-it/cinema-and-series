@@ -8,7 +8,7 @@ import {join} from "node:path";
 import {Miniflare,convertV4MiniflareOptions} from "miniflare";
 import {
   checkRows,prepareAtomicBatch,validateOwnerApproval,
-  hashOfBatch,applyApprovedBatch
+  hashOfBatch,applyApprovedBatch,applyApprovedInverseBatch,verifyAppliedBatch
 } from "./foundation_d1_guarded_executor.mjs";
 
 const TOKEN="https://github.com/rayadinaveen98-ship-it/cinema-and-series/issues/999999";
@@ -162,4 +162,43 @@ test("identity, held films, mixed tables, unknown provenance and size overflow r
   assert.throws(()=>checkRows([{...item,row:{...row,wikidata_qid:"Q20649744"},qid:"Q20649744"}]));
   assert.throws(()=>checkRows(Array(101).fill(item)));
   assert.throws(()=>checkRows([{...item,evidence_url:"https://example.com"}]));
+});
+
+
+test("approved inverse restores every original film column exactly",async()=>{
+  const fixture=await environment();
+  try{
+    const items=await seed(fixture.db,"catalogue_titles",5);
+    const before=await rows(fixture.db,"catalogue_titles");
+    await applyApprovedBatch(fixture.db,items,grant(items));
+    const afterVerified=await verifyAppliedBatch(fixture.db,items);
+    assert.equal(afterVerified.verified,5);
+    const denied=grant(items);
+    await assert.rejects(()=>applyApprovedInverseBatch(
+      fixture.db,items,afterVerified.after,denied
+    ),/rollback approval/i);
+    const approval={...grant(items),rollback_approved:true,
+      rollback_batch_sha256:hashOfBatch(items)};
+    const inverse=await applyApprovedInverseBatch(
+      fixture.db,items,afterVerified.after,approval);
+    assert.equal(inverse.restored,5);
+    assert.deepEqual(await rows(fixture.db,"catalogue_titles"),before);
+  }finally{await fixture.dispose();}
+});
+
+test("a newer series edit prevents inverse from partially restoring previous rows",async()=>{
+  const fixture=await environment();
+  try{
+    const items=await seed(fixture.db,"series_titles",5);
+    await applyApprovedBatch(fixture.db,items,grant(items));
+    const after=await verifyAppliedBatch(fixture.db,items);
+    await fixture.db.prepare("UPDATE series_titles SET title='Independent editor' "+
+      "WHERE wikidata_qid=?").bind(items.at(-1).qid).run();
+    const newer=await rows(fixture.db,"series_titles");
+    const approval={...grant(items),rollback_approved:true,
+      rollback_batch_sha256:hashOfBatch(items)};
+    await assert.rejects(()=>applyApprovedInverseBatch(
+      fixture.db,items,after.after,approval),/SQLite|JSON|malformed|constraint|D1|guard/i);
+    assert.deepEqual(await rows(fixture.db,"series_titles"),newer);
+  }finally{await fixture.dispose();}
 });
