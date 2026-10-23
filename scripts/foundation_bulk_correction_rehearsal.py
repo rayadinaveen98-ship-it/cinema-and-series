@@ -14,6 +14,8 @@ import json
 import sqlite3
 from collections import Counter
 from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from foundation_verify_bulk_sealed_backup import verify_capsule
 from foundation_bulk_sealed_backup import check_key, DISPUTED
