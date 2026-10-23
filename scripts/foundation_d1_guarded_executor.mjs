@@ -143,12 +143,97 @@ export async function applyApprovedBatch(db,items,approval){
       result[i*2+1]?.meta?.changes===1,
       "D1 changed row-count mismatch: verify before any retry");
   }
-  // Audit contains digests and counts only; never record full original rows.
+  // This fresh read happens AFTER the atomic transaction. Never auto-retry a
+  // write whose outcome is uncertain; reconcile against the encrypted backup.
+  const verification=await verifyAppliedBatch(db,items);
   return {
     schema:"foundation-v2-atomic-approval-batch-result-v1",
     database:"cinema-and-series",table:items[0].table,
-    changed:items.length,batch_sha256:hashOfBatch(items),
+    changed:items.length,verified_after_count:verification.verified,
+    after_state_sha256:verification.after_sha256,
+    batch_sha256:hashOfBatch(items),
     owner_approval_reference:approval.owner_approval_reference,
     rollback_supported_by_sealed_snapshot:true
+  };
+}
+
+function valuesEqual(a,b){return a===b || (a==null && b==null);}
+function matchedNonLanguage(original,after){
+  const mutable=new Set(["language_name","language_source","language_source_url","updated_at"]);
+  return Object.keys(original).every(k=>mutable.has(k)||valuesEqual(original[k],after[k])) &&
+    Object.keys(original).length===Object.keys(after).length &&
+    Object.keys(original).every(k=>Object.hasOwn(after,k));
+}
+function verifyAppliedRow(item,row){
+  const original=item.row;
+  require(row && matchedNonLanguage(original,row),"Unrelated column changed in post-write verification");
+  require(row.id===original.id && row.wikidata_qid===original.wikidata_qid &&
+    row.language_name===item.proposed_language &&
+    row.language_source===SOURCE && row.language_source_url===item.evidence_url,
+    "Post-write value/source verification failed");
+}
+/** Independent current-state SELECT verification: never retry writes on failure. */
+export async function verifyAppliedBatch(db,items){
+  checkRows(items);
+  const after=[];
+  for(const item of items){
+    const result=await db.prepare("SELECT * FROM "+item.table+
+      " WHERE id=? AND wikidata_qid=?").bind(item.row.id,item.qid).first();
+    verifyAppliedRow(item,result);
+    after.push(result);
+  }
+  return {verified:after.length,
+    after_sha256:createHash("sha256").update(JSON.stringify(after)).digest("hex"),
+    after};
+}
+/**
+ * Restore exactly the four language/provenance/timestamp fields. A later,
+ * unrelated edit to ANY column blocks the full inverse transaction.
+ */
+export async function applyApprovedInverseBatch(db,originalItems,afterRows,approval){
+  checkRows(originalItems);
+  validateOwnerApproval(approval,originalItems);
+  require(approval.rollback_approved===true &&
+    approval.rollback_batch_sha256===hashOfBatch(originalItems),
+    "Separate, exact rollback approval is mandatory");
+  require(Array.isArray(afterRows) && afterRows.length===originalItems.length,
+    "Missing verified post-write state for inverse");
+  const statements=[];
+  for(let i=0;i<originalItems.length;i++){
+    const item=originalItems[i],row=afterRows[i];
+    verifyAppliedRow(item,row);
+    const columns=Object.keys(row).sort();
+    const expected=columns.map(c=>row[c]);
+    const where=columns.map(c=>c+" IS ?").join(" AND ");
+    statements.push(db.prepare(
+      "SELECT CASE WHEN EXISTS (SELECT 1 FROM "+item.table+" WHERE "+where+
+      ") THEN 1 ELSE json_extract('foundation_inverse_guard_abort','
+) END AS ok"
+    ).bind(...expected));
+    statements.push(db.prepare(
+      "UPDATE "+item.table+
+      " SET language_name=?,language_source=?,language_source_url=?,updated_at=?"+
+      " WHERE "+where
+    ).bind(item.row.language_name,item.row.language_source,
+           item.row.language_source_url,item.row.updated_at,...expected));
+  }
+  const results=await db.batch(statements);
+  require(Array.isArray(results) && results.length===originalItems.length*2 &&
+    results.every((x,i)=>x.success===true && (i%2===0 || x.meta?.changes===1)),
+    "D1 inverse changes mismatch; inspect before any retry");
+  for(const item of originalItems){
+    const restored=await db.prepare("SELECT * FROM "+item.table+
+      " WHERE id=? AND wikidata_qid=?").bind(item.row.id,item.qid).first();
+    require(restored && Object.keys(item.row).every(k=>valuesEqual(item.row[k],restored[k])) &&
+      Object.keys(restored).length===Object.keys(item.row).length,
+      "Exact original full-row recovery verification failed");
+  }
+  return {
+    schema:"foundation-v2-atomic-rollback-batch-result-v1",
+    restored:originalItems.length,
+    batch_sha256:hashOfBatch(originalItems),
+    production_rollback_approved:true,
+    approval_reference:approval.owner_approval_reference,
+    unrelated_fields_unchanged:true
   };
 }
