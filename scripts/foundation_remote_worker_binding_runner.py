@@ -35,6 +35,38 @@ MIGRATIONS = (
     "migrations/0020_series_first_air_year_provenance.sql",
 )
 RESULT_SCHEMA = "foundation-v2-worker-binding-scratch-probe-v2"
+# These are intentionally allowlisted, non-sensitive diagnostic labels.
+# NEVER log exception messages, D1 bindings, SQL, UUIDs, secrets, or configs.
+SAFE_PHASES = frozenset((
+    "identity_checks", "scratch_create", "schema_initialize",
+    "scratch_proof", "preview_start", "preview_ready",
+    "probe_seed", "probe_film", "probe_series", "probe_stale",
+    "probe_conflict", "probe_finish", "scratch_cleanup", "completed",
+))
+def stage_log(label: str) -> None:
+    require(label in SAFE_PHASES, "Invalid diagnostic stage label")
+    print("FOUNDATION_REMOTE_CANARY_STAGE=" + label, flush=True)
+
+def safe_failure_diagnostic(label: str, cleanup_confirmed: bool,
+                            error: BaseException) -> dict:
+    """Only bounded categorical status, never an exception string."""
+    require(label in SAFE_PHASES, "Invalid diagnostic stage label")
+    category = ("timeout" if isinstance(error, subprocess.TimeoutExpired)
+                else "network_or_io" if isinstance(error, OSError)
+                else "validation_or_remote_rejection"
+                if isinstance(error, ValueError)
+                else "unclassified")
+    return {
+        "schema": "foundation-v2-remote-worker-canary-safe-diagnostic-v1",
+        "outcome": "not_verified",
+        "last_stage": label,
+        "failure_category": category,
+        "exact_scratch_cleanup_confirmed": bool(cleanup_confirmed),
+        "remote_worker_binding_passed": False,
+        "production_corrections_authorized": False,
+        "contains_private_data": False,
+    }
+
 ENDPOINT = "http://127.0.0.1:8787/__foundation_staging_probe"
 
 
@@ -83,7 +115,10 @@ def parse_migrations(path: Path) -> list[str]:
 def seed_schema_only(stage: str, config: Path) -> None:
     # Fixed, separately reviewed migration files. No saved production rows,
     # real film metadata, credentials or backups are ever uploaded.
-    for file in MIGRATIONS:
+    for file_index, file in enumerate(MIGRATIONS):
+        # Only the allowlisted schema ordinal is logged; no SQL or UUID.
+        print("FOUNDATION_REMOTE_CANARY_SCHEMA_FILE=" + str(file_index + 1),
+              flush=True)
         for stmt in parse_migrations(Path(file)):
             proc = subprocess.run(
                 ["npx", "wrangler", "d1", "execute", stage,
@@ -124,6 +159,7 @@ def once_remote_probe(config: Path, token: str) -> dict:
         "npx", "wrangler", "dev", "--remote", "--config", str(config),
         "--ip", "127.0.0.1", "--port", "8787",
     ]
+    stage_log("preview_start")
     proc = subprocess.Popen(
         command, stdin=subprocess.DEVNULL,
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
@@ -143,6 +179,7 @@ def once_remote_probe(config: Path, token: str) -> dict:
                 pass
             time.sleep(1)
         require(ready, "Remote preview was not accessible as isolated worker")
+        stage_log("preview_ready")
         payload = None
         # Free Workers: 50 D1 read subrequests per invocation. This test
         # deliberately splits the four write/rollback checks into ordered
@@ -150,6 +187,7 @@ def once_remote_probe(config: Path, token: str) -> dict:
         # Each phase is issued ONCE and is never retried after uncertainty.
         phases = ("seed", "film", "series", "stale", "conflict", "finish")
         for phase in phases:
+            stage_log("probe_" + phase)
             req = urllib.request.Request(
                 ENDPOINT, data=b"{}", method="POST",
                 headers={
@@ -211,6 +249,7 @@ def main() -> None:
     name = stage_name(
         os.environ["GITHUB_RUN_ID"], os.environ.get("GITHUB_RUN_ATTEMPT", "1")
     )
+    stage_log("identity_checks")
     existing = all_databases()
     prod_uuid = lookup(existing, PRODUCTION)
     require(prod_uuid is not None, "Production ID unavailable for isolation check")
@@ -224,9 +263,11 @@ def main() -> None:
     problem = None
     outcome = None
     deleted = False
+    last_stage = "scratch_create"
     args.config.parent.mkdir(parents=True, exist_ok=True)
     try:
         try:
+            stage_log(last_stage)
             wrangler("d1", "create", name, "--location=apac",
                      "--update-config=false")
         finally:
@@ -246,9 +287,16 @@ def main() -> None:
         args.config.write_text(json.dumps(config, indent=2) + "\n",
                                encoding="utf-8")
         args.config.chmod(0o600)
+        last_stage = "schema_initialize"
+        stage_log(last_stage)
         seed_schema_only(name, args.config)
+        last_stage = "scratch_proof"
+        stage_log(last_stage)
         bind_scratch_proof(name, args.config, stage_uuid, token)
+        last_stage = "preview_start"
         outcome = once_remote_probe(args.config, token)
+        last_stage = "completed"
+        stage_log(last_stage)
     except Exception as exc:
         problem = exc
     finally:
@@ -262,7 +310,19 @@ def main() -> None:
         args.config.unlink(missing_ok=True)
 
     if problem is not None or not deleted or outcome is None:
-        raise ValueError("Remote canary failed or exact scratch deletion not verified")
+        error = problem if problem is not None else ValueError(
+            "Unverified scratch cleanup or probe result")
+        # The stage is intentionally categorical: no strings from D1/HTTP/
+        # Wrangler are serialized into logs or the diagnostic artifact.
+        safe_label = last_stage if last_stage in SAFE_PHASES else "identity_checks"
+        diagnostic = safe_failure_diagnostic(safe_label, deleted, error)
+        diagnostic_path = args.output.with_name("safe-failure-diagnostic.json")
+        diagnostic_path.write_text(json.dumps(diagnostic, indent=2) + "\n",
+                                   encoding="utf-8")
+        print("FOUNDATION_REMOTE_CANARY_FAILURE=" + safe_label, flush=True)
+        print("FOUNDATION_REMOTE_CANARY_CLEANUP_CONFIRMED=" +
+              str(bool(deleted)).lower(), flush=True)
+        raise ValueError("Remote canary failed; inspect safe stage diagnostics")
     # No worker secrets, full rows, staging UUID or production UUID are archived.
     report = {
         **outcome,
