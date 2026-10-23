@@ -21,7 +21,6 @@ jobs:
   prepare-locked-168-batch-review:
     runs-on: ubuntu-24.04
     timeout-minutes: 14
-    env:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
