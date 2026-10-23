@@ -45,7 +45,9 @@ jobs:
           freeze=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
           assert freeze["active"] is True and freeze["baseline"]["total"] == 70175
           wf=Path(".github/workflows/foundation-remote-worker-binding-canary.yml").read_text()
-          assert "workflow_dispatch:" in wf and "  push:" not in wf
+          header=wf.split("\npermissions:",1)[0]
+          assert "workflow_dispatch:" in header
+          assert not any(line.strip()=="push:" for line in header.splitlines())
           assert "YES_SCRATCH_D1_ONLY" in wf
           assert "Always independently clean up exact temporary scratch D1" in wf
           PY
