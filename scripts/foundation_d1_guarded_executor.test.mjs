@@ -202,3 +202,53 @@ test("a newer series edit prevents inverse from partially restoring previous row
     assert.deepEqual(await rows(fixture.db,"series_titles"),newer);
   }finally{await fixture.dispose();}
 });
+
+test("missing non-language columns are rejected BEFORE writing any film records",async()=>{
+  const fixture=await environment();
+  try{
+    const items=await seed(fixture.db,"catalogue_titles",3);
+    const before=await rows(fixture.db,"catalogue_titles");
+    const truncated=items.map((item,i)=>{
+      if(i!==1)return item;
+      const row={...item.row};delete row.source_url;
+      return {...item,row};
+    });
+    await assert.rejects(
+      ()=>applyApprovedBatch(fixture.db,truncated,grant(truncated)),
+      /sealed snapshot missing|D1 columns/i
+    );
+    assert.deepEqual(await rows(fixture.db,"catalogue_titles"),before);
+  }finally{await fixture.dispose();}
+});
+
+test("unreviewed live migration blocks all writes even with a full old snapshot",async()=>{
+  const fixture=await environment();
+  try{
+    const items=await seed(fixture.db,"catalogue_titles",3);
+    await fixture.db.prepare("ALTER TABLE catalogue_titles ADD COLUMN unreviewed_note TEXT").run();
+    const before=await rows(fixture.db,"catalogue_titles");
+    await assert.rejects(
+      ()=>applyApprovedBatch(fixture.db,items,grant(items)),
+      /unknown live D1 column/i
+    );
+    assert.deepEqual(await rows(fixture.db,"catalogue_titles"),before);
+  }finally{await fixture.dispose();}
+});
+
+test("a schema change after forward apply prevents rollback from silently missing a column",async()=>{
+  const fixture=await environment();
+  try{
+    const items=await seed(fixture.db,"series_titles",3);
+    await applyApprovedBatch(fixture.db,items,grant(items));
+    const after=await verifyAppliedBatch(fixture.db,items);
+    await fixture.db.prepare("ALTER TABLE series_titles ADD COLUMN later_editor TEXT").run();
+    const before=await rows(fixture.db,"series_titles");
+    const approval={...grant(items),rollback_approved:true,
+      rollback_batch_sha256:hashOfBatch(items)};
+    await assert.rejects(
+      ()=>applyApprovedInverseBatch(fixture.db,items,after.after,approval),
+      /unknown live D1 column/i
+    );
+    assert.deepEqual(await rows(fixture.db,"series_titles"),before);
+  }finally{await fixture.dispose();}
+});

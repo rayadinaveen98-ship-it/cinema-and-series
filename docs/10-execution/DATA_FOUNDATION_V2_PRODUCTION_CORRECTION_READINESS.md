@@ -96,3 +96,38 @@ intentional: owner approval has not yet been obtained.
 - [Independent archive validation](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/39935974111)
 - [16,681-row isolated SQLite rehearsal](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/39936937501)
 - [Official D1 Database `batch()` documentation](https://developers.cloudflare.com/d1/worker-api/d1-database/)
+
+
+## Next safety gate: complete local D1-binding rehearsal (proposed)
+
+This gate is deliberately separated from any remotely bound D1 or production
+executor. It does not relax the **OWNER APPROVAL REQUIRED** state.
+
+- `scripts/foundation_d1_full_snapshot_rehearsal.mjs` consumes the previously
+  authenticated, **privately decrypted** historical backup in isolated Miniflare.
+- It seeds the actual film and series migrations with **all 16,681 original rows**
+  and one nonmatching untouched sentinel per table.
+- It exercises the **same guarded D1 `db.batch()` primitive** across the
+  **168 exact manifest-locked batches**, then exercises separately approved
+  synthetic inverses and checks complete restoration of every original column.
+- It tests an intentionally stale last film record and a competing new edit
+  during series rollback. Both must reject the entire batch with no partial
+  changes.
+- The library now reads `PRAGMA table_info` before forwards **and** inverses,
+  rejecting any missing snapshot column or unreviewed live schema drift.
+- `.github/workflows/foundation-d1-full-sealed-local-qa.yml` has a main-branch
+  / manual trigger and **no Cloudflare credential binding**. It briefly
+  decrypts the historical capsule in the runner, wipes plaintext in an exit
+  trap, and uploads **only non-sensitive booleans, counts and hashes**.
+- The full-size test is **not marked PASSED** until its GitHub Actions run
+  concludes successfully. A passing synthetic local run is **not** evidence
+  of full-size remote staging, current production-row freshness, data-owner
+  authorization, or independent studio confirmation of Wikidata P364.
+
+**Still blocking any production correction:** an owner-held backup/key retained
+outside expiring CI artifacts; full remote *disposable* D1 rehearsal, with both
+film and series schema and forced halfway failure; an exact approved hash
+manifest and evidence standard; a new prewrite snapshot/bookmark; a protected
+explicitly dispatched production runner with private persistent journal; and
+a post-write independent catalogue audit. Existing title/artwork/ingestion/UI
+freeze stays active until a separate authorized decision.
