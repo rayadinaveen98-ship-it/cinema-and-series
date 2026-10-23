@@ -204,3 +204,56 @@ selection or encryption/bookmark steps, not package installation.
 None of these safeguards authorize production writes. A fresh full original-row
 snapshot and fresh recovery bookmark immediately before any future approved
 correction are still mandatory.
+
+
+## Remote D1 account preflight (read-only staging admission gate)
+
+Before allowing even a small remote disposable D1 rehearsal:
+
+1. Verify the production catalogue freeze is still active at **70,175**.
+2. List D1 account database identities (control plane only), prove exactly one
+   `cinema-and-series` production identity, and reject duplicate names/UUIDs
+   or orphaned `foundation-v2-qa-` databases.
+3. Reserve **two Free-plan database slots** (require no more than 8 existing
+   databases before attempting scratch creation).
+4. Read account-wide, UTC-calendar-day D1 GraphQL `rowsRead` and
+   `rowsWritten` analytics. Fail closed on missing permissions, malformed
+   values, a truncated result or ambiguous account identity. Assume Free-plan
+   limits conservatively: 5,000,000 read rows/day and 100,000 written
+   rows/day, across **all** databases in the account.
+5. A small canary requires **at least 1,000,000 estimated read and 40,000
+   estimated write rows** of headroom at the time of the check. This is a
+   precautionary reserve, **not an estimate of canary cost**. A zero-group or
+   unavailable metrics response must not be interpreted as zero usage.
+6. Never treat GraphQL's sampled/delayed analytics as a guaranteed
+   real-time allowance. Before a *manual* staging action the owner must
+   independently check the dashboard's account billable usage, existing
+   traffic and daily reset timing.
+7. Do **not** extrapolate small canary success into authorization for the
+   full 16,681-row workload. Index maintenance and schema operations can
+   multiply metered writes; remote full-size staging remains a separate gate.
+
+Implementation:
+- `scripts/foundation_remote_account_preflight.py` uses only
+  `wrangler d1 list --json` and read-only Cloudflare GraphQL analytics;
+  never runs SQL or creates/modifies a database.
+- `.github/workflows/foundation-d1-account-readonly-preflight.yml`
+  runs after an approved main-branch merge and may be dispatched manually.
+  Its cloud credentials are restricted to the single read-only step;
+  its artifact contains safe aggregate counts only.
+- `.github/workflows/foundation-d1-account-preflight-offline-qa.yml`
+  validates safety logic on branches/PRs **without credentials**.
+- `.github/workflows/foundation-remote-staging-d1.yml` is changed
+  from push-triggered to **manual dispatch only**, checks the account gate
+  before disposable staging, and scopes credentials to the stages that need
+  them and the always-run exact-UUID cleanup step.
+
+**No remote staging dispatch and no production data writes are authorized by
+merging these protections.** The post-merge read-only preflight determines
+whether the account's control-plane and metrics checks are functioning, not
+whether full-size staging or production mutation can proceed.
+
+Cloudflare reference:
+- https://developers.cloudflare.com/d1/platform/limits/
+- https://developers.cloudflare.com/d1/platform/pricing/
+- https://developers.cloudflare.com/d1/observability/metrics-analytics/
