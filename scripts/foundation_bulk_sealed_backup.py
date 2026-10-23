@@ -27,7 +27,7 @@ from production_catalogue_quality import load_d1_rows, norm
 from foundation_final_prewrite import read_bookmark
 
 QID = re.compile(r"Q[1-9][0-9]*\Z")
-COMPROMISED_CHAT_KEY_SHA256 = "fe78ca718b8e68951767f23d1d4b3cfddd5100f2c30b9cb56ccbde8731eb795f"
+REVOKED_KEY_FINGERPRINTS = frozenset({"fe78ca718b8e68951767f23d1d4b3cfddd5100f2c30b9cb56ccbde8731eb795f", "3c3b59bae62877ece9f1a0f12ba617d08260a9723fb3166fdba52a7a506f4da1"})
 AAD = b"cinema-and-series/data-foundation-v2/full-bulk-recovery-v1"
 UNKNOWN = {"", "unknown", "xx", "und", "n/a", "na", "none", "null"}
 DISPUTED = {"Q20967570", "Q20649744", "Q109519684"}
@@ -42,7 +42,7 @@ def check_key(value: str) -> bytes:
         raise ValueError("Backup key must be valid base64") from exc
     if len(key) != 32:
         raise ValueError("Backup key must contain exactly 32 random bytes")
-    if hashlib.sha256(key).hexdigest() == COMPROMISED_CHAT_KEY_SHA256:
+    if hashlib.sha256(key).hexdigest() in REVOKED_KEY_FINGERPRINTS:
         raise ValueError("Backup key was previously disclosed in chat. Replace GitHub secret with a fresh PRIVATE key.")
     return key
 
@@ -153,7 +153,7 @@ def make_capsule(film:dict,series:dict,film_current:dict,series_current:dict,
         "bookmark_sha256":hashlib.sha256(bookmark.encode()).hexdigest() if bookmark else None,
         "bookmark_raw_public":False,
         "encrypted_backup_created":True,
-        "recovery_key_privately_generated_check":True,
+        "disclosed_key_fingerprint_rejected":True,
         "writes_authorized":False,"production_writes":0,
         "next_gate":"Test owner-held decrypt key; perform FRESH prewrite queries and approval. This snapshot will be stale later.",
     }
