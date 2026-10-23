@@ -1,0 +1,46 @@
+name: Foundation V2 - Isolated D1 Production Guard QA
+
+on:
+  push:
+    branches:
+      - main
+      - feat/foundation-v2-guarded-production-executor-v1
+    paths:
+      - ".github/workflows/foundation-d1-production-guard-qa.yml"
+      - "scripts/foundation_d1_guarded_executor.mjs"
+      - "scripts/foundation_d1_guarded_executor.test.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-v2-prod-guard-isolated-tests
+  cancel-in-progress: false
+
+jobs:
+  only-local-d1:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install only local application/dev dependencies
+        run: npm install --no-audit --no-fund
+      - name: Verify frozen production status and no remote commands
+        shell: bash
+        run: |
+          node -e "const p=require('./ops/data-foundation-v2-freeze.json');if(!p.active)process.exit(1)"
+          if grep -E '(--remote|wrangler d1 execute|wrangler deploy|CLOUDFLARE_API_TOKEN)' \
+             scripts/foundation_d1_guarded_executor.test.mjs; then
+            echo "Local QA must not contain remote DB references."
+            exit 1
+          fi
+      - name: Execute prepared-parameter D1.batch guard tests against Miniflare
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --test scripts/foundation_d1_guarded_executor.test.mjs
+          echo "FOUNDATION_D1_PRODUCTION_GUARD_QA=local_atomic_stale_guard_approval_disabled_no_production_writes"
