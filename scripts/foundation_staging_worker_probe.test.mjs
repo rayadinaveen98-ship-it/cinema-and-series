@@ -39,8 +39,9 @@ async function setup(){
     }
     await db.prepare("CREATE TABLE foundation_v2_stage_proof ("+
       "id INTEGER PRIMARY KEY CHECK(id=1),stage_name TEXT NOT NULL,"+
-      "stage_uuid TEXT NOT NULL,access_nonce TEXT NOT NULL)").run();
-    await db.prepare("INSERT INTO foundation_v2_stage_proof VALUES (1,?,?,?)")
+      "stage_uuid TEXT NOT NULL,access_nonce TEXT NOT NULL,"+
+      "stage_phase TEXT NOT NULL DEFAULT 'new')").run();
+    await db.prepare("INSERT INTO foundation_v2_stage_proof (id,stage_name,stage_uuid,access_nonce) VALUES (1,?,?,?)")
       .bind("foundation-v2-qa-39946487548-1",STAGE_UUID,
         "local-test-only-not-valid-in-cloudflare").run();
     return {
@@ -61,8 +62,9 @@ async function setup(){
     throw error;
   }
 }
-const request=token=>new Request("https://test.invalid/__foundation_staging_probe",{
-  method:"POST",headers:{"x-foundation-ephemeral-token":token}
+const request=(token,phase="seed")=>new Request("https://test.invalid/__foundation_staging_probe",{
+  method:"POST",headers:{"x-foundation-ephemeral-token":token,
+    "x-foundation-probe-phase":phase}
 });
 test("fail closed on production identity, wrong scratch name or no D1 handle",async()=>{
   const x=await setup();
@@ -70,7 +72,7 @@ test("fail closed on production identity, wrong scratch name or no D1 handle",as
     assert.throws(()=>assertScratchBinding({...x.env,
       FOUNDATION_STAGE_UUID:PROD_UUID}),/scratch|production|identity/i);
     assert.throws(()=>assertScratchBinding({...x.env,
-      FOUNDATION_STAGE_NAME:"cinema-and-series"}),/disposable QA/i);
+      FOUNDATION_STAGE_NAME:"cinema-and-series"}),/scratch|database names/i);
     assert.throws(()=>assertScratchBinding({...x.env,DB:null}),/binding/i);
     const bad=await worker.fetch(request(x.env.FOUNDATION_EPHEMERAL_TOKEN),
       {...x.env,FOUNDATION_STAGE_UUID:PROD_UUID});
@@ -101,10 +103,18 @@ test("no credentials, wrong method, wrong route and wrong token must do no work"
 test("scratch Worker Binding atomic forward, full inverse and both conflict cases",async()=>{
   const x=await setup();
   try{
-    const response=await worker.fetch(
-      request(x.env.FOUNDATION_EPHEMERAL_TOKEN),x.env);
-    assert.equal(response.status,200);
-    const result=await response.json();
+    const phases=["seed","film","series","stale","conflict","finish"];
+    let result;
+    for(const phase of phases){
+      const response=await worker.fetch(
+        request(x.env.FOUNDATION_EPHEMERAL_TOKEN,phase),x.env);
+      assert.equal(response.status,200,"Expected approved phase: "+phase);
+      result=await response.json();
+      assert.equal(result.phase,phase);
+      assert.equal(result.phase_passed,true);
+      assert.equal(result.production_database_writes,0);
+    }
+    assert.equal(result.stage_completed,true);
     assert.equal(result.actual_worker_d1_batch_forward_inverse,true);
     assert.equal(result.original_rows_fully_restored,true);
     assert.equal(result.stale_last_row_atomic_abort,true);
@@ -150,5 +160,26 @@ test("mismatched database-resident UUID blocks worker writes",async()=>{
     assert.equal(response.status,409);
     assert.equal((await x.db.prepare(
       "SELECT count(*) AS n FROM catalogue_titles").first()).n,0);
+  }finally{await x.close();}
+});
+
+test("phase skipping, replay and invalid phases must not mutate scratch D1",async()=>{
+  const x=await setup();
+  try{
+    const token=x.env.FOUNDATION_EPHEMERAL_TOKEN;
+    for(const phase of ["film","series","not-a-phase"]){
+      const response=await worker.fetch(request(token,phase),x.env);
+      assert.equal(response.status,409,"Skip/invalid phase must fail: "+phase);
+    }
+    const seeded=await worker.fetch(request(token,"seed"),x.env);
+    assert.equal(seeded.status,200);
+    const original=(await x.db.prepare("SELECT * FROM catalogue_titles").all()).results;
+    assert.equal(original.length,4);
+    assert.equal((await worker.fetch(request(token,"seed"),x.env)).status,409);
+    assert.equal((await worker.fetch(request(token,"series"),x.env)).status,409);
+    assert.deepEqual((await x.db.prepare("SELECT * FROM catalogue_titles").all()).results,original);
+    assert.equal((await x.db.prepare(
+      "SELECT stage_phase FROM foundation_v2_stage_proof WHERE id=1").first()).stage_phase,
+      "seed");
   }finally{await x.close();}
 });

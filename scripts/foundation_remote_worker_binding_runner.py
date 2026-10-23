@@ -34,7 +34,7 @@ MIGRATIONS = (
     "migrations/0019_series_language_provenance.sql",
     "migrations/0020_series_first_air_year_provenance.sql",
 )
-RESULT_SCHEMA = "foundation-v2-worker-binding-scratch-probe-v1"
+RESULT_SCHEMA = "foundation-v2-worker-binding-scratch-probe-v2"
 ENDPOINT = "http://127.0.0.1:8787/__foundation_staging_probe"
 
 
@@ -110,7 +110,8 @@ def bind_scratch_proof(stage: str, config: Path, stage_uuid: str,
         "CREATE TABLE foundation_v2_stage_proof("
         "id INTEGER PRIMARY KEY CHECK(id=1),"
         "stage_name TEXT NOT NULL,stage_uuid TEXT NOT NULL,"
-        "access_nonce TEXT NOT NULL);"
+        "access_nonce TEXT NOT NULL,"
+        "stage_phase TEXT NOT NULL DEFAULT 'new');"
     ))
     execute(stage, config, command=(
         "INSERT INTO foundation_v2_stage_proof(id,stage_name,stage_uuid,access_nonce)"
@@ -142,21 +143,35 @@ def once_remote_probe(config: Path, token: str) -> dict:
                 pass
             time.sleep(1)
         require(ready, "Remote preview was not accessible as isolated worker")
-        req = urllib.request.Request(
-            ENDPOINT, data=b"{}", method="POST",
-            headers={
-                "Content-Type": "application/json",
-                "x-foundation-ephemeral-token": token,
-            }
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=140) as response:
-                payload = json.loads(response.read(20000))
-        except Exception:
-            # Never retry unknown writes, even against a scratch database.
-            raise ValueError("Remote D1 canary returned ambiguous or failed response")
-        require(payload.get("schema") == RESULT_SCHEMA,
-                "Remote Worker Binding did not pass verified canary")
+        payload = None
+        # Free Workers: 50 D1 read subrequests per invocation. This test
+        # deliberately splits the four write/rollback checks into ordered
+        # HTTP invocations with stage_phase stored INSIDE scratch D1.
+        # Each phase is issued ONCE and is never retried after uncertainty.
+        phases = ("seed", "film", "series", "stale", "conflict", "finish")
+        for phase in phases:
+            req = urllib.request.Request(
+                ENDPOINT, data=b"{}", method="POST",
+                headers={
+                    "Content-Type": "application/json",
+                    "x-foundation-ephemeral-token": token,
+                    "x-foundation-probe-phase": phase,
+                }
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=140) as response:
+                    payload = json.loads(response.read(20000))
+            except Exception:
+                raise ValueError(
+                    "Remote scratch D1 phase returned ambiguous/failed response; no retry")
+            require(payload.get("schema") == RESULT_SCHEMA and
+                    payload.get("phase") == phase and
+                    payload.get("phase_passed") is True and
+                    payload.get("production_database_writes") == 0 and
+                    payload.get("production_corrections_authorized") is False,
+                    "Scratch phase verification failed; stop without retry")
+        require(payload is not None and payload.get("stage_completed") is True,
+                "Remote scratch phase sequence did not finish")
         required = (
             "actual_worker_d1_batch_forward_inverse",
             "original_rows_fully_restored",

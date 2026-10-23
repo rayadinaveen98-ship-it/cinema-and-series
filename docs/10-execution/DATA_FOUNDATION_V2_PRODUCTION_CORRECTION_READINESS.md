@@ -312,3 +312,39 @@ cleanup and stop, not automatic retries or broadened credentials.
 References:
 - https://developers.cloudflare.com/d1/worker-api/d1-database/
 - https://developers.cloudflare.com/workers/local-development/
+
+
+## Free-plan per-invocation safety refinement (23 Oct 2026)
+
+The synthetic scratch Worker canary originally performed all tests in a
+single HTTP invocation. Cloudflare Workers Free restricts requests to
+**50 D1 queries/subrequests per Worker invocation**, so that design had
+an avoidable resource-limit risk even with only eight QA identities.
+
+The nonproduction canary now uses **six separate, one-time HTTP requests**,
+in this exact order: `seed`, `film`, `series`, `stale`, `conflict`,
+`finish`. Every request:
+
+- Authenticates the exact ephemeral header nonce.
+- Verifies the database-resident proof of scratch name, UUID and nonce
+  **before** any writes.
+- Confirms a persisted `stage_phase` matches the *immediately previous*
+  phase. Skipped, repeated, malformed or uncertain requests fail closed.
+- Runs only a bounded subset of the synthetic forward/inverse/conflict cases,
+  then advances the scratch phase checkpoint once.
+- Does not retry an indeterminate request; any failure triggers
+  exact-UUID scratch cleanup (not continuation).
+
+The `finish` phase verifies the eight original scratch records and
+language/source fields are restored, and returns only pass/fail flags.
+`foundation_remote_worker_binding_runner.py` verifies the response of
+**each** of the six requests. The step remains manual-only and never
+operates on production. No remote pass is claimed until the manual
+Cloudflare action actually runs successfully.
+
+This refinement does not establish a safe real-production batch size.
+A full 100-row batch emits 200 SQL statements and must be separately
+proven against the plan's current query/subrequest, parameter and
+D1 execution limits before production is even considered.
+
+Official limits: https://developers.cloudflare.com/d1/platform/limits/

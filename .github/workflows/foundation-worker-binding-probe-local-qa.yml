@@ -6,16 +6,21 @@ on:
     branches:
       - main
       - feat/foundation-v2-worker-binding-remote-canary-prep
+      - fix/foundation-v2-split-scratch-worker-probe
     paths:
       - ".github/workflows/foundation-worker-binding-probe-local-qa.yml"
       - "scripts/foundation_staging_worker_probe.mjs"
       - "scripts/foundation_staging_worker_probe.test.mjs"
+      - "scripts/foundation_remote_worker_binding_runner.py"
+      - "tests/test_foundation_remote_worker_binding_runner.py"
       - "scripts/foundation_d1_guarded_executor.mjs"
   pull_request:
     paths:
       - ".github/workflows/foundation-worker-binding-probe-local-qa.yml"
       - "scripts/foundation_staging_worker_probe.mjs"
       - "scripts/foundation_staging_worker_probe.test.mjs"
+      - "scripts/foundation_remote_worker_binding_runner.py"
+      - "tests/test_foundation_remote_worker_binding_runner.py"
       - "scripts/foundation_d1_guarded_executor.mjs"
 
 permissions:
