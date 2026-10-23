@@ -26,7 +26,6 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     env:
-      FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
       ROOT: data/generated/foundation-full-d1-qa
     steps:
       - uses: actions/checkout@v4
@@ -62,6 +61,8 @@ jobs:
           github-token: ${{ github.token }}
           path: data/generated/foundation-full-d1-qa/encrypted
       - name: Rehearse all 168 exact batches, verify full inverse and guards
+        env:
+          FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
         shell: bash
         run: |
           set -euo pipefail
