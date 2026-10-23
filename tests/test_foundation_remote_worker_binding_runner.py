@@ -21,6 +21,7 @@ class RemoteWorkerRunnerTest(unittest.TestCase):
         self.assertEqual(result["main"],
                          str(Path("scripts/foundation_staging_worker_probe.mjs").resolve()))
         self.assertFalse(result["workers_dev"])
+        self.assertTrue(result["preview_urls"])
         self.assertEqual(result["vars"]["FOUNDATION_STAGE_UUID"],STAGE)
         self.assertEqual(result["vars"]["FOUNDATION_PRODUCTION_UUID"],PROD)
         self.assertEqual(result["compatibility_flags"],["nodejs_compat"])
@@ -53,6 +54,19 @@ class RemoteWorkerRunnerTest(unittest.TestCase):
         self.assertIn("YES_SCRATCH_D1_ONLY", header)
         self.assertIn("Always independently clean up exact temporary scratch D1",
                       workflow)
+
+    def test_preview_readiness_requires_authenticated_real_scratch_health(self):
+        from scripts.foundation_remote_worker_binding_runner import (
+            HEALTH_ENDPOINT, HEALTH_SCHEMA
+        )
+        self.assertEqual(HEALTH_ENDPOINT,
+                         "http://127.0.0.1:8787/__foundation_staging_probe_health")
+        self.assertEqual(HEALTH_SCHEMA,"foundation-v2-worker-binding-health-v1")
+        source=Path("scripts/foundation_remote_worker_binding_runner.py").read_text()
+        self.assertIn('"x-foundation-ephemeral-token": token', source)
+        self.assertIn('data.get("scratch_binding_verified") is True', source)
+        self.assertIn('data.get("scratch_write_performed") is False', source)
+        self.assertNotIn("if exc.code == 404:\\n                    ready = True", source)
 
     def test_safe_diagnostic_redacts_exception_messages_and_credentials(self):
         secret = "private-token-and-a-database-uuid-never-log-this"
