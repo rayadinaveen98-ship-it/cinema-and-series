@@ -37,6 +37,21 @@ class RemoteWorkerRunnerTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"token"):
             safe_config(QA,STAGE,PROD,"not-long-enough")
 
+    def test_manual_canary_trigger_guard_checks_only_yaml_header(self):
+        workflow = Path(
+            ".github/workflows/foundation-remote-worker-binding-canary.yml"
+        ).read_text(encoding="utf-8")
+        header = workflow.split("permissions:", 1)[0]
+        # The trigger is manual. Text inside the shell validation script
+        # must not become a false 'push' trigger.
+        self.assertIn("workflow_dispatch:", header)
+        self.assertFalse(any(line.strip() == "push:"
+                             for line in header.splitlines()))
+        self.assertIn("header=wf.split(", workflow)
+        self.assertIn("YES_SCRATCH_D1_ONLY", header)
+        self.assertIn("Always independently clean up exact temporary scratch D1",
+                      workflow)
+
     def test_trusted_film_and_series_qa_migrations_parse(self):
         self.assertEqual(len(MIGRATIONS),5)
         for file in MIGRATIONS:
