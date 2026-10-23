@@ -32,7 +32,7 @@ function migrations(db,paths){
         .split("\n").filter(line=>!line.trimStart().startsWith("--"))
         .join("\n").split(";").map(x=>x.trim()).filter(Boolean);
       for(const statement of statements){
-        assert.match(statement,/^(CREATE|ALTER)\s/i);
+        assert.match(statement,/^(?:(?:CREATE|ALTER)\s|UPDATE series_titles\s+SET language_source\b)/i);
         await db.prepare(statement).run();
       }
     }
