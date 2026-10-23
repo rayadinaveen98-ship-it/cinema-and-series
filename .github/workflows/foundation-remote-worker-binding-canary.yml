@@ -1,0 +1,130 @@
+name: Foundation V2 - Disposable Remote Worker D1 Binding Canary
+
+# DANGEROUS TO AUTO-RUN: deliberately MANUAL ONLY.
+# Creates and deletes a fresh QA-only D1, never binds the live catalogue.
+on:
+  workflow_dispatch:
+    inputs:
+      scratch_only:
+        description: "Confirm scratch-only Cloudflare D1 test; no production corrections"
+        required: true
+        type: choice
+        options:
+          - "NO"
+          - "YES_SCRATCH_D1_ONLY"
+        default: "NO"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-v2-remote-worker-binding-staging
+  cancel-in-progress: false
+
+jobs:
+  worker-binding-qa-only:
+    if: ${{ inputs.scratch_only == 'YES_SCRATCH_D1_ONLY' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      FOUNDATION_ROOT: data/generated/foundation-worker-binding-canary
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Confirm source code remains scratch-only and frozen
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          freeze=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert freeze["active"] is True and freeze["baseline"]["total"] == 70175
+          wf=Path(".github/workflows/foundation-remote-worker-binding-canary.yml").read_text()
+          assert "workflow_dispatch:" in wf and "  push:" not in wf
+          assert "YES_SCRATCH_D1_ONLY" in wf
+          assert "Always independently clean up exact temporary scratch D1" in wf
+          PY
+      - name: Install dependencies without Cloudflare credentials
+        run: npm install --no-audit --no-fund
+      - name: Run all offline synthetic Worker and Python isolation tests
+        run: |
+          set -euo pipefail
+          python -m unittest \
+            tests.test_foundation_remote_worker_binding_runner \
+            tests.test_foundation_remote_account_preflight \
+            tests.test_foundation_remote_staging_d1 -v
+          node --test scripts/foundation_staging_worker_probe.test.mjs
+      - name: Read-only capacity and fresh account-wide quota preflight
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          python scripts/foundation_remote_account_preflight.py \
+            --out "$FOUNDATION_ROOT/account-safe-summary.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ["FOUNDATION_ROOT"])/
+            "account-safe-summary.json").read_text())
+          assert r["canary_capacity_indicated_not_authorized"] is True
+          assert r["database_count"] <= 8
+          assert r["staging_orphans_found"] == 0
+          assert r["production_d1_writes"] == 0
+          PY
+      - name: Create disposable D1, test actual remote Worker D1.batch and delete scratch
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          python scripts/foundation_remote_worker_binding_runner.py \
+            --state "$FOUNDATION_ROOT/private-staging-identity.json" \
+            --config "$FOUNDATION_ROOT/private-preview-wrangler.jsonc" \
+            --output "$FOUNDATION_ROOT/verified-safe-proof.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads((Path(os.environ["FOUNDATION_ROOT"])/
+            "verified-safe-proof.json").read_text())
+          assert r["remote_worker_binding_verified"] is True
+          assert r["disposable_remote_staging_d1_deleted"] is True
+          assert r["production_database_writes"] == 0
+          assert r["production_corrections_authorized"] is False
+          assert r["film_language_rows_tested"] == 3
+          assert r["series_language_rows_tested"] == 3
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Foundation V2 - disposable Worker D1 Binding canary\n\n")
+              f.write("- Scratch-only Worker db.batch() forward and inverse: **PASS**\n")
+              f.write("- Stale last row / concurrent editor atomic rollbacks: **PASS**\n")
+              f.write("- All synthetic rows restored, scratch deleted: **PASS**\n")
+              f.write("- Production SQL and writes: **ZERO**\n")
+              f.write("- This does NOT authorize or execute real catalogue correction.\n")
+          PY
+      - name: Always independently clean up exact temporary scratch D1
+        if: always()
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          STATE="$FOUNDATION_ROOT/private-staging-identity.json"
+          if [ -f "$STATE" ]; then
+            python scripts/foundation_remote_staging_d1.py cleanup --state "$STATE"
+          else
+            echo "No created scratch database identity recorded"
+          fi
+          rm -f "$FOUNDATION_ROOT/private-preview-wrangler.jsonc"
+      - name: Archive ONLY safe summary without tokens or database UUIDs
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-v2-worker-d1-remote-canary-no-private-data
+          path: data/generated/foundation-worker-binding-canary/verified-safe-proof.json
+          if-no-files-found: error
+          retention-days: 7

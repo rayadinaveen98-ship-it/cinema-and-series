@@ -1,0 +1,46 @@
+name: Foundation V2 - Scratch Worker Binding Probe Local QA
+
+# No Cloudflare secrets, Workers deployment or remote D1.
+on:
+  push:
+    branches:
+      - main
+      - feat/foundation-v2-worker-binding-remote-canary-prep
+    paths:
+      - ".github/workflows/foundation-worker-binding-probe-local-qa.yml"
+      - "scripts/foundation_staging_worker_probe.mjs"
+      - "scripts/foundation_staging_worker_probe.test.mjs"
+      - "scripts/foundation_d1_guarded_executor.mjs"
+  pull_request:
+    paths:
+      - ".github/workflows/foundation-worker-binding-probe-local-qa.yml"
+      - "scripts/foundation_staging_worker_probe.mjs"
+      - "scripts/foundation_staging_worker_probe.test.mjs"
+      - "scripts/foundation_d1_guarded_executor.mjs"
+
+permissions:
+  contents: read
+
+jobs:
+  local-only-d1-binding-probe:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install testing dependencies without credentials
+        run: npm install --no-audit --no-fund
+      - name: Verify local synthetic Worker D1-binding probe
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --check scripts/foundation_staging_worker_probe.mjs
+          node --test scripts/foundation_staging_worker_probe.test.mjs
+          python -m unittest tests.test_foundation_remote_worker_binding_runner -v
+          python -m py_compile scripts/foundation_remote_worker_binding_runner.py
+          echo "FOUNDATION_WORKER_BINDING_PROBE=LOCAL_ONLY_NO_PRODUCTION_WRITES"
