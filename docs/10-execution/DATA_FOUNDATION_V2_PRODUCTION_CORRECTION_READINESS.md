@@ -387,3 +387,40 @@ A new manually dispatched test, not a retry of a stale failed job, is
 needed to verify real Cloudflare D1 behavior. If it fails again, use the
 safe diagnostic artifact and `FOUNDATION_REMOTE_CANARY_STAGE` markers to
 locate the failing step before changing any further code.
+
+
+## Third remote Worker canary result — preview startup blocker
+
+The next manually requested scratch-only remote Worker canary
+[run 39963004524](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/39963004524)
+failed after **all five trusted schema files and the database-resident scratch
+identity proof succeeded**. The last safe diagnostic marker was
+`preview_start`; **no synthetic Worker data phase was reached**.
+The unconditional cleanup confirmed the scratch D1 was absent. This does
+not prove any problem with the full correction executor.
+
+Cloudflare's current configuration docs explain that Preview URLs default
+to the `workers_dev` value when no explicit setting exists, and we had
+`workers_dev=false` with no explicit Preview URL setting. This is a
+credible **configuration hypothesis**, not an independently proven root
+cause. To test safely without deploying the application:
+
+- Keep `workers_dev=false` and add `preview_urls=true` **only to the
+  temporary scratch Worker configuration**.
+- Require an authenticated, **read-only** GET to the dedicated
+  `/__foundation_staging_probe_health` path to prove that the actual bound
+  remote D1 contains the expected scratch name, UUID and ephemeral nonce
+  with `stage_phase=new`.
+- Disallow the earlier generic 404 readiness shortcut: an HTTP 404 could
+  come from an unrelated localhost/gateway handler, not from our Worker.
+- Keep phase execution on six one-time POST requests only AFTER positive
+  scratch-binding health, and preserve exact UUID deletion and
+  never-retry-on-uncertainty behavior.
+
+No remote success can be claimed until a new manually dispatched run proves
+the bounded forward/rollback cases and scratch cleanup. The production
+catalogue remains frozen at **70,175** titles.
+
+Documentation:
+https://developers.cloudflare.com/workers/wrangler/configuration/
+https://developers.cloudflare.com/workers/local-development/
