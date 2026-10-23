@@ -122,6 +122,14 @@ jobs:
             echo "No created scratch database identity recorded"
           fi
           rm -f "$FOUNDATION_ROOT/private-preview-wrangler.jsonc"
+      - name: Archive ONLY allowlisted failure category and scratch cleanup status
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-v2-worker-d1-remote-canary-safe-diagnostic
+          path: data/generated/foundation-worker-binding-canary/safe-failure-diagnostic.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Archive ONLY safe summary without tokens or database UUIDs
         if: success()
         uses: actions/upload-artifact@v4
