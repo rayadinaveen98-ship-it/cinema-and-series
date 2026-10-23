@@ -1,0 +1,137 @@
+name: Data Foundation V2 - Bulk Sealed Recovery (Read Only)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-bulk-sealed-backup.yml"
+      - "scripts/foundation_bulk_sealed_backup.py"
+      - "scripts/foundation_bulk_qid_selects.py"
+      - "tests/test_foundation_bulk_sealed_backup.py"
+      - "tests/test_foundation_bulk_qid_selects.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: foundation-v2-bulk-sealed-recovery
+  cancel-in-progress: false
+
+jobs:
+  seal-current-candidates:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
+      ROOT: data/generated/foundation-bulk-recovery
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check owner key before ANY database access
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install "cryptography>=44,<50"
+          python -m unittest tests.test_foundation_bulk_sealed_backup tests.test_foundation_bulk_qid_selects -v
+          python scripts/foundation_bulk_sealed_backup.py check-key
+      - name: Confirm frozen baseline
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          assert json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())["active"] is True
+          PY
+      - name: Restore 11,667-film original-language evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: foundation-v2-current-bulk-film-language-review
+          run-id: 39919391888
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-bulk-recovery/films
+      - name: Restore 5,014-series original-language evidence
+        uses: actions/download-artifact@v4
+        with:
+          name: foundation-v2-existing-series-bulk-language-review
+          run-id: 39897011592
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-bulk-recovery/series
+      - name: Create ONLY bounded SELECT queries for previously reviewed QIDs
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/foundation_bulk_qid_selects.py plan \
+            --films "$ROOT/films/all-candidates.json" \
+            --series "$ROOT/series/series-bulk-review.json" \
+            --folder "$ROOT/queries"
+      - name: Read matching CURRENT production rows without writes
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$CLOUDFLARE_ACCOUNT_ID" && test -n "$CLOUDFLARE_API_TOKEN"
+          npm install --no-audit --no-fund
+          python scripts/cloudflare_bootstrap.py
+          mkdir -p "$ROOT/private-reads"
+          for table in catalogue_titles series_titles; do
+            for file in "$ROOT/queries/$table"-*.sql; do
+              stem="$(basename "$file" .sql)"
+              query="$(cat "$file")"
+              npx wrangler d1 execute cinema-and-series --remote --json \
+                --command "$query" > "$ROOT/private-reads/$stem.json"
+            done
+            python scripts/foundation_bulk_qid_selects.py merge \
+              --folder "$ROOT" --table "$table" \
+              --out "$ROOT/private-current-$table.json"
+          done
+      - name: Encrypt current rows with AES-256-GCM and publish only ciphertext
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/foundation_bulk_sealed_backup.py seal \
+            --films "$ROOT/films/all-candidates.json" \
+            --series "$ROOT/series/series-bulk-review.json" \
+            --current-films "$ROOT/private-current-catalogue_titles.json" \
+            --current-series "$ROOT/private-current-series_titles.json" \
+            --summary "$ROOT/approval-summary.json" \
+            --sealed "$ROOT/encrypted-recovery.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path("data/generated/foundation-bulk-recovery")
+          report=json.loads((root/"approval-summary.json").read_text())
+          backup=json.loads((root/"encrypted-recovery.json").read_text())
+          assert report["total_source_candidates"]==16681
+          assert report["film_source_candidates"]==11667
+          assert report["series_source_candidates"]==5014
+          assert report["full_production_rows_backed_up"]+report["held_on_fresh_live_check"]==16681
+          assert report["production_writes"]==0 and report["writes_authorized"] is False
+          assert backup["full_rows"]==report["full_production_rows_backed_up"]
+          assert backup["algorithm"]=="AES-256-GCM"
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Data Foundation V2: encrypted bulk recovery\n\n")
+              f.write(f"- Reviewed existing film/series candidates: **{report['total_source_candidates']:,}**\n")
+              f.write(f"- Complete CURRENT rows sealed: **{report['full_production_rows_backed_up']:,}**\n")
+              f.write(f"- Live-value mismatches safely held: **{report['held_on_fresh_live_check']:,}**\n")
+              f.write(f"- Time Travel bookmark: **{report['bookmark_status']}** (raw value encrypted)\n")
+              f.write("- Production writes: **0**; correction approval: **NO**\n")
+              f.write("- Owner must verify private recovery and approve any later correction.\n")
+          PY
+      - name: Upload only ciphertext and non-sensitive status
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-v2-16681-candidate-encrypted-recovery
+          path: |
+            data/generated/foundation-bulk-recovery/approval-summary.json
+            data/generated/foundation-bulk-recovery/encrypted-recovery.json
+          if-no-files-found: error
+          retention-days: 30
