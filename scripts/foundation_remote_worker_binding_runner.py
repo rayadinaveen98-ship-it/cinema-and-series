@@ -24,7 +24,7 @@ import urllib.request
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from foundation_remote_staging_d1 import (
     PREFIX, PRODUCTION, UUID, stage_name, all_databases, lookup,
-    cleanup_exact_stage, wrangler, require
+    cleanup_exact_stage, wrangler, require, execute, sql_literal
 )
 
 MIGRATIONS = (
@@ -93,6 +93,29 @@ def seed_schema_only(stage: str, config: Path) -> None:
             )
             require(proc.returncode == 0,
                     "Isolated staging schema initialization failed")
+
+
+def bind_scratch_proof(stage: str, config: Path, stage_uuid: str,
+                       token: str) -> None:
+    """Proof is CREATED on the scratch DB only, never on the live database.
+
+    The Worker refuses ALL mutations unless the bound DB contains this exact
+    stage name, its UUID and ephemeral nonce. Environment variables alone
+    are not enough to prove the D1 binding is not production.
+    """
+    require(stage.startswith(PREFIX) and stage != PRODUCTION and
+            UUID.fullmatch(stage_uuid) and len(token) >= 32,
+            "Refusing unsafe scratch marker")
+    execute(stage, config, command=(
+        "CREATE TABLE foundation_v2_stage_proof("
+        "id INTEGER PRIMARY KEY CHECK(id=1),"
+        "stage_name TEXT NOT NULL,stage_uuid TEXT NOT NULL,"
+        "access_nonce TEXT NOT NULL);"
+    ))
+    execute(stage, config, command=(
+        "INSERT INTO foundation_v2_stage_proof(id,stage_name,stage_uuid,access_nonce)"
+        " VALUES (1," + ",".join(map(sql_literal,(stage,stage_uuid,token))) + ");"
+    ))
 
 
 def once_remote_probe(config: Path, token: str) -> dict:
@@ -209,6 +232,7 @@ def main() -> None:
                                encoding="utf-8")
         args.config.chmod(0o600)
         seed_schema_only(name, args.config)
+        bind_scratch_proof(name, args.config, stage_uuid, token)
         outcome = once_remote_probe(args.config, token)
     except Exception as exc:
         problem = exc
