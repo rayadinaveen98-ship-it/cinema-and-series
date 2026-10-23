@@ -69,6 +69,15 @@ def safe_failure_diagnostic(label: str, cleanup_confirmed: bool,
         "contains_private_data": False,
     }
 
+class ProbePhaseFailure(ValueError):
+    """Non-sensitive, allowlisted failure location, no HTTP or D1 detail."""
+    def __init__(self, stage: str):
+        require(stage in SAFE_PHASES and stage.startswith("probe_"),
+                "Invalid probe phase failure stage")
+        self.stage = stage
+        super().__init__("Remote scratch test rejected a bounded phase")
+
+
 ENDPOINT = "http://127.0.0.1:8787/__foundation_staging_probe"
 
 
@@ -252,15 +261,16 @@ def once_remote_probe(config: Path, token: str) -> dict:
             try:
                 with urllib.request.urlopen(req, timeout=140) as response:
                     payload = json.loads(response.read(20000))
+                require(payload.get("schema") == RESULT_SCHEMA and
+                        payload.get("phase") == phase and
+                        payload.get("phase_passed") is True and
+                        payload.get("production_database_writes") == 0 and
+                        payload.get("production_corrections_authorized") is False,
+                        "Scratch phase verification failed; stop without retry")
             except Exception:
-                raise ValueError(
-                    "Remote scratch D1 phase returned ambiguous/failed response; no retry")
-            require(payload.get("schema") == RESULT_SCHEMA and
-                    payload.get("phase") == phase and
-                    payload.get("phase_passed") is True and
-                    payload.get("production_database_writes") == 0 and
-                    payload.get("production_corrections_authorized") is False,
-                    "Scratch phase verification failed; stop without retry")
+                # Do not pass sensitive HTTP/Worker exception strings onward.
+                # Never retry a phase after an uncertain remote response.
+                raise ProbePhaseFailure("probe_" + phase) from None
         require(payload is not None and payload.get("stage_completed") is True,
                 "Remote scratch phase sequence did not finish")
         required = (
@@ -352,6 +362,8 @@ def main() -> None:
         stage_log(last_stage)
     except Exception as exc:
         problem = exc
+        if isinstance(exc, ProbePhaseFailure):
+            last_stage = exc.stage
     finally:
         if args.state.exists():
             try:
