@@ -348,3 +348,42 @@ proven against the plan's current query/subrequest, parameter and
 D1 execution limits before production is even considered.
 
 Official limits: https://developers.cloudflare.com/d1/platform/limits/
+
+
+## Remote Worker D1 canary failure and scratch schema optimization — 23 October 2026
+
+The owner dispatched scratch-only Worker Binding canary
+[run 39954207551](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/39954207551).
+**21 Python safety tests, six local Worker Binding tests and Cloudflare D1
+account read-only quota preflight PASSED**. The separate remote test failed,
+and the unconditional cleanup action reported
+`FOUNDATION_STAGING_CLEANUP=verified_absent`. Because the cleanup found a
+recorded scratch identity, the disposable D1 had actually been provisioned;
+no production correction was authorized or executed.
+
+The exact failing remote substep was not observable because this run preceded
+categorical stage diagnostics from PR #214. Do not claim schema setup was
+proven to cause the failure.
+
+The local code identified a reliability/performance concern: the scratch
+schema loader spawned one remote Wrangler process per individual statement
+across five trusted film/series migrations. It is now configured to:
+
+- Parse and allowlist all trusted `CREATE`, `ALTER` and one fixed
+  `UPDATE series_titles` migration statement.
+- Validate the exact scratch naming convention plus the private Wrangler
+  binding's scratch UUID versus production UUID **before issuing any SQL**.
+- Write the fixed schema SQL to one temporary runner-local file, invoke
+  `wrangler d1 execute --remote --file ...` **once**, then always remove
+  the temporary schema file, including after a failed remote command.
+- Keep scratch-only UUID and database-resident nonce controls, automatic
+  exact cleanup and the frozen 70,175-title catalogue unchanged.
+- Record a fixed `probe_seed`, `probe_film`, `probe_series`,
+  `probe_stale`, `probe_conflict`, or `probe_finish` diagnostic if a
+  phase fails, with no raw Cloudflare/network exception contents.
+
+These are **preventive improvements**, not evidence of remote success.
+A new manually dispatched test, not a retry of a stale failed job, is
+needed to verify real Cloudflare D1 behavior. If it fails again, use the
+safe diagnostic artifact and `FOUNDATION_REMOTE_CANARY_STAGE` markers to
+locate the failing step before changing any further code.
