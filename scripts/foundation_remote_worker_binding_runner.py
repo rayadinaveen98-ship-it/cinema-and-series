@@ -317,7 +317,7 @@ def main() -> None:
         safe_label = last_stage if last_stage in SAFE_PHASES else "identity_checks"
         diagnostic = safe_failure_diagnostic(safe_label, deleted, error)
         diagnostic_path = args.output.with_name("safe-failure-diagnostic.json")
-        diagnostic_path.write_text(json.dumps(diagnostic, indent=2) + "\\n",
+        diagnostic_path.write_text(json.dumps(diagnostic, indent=2) + "\n",
                                    encoding="utf-8")
         print("FOUNDATION_REMOTE_CANARY_FAILURE=" + safe_label, flush=True)
         print("FOUNDATION_REMOTE_CANARY_CLEANUP_CONFIRMED=" +
