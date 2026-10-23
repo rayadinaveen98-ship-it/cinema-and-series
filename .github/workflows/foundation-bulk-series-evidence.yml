@@ -1,0 +1,146 @@
+name: Data Foundation V2 — Bulk Series P364 Evidence (No D1)
+
+# Entire existing 18k series catalogue from archived verified production rows.
+# No D1 credentials, remote SQL, ingestion or direct production modifications.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-bulk-series-evidence.yml"
+      - "scripts/foundation_bulk_series_summary.py"
+      - "tests/test_foundation_bulk_series_summary.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: foundation-v2-bulk-series-evidence
+  cancel-in-progress: false
+
+jobs:
+  source-shards:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        shard: [0, 1, 2, 3]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Assert production freeze and regression-test series original-language resolver
+        shell: bash
+        run: |
+          python -m unittest tests.test_series_language_enrichment \
+            tests.test_foundation_bulk_series_summary -v
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          marker=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert marker["active"] is True
+          PY
+      - name: Restore archived 18,303-series production snapshot (NO current D1 use)
+        uses: actions/download-artifact@v4
+        with:
+          name: catalogue-quality-v1
+          run-id: 39758915343
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-bulk-series/frozen
+      - name: Resolve one non-overlapping shard of unknown-language series via P364
+        shell: bash
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/foundation-bulk-series
+          python scripts/enrich_series_languages.py \
+            --input "$ROOT/frozen/quality-series.json" \
+            --max-series 8000 \
+            --shard-index "$SHARD" \
+            --shard-count 4 \
+            --out-json "$ROOT/shard-$SHARD.json" \
+            --sql-out "$ROOT/shard-$SHARD.sql"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path("data/generated/foundation-bulk-series")
+          index=int(os.environ["SHARD"])
+          report=json.loads((root/f"shard-{index}.json").read_text())
+          assert report["schema_version"]=="series-language-enrichment-v1"
+          assert report["shard_count"]==4 and report["shard_index"]==index
+          assert report["candidate_count"]<=8000 and report["update_count"]<=report["candidate_count"]
+          assert len(report["updates"])==report["update_count"]
+          assert all(row["language_source"]=="wikidata:P364" for row in report["updates"])
+          assert len(set(row["wikidata_qid"] for row in report["updates"]))==len(report["updates"])
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: foundation-v2-series-source-shard-${{ matrix.shard }}
+          path: |
+            data/generated/foundation-bulk-series/shard-${{ matrix.shard }}.json
+            data/generated/foundation-bulk-series/shard-${{ matrix.shard }}.sql
+          retention-days: 30
+
+  aggregate:
+    needs: [source-shards]
+    if: needs.source-shards.result == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Restore all four disjoint series evidence shards
+        uses: actions/download-artifact@v4
+        with:
+          pattern: foundation-v2-series-source-shard-*
+          path: data/generated/foundation-bulk-series/shards
+      - name: Restore the same immutable 18,303-series source snapshot
+        uses: actions/download-artifact@v4
+        with:
+          name: catalogue-quality-v1
+          run-id: 39758915343
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-bulk-series/frozen
+      - name: Assemble one complete series correction review manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/foundation-bulk-series
+          python scripts/foundation_bulk_series_summary.py \
+            --input "$ROOT/frozen/quality-series.json" \
+            --shards "$ROOT/shards" \
+            --out "$ROOT/series-bulk-review.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          report=json.loads(Path("data/generated/foundation-bulk-series/series-bulk-review.json").read_text())
+          assert report["total_existing_series"]==18303
+          assert report["unique_existing_unknown_qids"]==report["source_candidates"]
+          assert report["language_candidates"]==len(report["records"])
+          assert report["d1_reads"]==report["d1_writes"]==0
+          assert report["production_changes"]==0 and not report["writes_authorized"]
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as o:
+              o.write("## Data Foundation V2 — entire existing series P364 reconciliation\n\n")
+              o.write(f"- Existing series: **{report['total_existing_series']:,}**\n")
+              o.write(f"- Series with Unknown language: **{report['series_unknown_language']:,}**\n")
+              o.write(f"- Existing unknown-language series with Wikidata QID: **{report['source_candidates']:,}**\n")
+              o.write(f"- Strict P364 language proposals: **{report['language_candidates']:,}**\n")
+              o.write(f"- Ambiguous source claims: **{report['ambiguous_count']:,}**\n")
+              o.write(f"- No P364 original-language claim: **{report['missing_claim_count']:,}**\n")
+              o.write("- Production reads/writes: **0/0**; correction approval: **NO**.\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: foundation-v2-existing-series-bulk-language-review
+          path: data/generated/foundation-bulk-series/series-bulk-review.json
+          retention-days: 30
