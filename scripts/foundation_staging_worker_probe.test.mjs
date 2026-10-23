@@ -72,7 +72,7 @@ test("fail closed on production identity, wrong scratch name or no D1 handle",as
     assert.throws(()=>assertScratchBinding({...x.env,
       FOUNDATION_STAGE_UUID:PROD_UUID}),/scratch|production|identity/i);
     assert.throws(()=>assertScratchBinding({...x.env,
-      FOUNDATION_STAGE_NAME:"cinema-and-series"}),/disposable QA/i);
+      FOUNDATION_STAGE_NAME:"cinema-and-series"}),/scratch|database names/i);
     assert.throws(()=>assertScratchBinding({...x.env,DB:null}),/binding/i);
     const bad=await worker.fetch(request(x.env.FOUNDATION_EPHEMERAL_TOKEN),
       {...x.env,FOUNDATION_STAGE_UUID:PROD_UUID});
