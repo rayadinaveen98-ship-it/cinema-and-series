@@ -99,6 +99,31 @@ function guard(item){
     "updated_at=CURRENT_TIMESTAMP WHERE "+condition;
   return {guardSQL,updateSQL,values};
 }
+/**
+ * Before any mutation, prove the sealed record contains EVERY current table
+ * column. checkRows() alone only validates identity/known-safe field names;
+ * without this check an omitted column would escape freshness guards.
+ * An unknown migration also fails closed until reviewed and allowlisted.
+ */
+export async function validateD1SchemaSnapshot(db,items){
+  const table=checkRows(items);
+  require(db && typeof db.prepare==="function",
+    "D1 database binding unavailable for schema preflight");
+  const info=await db.prepare("PRAGMA table_info("+table+")").all();
+  require(Array.isArray(info?.results) && info.results.length>=10,
+    "Failed to read complete live D1 table schema");
+  const actual=info.results.map(column=>column.name);
+  require(new Set(actual).size===actual.length &&
+    actual.every(name=>ALLOWED_COLUMNS[table].has(name)),
+    "Unknown live D1 column: fail closed until schema reviewed");
+  const expected=actual.slice().sort().join("\u0000");
+  for(const item of items){
+    require(Object.keys(item.row).slice().sort().join("\u0000")===expected,
+      "Sealed snapshot missing or mismatching live D1 columns");
+  }
+  return actual;
+}
+
 export function prepareAtomicBatch(db,items){
   checkRows(items);
   require(db && typeof db.prepare==="function" && typeof db.batch==="function",
@@ -134,6 +159,7 @@ export function validateOwnerApproval(approval,items){
 export async function applyApprovedBatch(db,items,approval){
   checkRows(items);
   validateOwnerApproval(approval,items);
+  await validateD1SchemaSnapshot(db,items);
   const statements=prepareAtomicBatch(db,items);
   const result=await db.batch(statements);
   require(Array.isArray(result) && result.length===items.length*2,
@@ -196,6 +222,7 @@ export async function applyApprovedInverseBatch(db,originalItems,afterRows,appro
   require(approval.rollback_approved===true &&
     approval.rollback_batch_sha256===hashOfBatch(originalItems),
     "Separate, exact rollback approval is mandatory");
+  await validateD1SchemaSnapshot(db,originalItems);
   require(Array.isArray(afterRows) && afterRows.length===originalItems.length,
     "Missing verified post-write state for inverse");
   const statements=[];
