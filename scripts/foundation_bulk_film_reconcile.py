@@ -14,6 +14,8 @@ import json
 from collections import Counter
 from pathlib import Path
 from typing import Any
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from foundation_language_review import build as original_review
 from production_catalogue_quality import load_d1_rows, movie_projection, known, norm, valid_qid
