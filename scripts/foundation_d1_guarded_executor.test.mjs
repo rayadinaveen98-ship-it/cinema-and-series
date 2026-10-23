@@ -252,3 +252,60 @@ test("a schema change after forward apply prevents rollback from silently missin
     assert.deepEqual(await rows(fixture.db,"series_titles"),before);
   }finally{await fixture.dispose();}
 });
+
+
+test("100-row D1 forward and inverse each verify through one indexed bulk read",async()=>{
+  const fixture=await environment();
+  try{
+    const items=await seed(fixture.db,"catalogue_titles",100);
+    const before=await rows(fixture.db,"catalogue_titles");
+    let reads=0;
+    const instrumented={
+      prepare(sql){
+        if(sql.startsWith("SELECT * FROM catalogue_titles WHERE wikidata_qid IN (")){
+          reads+=1;
+        }
+        return fixture.db.prepare(sql);
+      },
+      batch(statements){return fixture.db.batch(statements);}
+    };
+    const result=await applyApprovedBatch(instrumented,items,grant(items));
+    assert.equal(result.changed,100);
+    assert.equal(reads,1,"forward verification should use one bulk query");
+    const after=await verifyAppliedBatch(instrumented,items);
+    assert.equal(after.verified,100);
+    assert.equal(reads,2,"standalone verification should also use one query");
+    const approval={...grant(items),rollback_approved:true,
+      rollback_batch_sha256:hashOfBatch(items)};
+    const restored=await applyApprovedInverseBatch(instrumented,items,after.after,approval);
+    assert.equal(restored.restored,100);
+    assert.equal(reads,3,"inverse verification should use one bulk query");
+    assert.deepEqual(await rows(fixture.db,"catalogue_titles"),before);
+  }finally{await fixture.dispose();}
+});
+
+test("a partial bulk read is never accepted as successful post-write verification",async()=>{
+  const fixture=await environment();
+  try{
+    const items=await seed(fixture.db,"series_titles",4);
+    await applyApprovedBatch(fixture.db,items,grant(items));
+    const missing={
+      prepare(sql){
+        if(sql.startsWith("SELECT * FROM series_titles WHERE wikidata_qid IN (")){
+          return {
+            bind(...args){
+              const bound=fixture.db.prepare(sql).bind(...args);
+              return {async all(){
+                const result=await bound.all();
+                return {...result,results:result.results.slice(1)};
+              }};
+            }
+          };
+        }
+        return fixture.db.prepare(sql);
+      }
+    };
+    await assert.rejects(()=>verifyAppliedBatch(missing,items),
+      /missing or extra rows/i);
+  }finally{await fixture.dispose();}
+});
