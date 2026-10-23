@@ -3,7 +3,8 @@ import unittest
 from pathlib import Path
 from scripts.foundation_remote_worker_binding_runner import (
     safe_config, parse_migrations, PRODUCTION, MIGRATIONS,
-    safe_failure_diagnostic, stage_log
+    safe_failure_diagnostic, stage_log, seed_schema_only,
+    assert_remote_scratch_config, ProbePhaseFailure
 )
 
 QA="foundation-v2-qa-39946487548-1"
@@ -77,6 +78,78 @@ class RemoteWorkerRunnerTest(unittest.TestCase):
             "preview_start", False, TimeoutExpired("wrangler", 5))
         self.assertEqual(result["failure_category"], "timeout")
         self.assertFalse(result["exact_scratch_cleanup_confirmed"])
+
+    def test_batched_trusted_schema_uses_one_remote_d1_invocation(self):
+        import json
+        from tempfile import TemporaryDirectory
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "private-wrangler.qa.jsonc"
+            path.write_text(json.dumps(safe_config(QA, STAGE, PROD, TOKEN)))
+            self.assertIsNone(assert_remote_scratch_config(QA, path))
+            calls = []
+            def intercepted(argv, **options):
+                self.assertEqual(argv[:4],
+                                 ["npx", "wrangler", "d1", "execute"])
+                self.assertEqual(argv[4], QA)
+                self.assertIn("--remote", argv)
+                self.assertIn("--file", argv)
+                self.assertNotIn(PRODUCTION, argv)
+                script = Path(argv[argv.index("--file")+1])
+                source = script.read_text()
+                self.assertIn("CREATE TABLE IF NOT EXISTS catalogue_titles", source)
+                self.assertIn("CREATE TABLE IF NOT EXISTS series_titles", source)
+                self.assertIn("ALTER TABLE series_titles ADD COLUMN", source)
+                self.assertNotIn("DROP TABLE", source.upper())
+                self.assertNotIn(TOKEN, source)
+                self.assertNotIn(PROD, source)
+                calls.append(script)
+                return SimpleNamespace(returncode=0, stdout="", stderr="")
+            with patch("scripts.foundation_remote_worker_binding_runner.subprocess.run",
+                       side_effect=intercepted):
+                seed_schema_only(QA, path)
+            self.assertEqual(len(calls), 1)
+            self.assertFalse(calls[0].exists())
+
+    def test_unverified_scratch_uuid_cannot_run_any_remote_sql(self):
+        import json
+        from tempfile import TemporaryDirectory
+        from unittest.mock import patch
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "bad-wrangler.qa.jsonc"
+            bad = safe_config(QA, STAGE, PROD, TOKEN)
+            bad["d1_databases"][0]["database_id"] = PROD
+            path.write_text(json.dumps(bad))
+            with patch("scripts.foundation_remote_worker_binding_runner.subprocess.run") as run:
+                with self.assertRaisesRegex(ValueError, "identity"):
+                    seed_schema_only(QA, path)
+                run.assert_not_called()
+
+    def test_schema_file_removed_after_remote_execution_failure(self):
+        import json
+        from tempfile import TemporaryDirectory
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "private-wrangler.qa.jsonc"
+            path.write_text(json.dumps(safe_config(QA, STAGE, PROD, TOKEN)))
+            with patch("scripts.foundation_remote_worker_binding_runner.subprocess.run",
+                       return_value=SimpleNamespace(returncode=1, stdout="SECRET", stderr="SECRET")):
+                with self.assertRaisesRegex(ValueError, "initialization failed"):
+                    seed_schema_only(QA, path)
+            self.assertEqual(list(Path(tmp).glob("foundation-only-schema-*.sql")), [])
+
+    def test_failed_remote_phase_is_bounded_and_does_not_log_raw_errors(self):
+        import json
+        failed=ProbePhaseFailure("probe_film")
+        self.assertEqual(failed.stage, "probe_film")
+        self.assertNotIn(TOKEN, str(failed))
+        result=safe_failure_diagnostic(failed.stage,True,failed)
+        self.assertEqual(result["last_stage"],"probe_film")
+        self.assertNotIn(TOKEN,json.dumps(result))
+        with self.assertRaises(ValueError):
+            ProbePhaseFailure("probe_SECRET_" + TOKEN)
 
     def test_trusted_film_and_series_qa_migrations_parse(self):
         self.assertEqual(len(MIGRATIONS),5)
