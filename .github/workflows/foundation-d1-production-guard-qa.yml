@@ -6,6 +6,7 @@ on:
       - main
       - feat/foundation-v2-guarded-production-executor-v1
       - feat/foundation-v2-full-d1-local-recovery-qa
+      - feat/foundation-v2-bounded-d1-postwrite-reads
     paths:
       - ".github/workflows/foundation-d1-production-guard-qa.yml"
       - "scripts/foundation_d1_guarded_executor.mjs"

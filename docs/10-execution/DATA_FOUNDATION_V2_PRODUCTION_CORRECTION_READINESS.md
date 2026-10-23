@@ -131,3 +131,52 @@ manifest and evidence standard; a new prewrite snapshot/bookmark; a protected
 explicitly dispatched production runner with private persistent journal; and
 a post-write independent catalogue audit. Existing title/artwork/ingestion/UI
 freeze stays active until a separate authorized decision.
+
+
+## Verified complete local D1 rehearsal — 23 October 2026
+
+Run [39942616541](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/39942616541)
+completed **successfully** on main after PR #207. Its guarded
+forward updates, complete inverse, stale-last-row abort, competing-edit inverse
+abort and upload of non-sensitive QA counts/hashes all passed against the
+authenticated, historical **16,681-record / 168-batch** fixture.
+
+The still-frozen **70,175-title live catalogue** was not mutated. The run
+was LOCAL Miniflare, not remote Cloudflare D1. Real remote throughput, current
+production-row freshness, owner-held backup durability and production
+authorization remain unproven.
+
+### Remote deployment limitation found before staging
+
+Cloudflare D1's documented Worker Free limits include **50 queries per Worker
+invocation**, **100 bound parameters per query**, a **10-database account
+limit**, and **100,000 D1 rows written per day** shared across the account.
+A guarded 100-title batch must therefore not issue a separate SELECT for each
+title after the write. Even a successful local Miniflare 100-item transaction
+does **not** guarantee that a remote Worker invocation can perform 100
+sequential verification subrequests.
+
+The guarded executor was optimized so verification uses a **single indexed
+`SELECT ... WHERE wikidata_qid IN (100 bound placeholders)`** for each
+100-item batch, both forward and inverse. It rejects missing, duplicate or
+unexpected identities, compares every original column, and never silently
+retries uncertain writes. This preserves all original transaction guards while
+reducing remote read round trips. An explicit 100-row Miniflare test verifies
+one post-write read per phase and a negative test rejects partial reads.
+
+Before creating any full-size remote disposable D1, check the current
+account's remaining D1 row-read/write allowance, database count and
+storage, and test a **bounded canary using the same Worker Binding API**.
+The expected base rehearsal would write at least **50,043 rows**
+(16,681 seed + 16,681 forward + 16,681 inverse), excluding sentinels,
+extra negative-case writes, schema writes and any other account activity.
+Never equate this arithmetic minimum with actual metered Cloudflare usage.
+Cloudflare documents that the Free daily allowance is enforced; risking a
+quota stop could disrupt the live application.
+
+Official limits: https://developers.cloudflare.com/d1/platform/limits/
+and https://developers.cloudflare.com/d1/platform/pricing/
+
+A complete remote staging test is **still required** and should remain
+separate from automatic push and scheduled workflows until explicit
+resource/quota checks and cleanup control have passed.

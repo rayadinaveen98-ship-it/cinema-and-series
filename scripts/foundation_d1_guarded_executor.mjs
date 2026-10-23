@@ -198,20 +198,47 @@ function verifyAppliedRow(item,row){
     row.language_source===SOURCE && row.language_source_url===item.evidence_url,
     "Post-write value/source verification failed");
 }
+/**
+ * One bounded SELECT instead of 100 per-row SELECT subrequests.
+ * D1 Worker free-tier invocation limits are 50 queries, so a verification
+ * loop with one read per row is not deployable at batch size 100.
+ * qid is uniquely indexed; never rely on result ordering or accept partial
+ * results. The IN() placeholders are capped at D1's 100 bind-parameter limit.
+ */
+async function readExactBatchRows(db,items){
+  const table=checkRows(items);
+  const qids=items.map(item=>item.qid);
+  const statement=db.prepare("SELECT * FROM "+table+
+    " WHERE wikidata_qid IN ("+qids.map(()=>"?").join(",")+")");
+  const response=await statement.bind(...qids).all();
+  const rows=response?.results;
+  require(Array.isArray(rows) && rows.length===items.length,
+    "D1 bounded verification returned missing or extra rows");
+  const byQid=new Map();
+  for(const row of rows){
+    require(!byQid.has(row?.wikidata_qid),
+      "D1 bounded verification returned duplicate identities");
+    byQid.set(row.wikidata_qid,row);
+  }
+  return items.map(item=>{
+    const current=byQid.get(item.qid);
+    require(current && current.id===item.row.id,
+      "D1 bounded verification identity mismatch");
+    return current;
+  });
+}
+
 /** Independent current-state SELECT verification: never retry writes on failure. */
 export async function verifyAppliedBatch(db,items){
-  checkRows(items);
-  const after=[];
-  for(const item of items){
-    const result=await db.prepare("SELECT * FROM "+item.table+
-      " WHERE id=? AND wikidata_qid=?").bind(item.row.id,item.qid).first();
-    verifyAppliedRow(item,result);
-    after.push(result);
+  const after=await readExactBatchRows(db,items);
+  for(let i=0;i<items.length;i++){
+    verifyAppliedRow(items[i],after[i]);
   }
   return {verified:after.length,
     after_sha256:createHash("sha256").update(JSON.stringify(after)).digest("hex"),
     after};
 }
+
 /**
  * Restore exactly the four language/provenance/timestamp fields. A later,
  * unrelated edit to ANY column blocks the full inverse transaction.
@@ -247,11 +274,11 @@ export async function applyApprovedInverseBatch(db,originalItems,afterRows,appro
   require(Array.isArray(results) && results.length===originalItems.length*2 &&
     results.every((x,i)=>x.success===true && (i%2===0 || x.meta?.changes===1)),
     "D1 inverse changes mismatch; inspect before any retry");
-  for(const item of originalItems){
-    const restored=await db.prepare("SELECT * FROM "+item.table+
-      " WHERE id=? AND wikidata_qid=?").bind(item.row.id,item.qid).first();
-    require(restored && Object.keys(item.row).every(k=>valuesEqual(item.row[k],restored[k])) &&
-      Object.keys(restored).length===Object.keys(item.row).length,
+  const restoredRows=await readExactBatchRows(db,originalItems);
+  for(let i=0;i<originalItems.length;i++){
+    const restored=restoredRows[i],original=originalItems[i].row;
+    require(Object.keys(original).every(k=>valuesEqual(original[k],restored[k])) &&
+      Object.keys(restored).length===Object.keys(original).length,
       "Exact original full-row recovery verification failed");
   }
   return {
