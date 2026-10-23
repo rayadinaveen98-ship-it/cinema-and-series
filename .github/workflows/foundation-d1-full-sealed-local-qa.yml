@@ -1,0 +1,106 @@
+name: Foundation V2 - Full 168-Batch Isolated D1 Recovery QA
+
+# The only input is the previously authenticated, encrypted recovery capsule.
+# Main-branch only. NO Cloudflare credentials or production D1 bindings.
+# This never runs on untrusted PR code with secrets.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-d1-full-sealed-local-qa.yml"
+      - "scripts/foundation_d1_full_snapshot_rehearsal.mjs"
+      - "scripts/foundation_d1_guarded_executor.mjs"
+      - "scripts/foundation_d1_approval_manifest.mjs"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: foundation-v2-full-local-d1-recovery
+  cancel-in-progress: false
+
+jobs:
+  full-isolated-d1-forward-and-inverse:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    env:
+      FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
+      ROOT: data/generated/foundation-full-d1-qa
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Verify frozen baseline and no production D1 credentials
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          data=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert data["active"] is True and data["baseline"]["total"] == 70175
+          PY
+          node --check scripts/foundation_d1_full_snapshot_rehearsal.mjs
+          node --check scripts/foundation_d1_approval_manifest.mjs
+      - name: Install isolated test dependencies only
+        run: |
+          npm install --no-audit --no-fund
+          python -m pip install "cryptography>=44,<50"
+      - name: Re-run guarded D1 tests before using historical encrypted snapshot
+        run: node --test scripts/foundation_d1_guarded_executor.test.mjs
+      - name: Restore ONLY independently verified encrypted historical recovery
+        uses: actions/download-artifact@v4
+        with:
+          name: foundation-v2-16681-candidate-encrypted-recovery
+          run-id: 39935377448
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-full-d1-qa/encrypted
+      - name: Rehearse all 168 exact batches, verify full inverse and guards
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          PRIVATE="$ROOT/private-full-snapshot.json"
+          trap 'rm -f "$PRIVATE"' EXIT
+          python scripts/foundation_verify_bulk_sealed_backup.py \
+            "$ROOT/encrypted/encrypted-recovery.json" \
+            --export-plaintext "$PRIVATE" > /dev/null
+          node scripts/foundation_d1_full_snapshot_rehearsal.mjs \
+            "$PRIVATE" "$ROOT/qa-summary.json"
+          test -s "$ROOT/qa-summary.json"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path(os.environ["ROOT"])/"qa-summary.json"
+          r=json.loads(p.read_text())
+          assert r["existing_title_changes_rehearsed"] == 16681
+          assert r["atomic_batches"] == 168
+          for k in ("all_forward_batches_verified",
+                    "complete_inverse_restored_all_columns",
+                    "stale_last_row_atomic_abort",
+                    "competing_edit_inverse_atomic_abort",
+                    "unrelated_control_records_untouched"):
+              assert r[k] is True, k
+          assert r["remote_d1_staging_passed"] is False
+          assert r["production_approval_granted"] is False
+          assert r["production_reads"] == r["production_writes"] == 0
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Foundation V2 - isolated complete D1 rehearsal\\n\\n")
+              f.write("- 16,681 real historical original rows; 168 D1 batches\\n")
+              f.write("- Forward/complete inverse verified, stale and competing edits rejected\\n")
+              f.write("- Zero production reads/writes; remote staging still pending\\n")
+          PY
+      - name: Upload ONLY non-sensitive counts and hashes
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-v2-full-local-d1-qa-no-private-rows
+          path: data/generated/foundation-full-d1-qa/qa-summary.json
+          if-no-files-found: error
+          retention-days: 30
