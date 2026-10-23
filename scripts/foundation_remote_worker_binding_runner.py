@@ -158,7 +158,7 @@ def seed_schema_only(stage: str, config: Path) -> None:
     ]
     require(statements and len(statements) <= 60,
             "Unexpected full scratch migration statement count")
-    source = ";\\n".join(statements) + ";\\n"
+    source = ";\n".join(statements) + ";\n"
     config.parent.mkdir(parents=True, exist_ok=True)
     scratch_sql = None
     try:
