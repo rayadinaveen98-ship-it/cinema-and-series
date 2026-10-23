@@ -1,0 +1,76 @@
+name: Data Foundation V2 - Independent Bulk Recovery Verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-independent-bulk-recovery.yml"
+      - "scripts/foundation_verify_bulk_sealed_backup.py"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: foundation-independent-bulk-recovery
+  cancel-in-progress: false
+
+jobs:
+  verify-ciphertext-in-clean-runner:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      FOUNDATION_BACKUP_KEY_B64: ${{ secrets.FOUNDATION_BACKUP_KEY_B64 }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Prepare standalone AES-256-GCM validator (no D1 credentials)
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m pip install "cryptography>=44,<50"
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          marker=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert marker["active"] is True
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: foundation-v2-16681-candidate-encrypted-recovery
+          run-id: 39935377448
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-independent-restore
+      - name: Independently authenticate ciphertext and verify exact record count
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/foundation_verify_bulk_sealed_backup.py \
+            data/generated/foundation-independent-restore/encrypted-recovery.json \
+            > data/generated/foundation-independent-restore/private-check.json
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          root=Path("data/generated/foundation-independent-restore")
+          result=json.loads((root/"private-check.json").read_text())
+          metadata=json.loads((root/"approval-summary.json").read_text())
+          assert result["encrypted_backup_valid"] is True
+          assert result["full_existing_rows"]==16681
+          assert result["drift_holds"]==0
+          assert result["bookmark_present"] is True
+          assert result["production_writes"]==0
+          assert metadata["backed_up_by_table"]=={"catalogue_titles":11667,"series_titles":5014}
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Independent Data Foundation V2 recovery proof\n\n")
+              f.write("- Standalone AES-256-GCM authentication: **PASSED**\n")
+              f.write("- Full original rows successfully decrypted **in-memory only**: **16,681**\n")
+              f.write("- Films: **11,667**; series: **5,014**\n")
+              f.write("- Bookmark available in encrypted backup: **YES**\n")
+              f.write("- New production reads/writes: **0/0**\n")
+              f.write("- No plaintext rows, bookmark or keys were uploaded or printed.\n\n")
+              f.write("Owner must retain the key and encrypted archive outside GitHub. "
+                      "Restoration to a nonproduction environment should be tested before any approved correction.\n")
+          PY
