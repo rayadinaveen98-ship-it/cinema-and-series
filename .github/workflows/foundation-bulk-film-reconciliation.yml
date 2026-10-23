@@ -1,0 +1,122 @@
+name: Data Foundation V2 — Bulk Film Evidence Reconciliation (No D1)
+
+# Compare entire SAVED production catalogue to CURRENT durable P364 checkpoint.
+# No Cloudflare credentials, production DB usage, or UPDATE execution.
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/foundation-bulk-film-reconciliation.yml"
+      - "scripts/foundation_bulk_film_reconcile.py"
+      - "tests/test_foundation_bulk_film_reconcile.py"
+  workflow_run:
+    workflows: ["Indian Films — Resumable Language Evidence (Source Only)"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: foundation-v2-bulk-film-reconciliation
+  cancel-in-progress: false
+
+jobs:
+  reconcile-existing:
+    if: >-
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 16
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Enforce source-only reconciliation and freeze
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m unittest \
+            tests.test_foundation_bulk_film_reconcile \
+            tests.test_foundation_language_review -v
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          freeze=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert freeze["active"] is True
+          src=Path("scripts/foundation_bulk_film_reconcile.py").read_text()
+          assert "writes_authorized" in src and '"d1_writes":0' in src
+          PY
+      - name: Restore 70,175-title archived production baseline (NO new D1 query)
+        uses: actions/download-artifact@v4
+        with:
+          name: catalogue-quality-v1
+          run-id: 39758915343
+          github-token: ${{ github.token }}
+          path: data/generated/foundation-bulk/snapshot
+      - name: Retrieve latest 26k-identity source-only durable P364 evidence
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p data/generated/foundation-bulk
+          git fetch --no-tags origin refs/heads/automation/india-language-evidence
+          git show FETCH_HEAD:.automation/india-language-evidence.json \
+            > data/generated/foundation-bulk/checkpoint.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload=json.loads(Path("data/generated/foundation-bulk/checkpoint.json").read_text())
+          assert payload["schema"]=="india-film-language-evidence-v1"
+          assert len(payload["records"])>=14674
+          print("CURRENT_DURABLE_SOURCE_RECORDS="+str(len(payload["records"])))
+          PY
+      - name: Join entire frozen film catalogue to source P364 without writing
+        shell: bash
+        run: |
+          set -euo pipefail
+          ROOT=data/generated/foundation-bulk
+          python scripts/foundation_bulk_film_reconcile.py \
+            --movies "$ROOT/snapshot/quality-movies.json" \
+            --catalogue "$ROOT/snapshot/quality-catalogue-movies.json" \
+            --series "$ROOT/snapshot/quality-series.json" \
+            --checkpoint "$ROOT/checkpoint.json" \
+            --out-dir "$ROOT/review"
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path("data/generated/foundation-bulk/review")
+          full=json.loads((p/"all-candidates.json").read_text())
+          plan=json.loads((p/"batch-plan.json").read_text())
+          assert full["frozen_catalogue_movies"]==51872
+          assert full["frozen_catalogue_series"]==18303
+          assert full["correction_candidates"]==len(full["records"])
+          assert plan["correction_candidates"]==full["correction_candidates"]
+          assert sum(x["rows"] for x in plan["sql_batches"])==full["correction_candidates"]
+          assert not full["writes_authorized"] and full["d1_writes"]==0
+          assert plan["writes_executed"]==0 and plan["d1_reads"]==plan["d1_writes"]==0
+          assert plan["batch_size_max"]<=200
+          assert all(x["wikidata_qid"] not in {"Q20967570","Q20649744","Q109519684"}
+                     for x in full["records"])
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as o:
+              o.write("## Data Foundation V2 — ALL existing film P364 reconciliation\n\n")
+              o.write(f"- Film catalogue baseline: **{full['frozen_catalogue_movies']:,}**\n")
+              o.write(f"- Series catalogue baseline (unchanged): **{full['frozen_catalogue_series']:,}**\n")
+              o.write(f"- Durable Wikidata source QIDs checked: **{full['source_checkpoint_records']:,}**\n")
+              o.write(f"- Exact QID/title/year unknown-language film proposals: **{full['correction_candidates']:,}**\n")
+              for table,count in sorted(full["by_table"].items()):
+                  o.write(f"- Existing {table} candidates: **{count:,}**\n")
+              o.write(f"- Conflicting/ambiguous source records held: **{full['source_rule_holds']:,}**\n")
+              o.write(f"- Known disputed film IDs excluded: **{len(full['manual_held'])}**\n")
+              o.write(f"- Guarded batches prepared: **{len(plan['sql_batches'])}** (NOT EXECUTED)\n")
+              o.write("- Cloudflare production D1 reads/writes: **0 / 0**\n")
+              o.write("- All proposed updates require a separately authorized, sealed-backup and fresh preflight production action.\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: foundation-v2-current-bulk-film-language-review
+          path: data/generated/foundation-bulk/review/
+          if-no-files-found: warn
+          retention-days: 30
