@@ -1,0 +1,90 @@
+name: Foundation V2 - Read-only Billing D1 Usage Crosscheck
+
+# MANUAL ONLY: queries billing REST history, not D1 database/SQL.
+# Dedicated Account Billing Read secret; never use Cloudflare D1 token.
+# The data is daily-delayed and NEVER certifies real-time D1 headroom.
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge:
+        description: "Run ONE account Billing Read usage-history query; no D1 operations"
+        required: true
+        type: choice
+        options:
+          - "NO"
+          - "YES_BILLING_READ_ONLY"
+        default: "NO"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-v2-readonly-billing-usage
+  cancel-in-progress: false
+
+jobs:
+  billing-usage-visibility-only:
+    if: ${{ inputs.acknowledge == 'YES_BILLING_READ_ONLY' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Assert frozen catalogue and manual-only read-only billing check
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          freeze=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert freeze["active"] is True and freeze["baseline"]["total"] == 70175
+          wf=Path(".github/workflows/foundation-d1-billing-usage-diagnostic.yml").read_text()
+          head=wf.split("\npermissions:",1)[0]
+          assert "workflow_dispatch:" in head
+          assert not any(l.strip() in ("push:","schedule:","workflow_run:")
+                         for l in head.splitlines())
+          assert "YES_BILLING_READ_ONLY" in head
+          assert "secrets.CLOUDFLARE_API_TOKEN" not in wf
+          PY
+      - name: Run offline historical billing safety tests without credentials
+        run: |
+          set -euo pipefail
+          python -m unittest tests.test_foundation_d1_billing_usage_diagnostic -v
+          python -m py_compile scripts/foundation_d1_billing_usage_diagnostic.py
+      - name: Request bounded Cloudflare billing history only
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_BILLING_READ_TOKEN: ${{ secrets.CLOUDFLARE_BILLING_READ_TOKEN }}
+        run: |
+          set -euo pipefail
+          python -m scripts.foundation_d1_billing_usage_diagnostic \
+            --out data/generated/foundation-v2-billing-visibility/safe-summary.json
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          p=Path("data/generated/foundation-v2-billing-visibility/safe-summary.json")
+          r=json.loads(p.read_text())
+          assert r["production_d1_sql_executed"] is False
+          assert r["production_d1_reads"] == r["production_d1_writes"] == 0
+          assert r["scratch_staging_authorized"] is False
+          assert r["production_corrections_authorized"] is False
+          assert r["current_quota_headroom_verified"] is False
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
+              f.write("## Read-only Cloudflare Billing D1 visibility\n\n")
+              f.write(f"- Status: **{r['status']}**\n")
+              f.write(f"- Billing rows in 7-day request: **{r['billing_row_count']}**\n")
+              f.write(f"- D1 billing rows: **{r['d1_billing_row_count']}**\n")
+              f.write(f"- Latest D1 charge day: **{r['most_recent_d1_charge_period_start_utc']}**\n")
+              f.write("- Cloudflare billing metrics update daily; this is NOT current quota headroom.\n")
+              f.write("- This workflow never uses the production D1 query token, SQL, or staging.\n")
+          PY
+      - name: Archive only sanitized billing visibility (no charge amounts)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-v2-billing-d1-visibility-safe
+          path: data/generated/foundation-v2-billing-visibility/safe-summary.json
+          if-no-files-found: error
+          retention-days: 7
