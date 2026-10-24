@@ -10,6 +10,8 @@ on:
       - ".github/workflows/foundation-remote-staging-d1.yml"
       - "scripts/foundation_remote_account_preflight.py"
       - "tests/test_foundation_remote_account_preflight.py"
+      - "scripts/foundation_d1_analytics_freshness.py"
+      - "tests/test_foundation_d1_analytics_freshness.py"
   workflow_dispatch:
 
 permissions:
@@ -37,6 +39,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest tests.test_foundation_remote_account_preflight -v
+          python -m unittest tests.test_foundation_d1_analytics_freshness -v
           python -m py_compile scripts/foundation_remote_account_preflight.py
       - name: Query ONLY Cloudflare database list and account-wide D1 analytics
         env:
@@ -47,6 +50,9 @@ jobs:
           set -euo pipefail
           python scripts/foundation_remote_account_preflight.py \
             --out data/generated/foundation-d1-account-preflight/safe-summary.json
+          python scripts/foundation_d1_analytics_freshness.py \
+            --preflight data/generated/foundation-d1-account-preflight/safe-summary.json \
+            --out data/generated/foundation-d1-account-preflight/freshness-safe-summary.json
           python - <<'PY'
           import json
           from pathlib import Path
@@ -60,12 +66,23 @@ jobs:
           from scripts.foundation_remote_account_preflight import format_readonly_summary
           with open(__import__("os").environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
               f.write(format_readonly_summary(r))
+              freshness=json.loads(Path("data/generated/foundation-d1-account-preflight/freshness-safe-summary.json").read_text())
+              assert freshness["production_d1_sql_executed"] is False
+              assert freshness["canary_or_production_write_authorized"] is False
+              assert freshness["independent_realtime_quota_verified"] is False
+              f.write("\n## Three-day D1 GraphQL freshness check (same analytics source)\n\n")
+              f.write(f"- Freshness status: **{freshness['status']}**\n")
+              f.write(f"- Current UTC-day groups present: **{freshness['current_day_groups_present']}**\n")
+              f.write(f"- Prior-day groups present: **{freshness['prior_day_groups_present']}**\n")
+              f.write("- Same Cloudflare GraphQL dataset as dashboard; **not** an independent quota verification.\n")
           PY
       - name: Upload safe counts only, never credentials or database UUIDs
         if: success()
         uses: actions/upload-artifact@v4
         with:
           name: foundation-v2-d1-account-readonly-preflight
-          path: data/generated/foundation-d1-account-preflight/safe-summary.json
+          path: |
+            data/generated/foundation-d1-account-preflight/safe-summary.json
+            data/generated/foundation-d1-account-preflight/freshness-safe-summary.json
           if-no-files-found: error
           retention-days: 7
