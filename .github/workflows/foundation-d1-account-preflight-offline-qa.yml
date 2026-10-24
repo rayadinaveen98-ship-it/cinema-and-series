@@ -2,7 +2,7 @@ name: Foundation V2 - D1 Account Gate Offline QA
 
 on:
   push:
-    branches: [main, feat/foundation-v2-remote-account-preflight, fix/foundation-v2-phase1-quota-reporting-and-workflow-inventory, feat/foundation-v2-d1-analytics-freshness-diagnostics]
+    branches: [main, feat/foundation-v2-remote-account-preflight, fix/foundation-v2-phase1-quota-reporting-and-workflow-inventory, feat/foundation-v2-d1-analytics-freshness-diagnostics, feat/foundation-v2-independent-d1-readonly-runtime-probe]
     paths:
       - ".github/workflows/foundation-d1-account-preflight-offline-qa.yml"
       - ".github/workflows/foundation-d1-account-readonly-preflight.yml"
@@ -11,6 +11,9 @@ on:
       - "tests/test_foundation_remote_account_preflight.py"
       - "scripts/foundation_d1_analytics_freshness.py"
       - "tests/test_foundation_d1_analytics_freshness.py"
+      - "scripts/foundation_d1_runtime_readonly_probe.py"
+      - "tests/test_foundation_d1_runtime_readonly_probe.py"
+      - ".github/workflows/foundation-d1-runtime-readonly-probe.yml"
       - "scripts/foundation_workflow_inventory.py"
       - "tests/test_foundation_workflow_inventory.py"
       - ".github/workflows/foundation-remote-worker-binding-canary.yml"
@@ -23,6 +26,9 @@ on:
       - "tests/test_foundation_remote_account_preflight.py"
       - "scripts/foundation_d1_analytics_freshness.py"
       - "tests/test_foundation_d1_analytics_freshness.py"
+      - "scripts/foundation_d1_runtime_readonly_probe.py"
+      - "tests/test_foundation_d1_runtime_readonly_probe.py"
+      - ".github/workflows/foundation-d1-runtime-readonly-probe.yml"
       - "scripts/foundation_workflow_inventory.py"
       - "tests/test_foundation_workflow_inventory.py"
       - ".github/workflows/foundation-remote-worker-binding-canary.yml"
@@ -44,6 +50,7 @@ jobs:
           set -euo pipefail
           python -m unittest tests.test_foundation_remote_account_preflight -v
           python -m unittest tests.test_foundation_d1_analytics_freshness -v
+          python -m unittest tests.test_foundation_d1_runtime_readonly_probe -v
           python -m unittest tests.test_foundation_workflow_inventory -v
           python scripts/foundation_workflow_inventory.py --out data/generated/foundation-workflow-audit/inventory.json
           python -m py_compile scripts/foundation_remote_account_preflight.py

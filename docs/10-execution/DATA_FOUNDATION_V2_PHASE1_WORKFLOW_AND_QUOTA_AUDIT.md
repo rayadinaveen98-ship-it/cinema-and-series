@@ -188,3 +188,54 @@ Cloudflare references:
 - https://developers.cloudflare.com/d1/observability/billing/
 - https://developers.cloudflare.com/d1/observability/metrics-analytics/
 - https://developers.cloudflare.com/d1/platform/pricing/
+
+
+## Phase 1.5 — Manual one-query runtime health check (not quota certification)
+
+On 2026-10-24, the read-only account D1 GraphQL diagnostics still returned
+\`usage_unverified\` for today, but historical days were visible. Cloudflare's
+September 2026 D1 Free-tier enforcement explicitly returns a dedicated error
+when daily read or write limits have actually been reached. A **direct query
+with its own \`meta.rows_read\` and \`meta.rows_written\`** can provide a
+different type of operational evidence — whether one tiny query is currently
+accepted, not what account-wide capacity remains.
+
+A new workflow \`.github/workflows/foundation-d1-runtime-readonly-probe.yml\`
+is **strictly workflow_dispatch-only** with an explicit
+\`YES_ONE_READ_ONLY_D1_QUERY\` choice. It:
+
+1. Verifies the existing 70,175-title production freeze and source script.
+2. Lists account D1 databases via the control plane, requires **exactly one**
+   named production DB with a valid UUID and **no orphaned QA databases**.
+3. Sends **exactly one** Cloudflare REST D1 query:
+   \`SELECT 1 AS probe_ok\` against the UUID-verified existing database.
+   This may consume a small amount of the D1 query allowance, but it is a
+   constant expression with **no table reads, mutations, schema changes,
+   database creation/deletion, or retry**.
+4. Verifies the one-row result and \`meta.rows_written=0\`,
+   \`meta.changes=0\`, \`meta.changed_db=false\`. Any deviation produces
+   \`query_unverified\`, not a pass.
+5. Classifies documented Cloudflare daily read/write-limit errors into
+   \`cloudflare_reported_daily_read_limit\` or
+   \`cloudflare_reported_daily_write_limit\` without printing error bodies,
+   tokens, database/account IDs, URLs or SQL contents. Other errors are
+   \`query_unverified\`.
+6. Uploads **only** bounded safe status fields, query-local row counts and
+   the explicit statement that available account-wide row headroom remains
+   **unknown**.
+
+If successful, this **only** proves a tiny read-only D1 query was permitted at
+that moment; it **cannot** establish sufficient remaining reads/writes for a
+synthetic staging canary, especially alongside other account traffic. It does
+NOT bypass the independent Cloudflare GraphQL headroom gate, authorize any
+scratch D1 creation, or prove that the account has no future quota risk.
+
+Cloudflare docs:
+- https://developers.cloudflare.com/changelog/post/2026-09-01-d1-free-tier-limit-enforcement/
+- https://developers.cloudflare.com/api/resources/d1/subresources/database/methods/query/
+- https://developers.cloudflare.com/d1/observability/metrics-analytics/
+
+The next operational decision remains a separate explicitly authorized
+scratch-only staging request *after* adequate credible quota headroom is
+established. This diagnostic is not automatically dispatched by a PR merge,
+on a schedule, or as a condition watcher. No catalogue mutation is performed.
