@@ -239,3 +239,55 @@ The next operational decision remains a separate explicitly authorized
 scratch-only staging request *after* adequate credible quota headroom is
 established. This diagnostic is not automatically dispatched by a PR merge,
 on a schedule, or as a condition watcher. No catalogue mutation is performed.
+
+
+## Phase 1.6 — Account billing-usage source cross-check (manual, no D1)
+
+Cloudflare introduced the account-level **Billable Usage API** in August
+2026. It comes from Cloudflare's billing/charge-period usage system, unlike
+D1's per-query GraphQL charts. The official documentation explicitly notes
+the API **updates daily**, not in real time; it therefore cannot prove
+current free-tier remaining allowances or authorize a remote canary.
+It also requires account **Billing Read** permission and may lack coverage
+on unsupported billing account types or on a Free account with no reported
+usage rows.
+
+The opt-in manual workflow
+\`.github/workflows/foundation-d1-billing-usage-diagnostic.yml\` calls
+**only** \`GET /client/v4/accounts/{account}/billable-usage\` with a bounded
+recent 7-day date range, using a **dedicated**
+\`CLOUDFLARE_BILLING_READ_TOKEN\` secret, not the D1 API token. On first use
+the owner may create an Account > Billing > Read API token and save it as
+that GitHub Actions secret. A missing or restricted token reports
+\`billing_token_not_configured\` / \`billing_permission_unavailable\`
+without exposing any token, URL, response body, billing account, prices,
+costs, subscription names or raw usage records.
+
+The safe aggregate only reports whether *historical* D1 billing rows exist,
+their count, and the most recent charge-day start. The signal is not an
+accurate row-read/write total unless the units, metric scopes and period
+semantics are independently proved. Empty billing records do **not** mean
+zero D1 usage, zero cost, or exhausted quota.
+
+The workflow requires explicit choice \`YES_BILLING_READ_ONLY\` and has
+**no push, schedule, workflow-run chain, D1 SQL or scratch creation**.
+It always emits:
+\`current_quota_headroom_verified=false\`,
+\`scratch_staging_authorized=false\`,
+\`production_corrections_authorized=false\`.
+
+Evidence limitations:
+- Direct D1 \`SELECT 1\` live query succeeded in
+  [#40063535530](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/40063535530),
+  with query-local **zero writes**. That proves a tiny read is permitted,
+  **not** available daily write headroom.
+- D1 GraphQL showed historical days but no records for today's UTC day,
+  as of [#40062945995](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/40062945995).
+- Even when historical billing rows appear, they may lag. The canary
+  preflight remains fail-closed until current account-wide quota evidence
+  and a separately reviewed safe admission procedure are available.
+
+Cloudflare sources:
+- https://blog.cloudflare.com/billable-usage-api
+- https://developers.cloudflare.com/api/resources/billing/subresources/usage/
+- https://developers.cloudflare.com/billing/understand/billing-permissions/
