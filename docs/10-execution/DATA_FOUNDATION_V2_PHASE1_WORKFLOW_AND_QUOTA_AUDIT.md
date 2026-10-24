@@ -1,0 +1,142 @@
+# Data Foundation V2 — Phase 1: scheduled workflow and quota-reporting audit
+
+**Prepared 2026-10-24. Production catalogue freeze remains active.**
+This report is about **automation visibility and quota reporting**, not a
+production write request or a declaration that Cloudflare quota was exhausted.
+
+## Verified incident
+
+Owner-dispatched scratch D1 canary
+[run 40060701564](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/40060701564)
+passed its local safety checks, then stopped at read-only account preflight.
+The Cloudflare D1 GraphQL daily-usage query returned **zero groups** on
+2026-10-24 UTC. The prior preflight arithmetic printed **100,000 estimated
+writes remaining** by subtracting zero, but correctly refused canary staging
+because no current-day records existed. An empty day does **not** establish
+either unused capacity or exhausted capacity. The remote D1 mode introduced
+in PR #217 was **not executed in that failed run**.
+
+No scratch database was created in that run. No production correction was
+applied.
+
+## Code and reporting correction
+
+`scripts/foundation_remote_account_preflight.py` now retains fail-closed
+behavior while reporting a **three-state, read-only analytics status**:
+
+| Safe status | Interpretation | Staging allowed? |
+| --- | --- | --- |
+| `usage_unverified` | No current UTC-day analytics groups | No |
+| `reported_headroom_insufficient` | Cloudflare-reported daily counts below conservative canary reserve | No |
+| `reported_headroom_sufficient` | Cloudflare-reported daily counts above canary reserve | Provisional prerequisite only |
+
+- A missing daily-usage group yields **null**, not 100,000, for remaining
+  write allowance, and **null**, not 0, for reported usage counters.
+- A low positive balance is distinct from the actual daily limit having been
+  reached; `reported_daily_write_limit_reached` distinguishes the two and
+  is null when usage is unknown.
+- A valid historical/previous UTC-day group is not silently treated as a
+  current-day balance. Malformed, ambiguous or truncated analytics fail closed.
+- GraphQL can lag; even `reported_headroom_sufficient` is **not**
+  real-time proof or authorization for full remote staging/production.
+- The manual synthetic canary presents the exact reason in its job summary
+  and aborts **before scratch database creation** if usage is unverified.
+
+All checks remain isolated from the real production D1. This PR makes
+**no change that bypasses the approval or quota gate**.
+
+## Automated workflow inventory
+
+Credential-free CI on
+[run 40061692161](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/40061692161)
+enumerated **106 files in `.github/workflows`** on its feature-branch
+checkout, with:
+
+- **18** workflows declaring `schedule:`.
+- **3** declaring `workflow_run:`.
+- **61** files referencing a Cloudflare API token.
+- **13** scheduled workflow files referencing that token.
+- **67** requiring follow-up manual source review by conservative static
+  criteria.
+- **0** unrecognized/inline trigger shapes in the current parser.
+
+**Important:** these are code-presence counts, NOT counts of actually
+running jobs or database writers. The inventory cannot prove the absence
+of indirect writes via external scripts or workflow dispatch.
+
+The CI artifact `foundation-v2-workflow-inventory-static` contains every
+workflow filename, trigger, cron expression, direct Cloudflare credential
+reference, explicit freeze-file reference and manual-review flag.
+
+### Actual recent scheduled activity inspected
+
+| Workflow | What the run actually reported |
+| --- | --- |
+| `catalogue-quality-post-write-watch.yml` | Recent scheduled runs reported no recent verified production enrichment write; did not dispatch another quality audit |
+| `india-film-language-source-only.yml` | Collected/checkpointed source-language evidence; reported D1 reads 0 and writes 0 |
+| `foundation-bulk-film-reconciliation.yml` | Workflow-chained, read-only archived-film evidence reconciliation; reported writes 0 |
+| `india-catalogue-autopilot.yml` | Scheduled runs were skipped under the configured job-level freeze |
+
+See [quality watch run 40052295686](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/40052295686),
+[source-only run 40027265241](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/40027265241),
+[reconciliation run 40027682051](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/40027682051),
+and [catalogue autopilot 40016189936](https://github.com/rayadinaveen98-ship-it/cinema-and-series/actions/runs/40016189936).
+
+### Source-code review of all 18 scheduled workflows
+
+The 18 scheduled files are:
+
+- Artwork: `artwork-bulk-500.yml`, `existing-title-artwork-100-pilot.yml`,
+  `vrt-indian-poster-batch-02.yml`.
+- Catalogue/import: `india-catalogue-autopilot.yml`,
+  `series-catalogue.yml`, `wikidata-backfill.yml`, `wikidata-refresh.yml`,
+  `wikipedia-year-catalogue.yml`, `p1-quota-safe-daily-resume.yml`,
+  `p1-background-write-coordinator.yml`,
+  `india-film-language-quota-reset-20261020.yml`.
+- Observability/source: `catalogue-availability-check.yml`,
+  `catalogue-quality-post-write-watch.yml`, `catalogue-quality-v1.yml`,
+  `india-film-language-coverage-audit.yml`,
+  `india-film-language-source-only.yml`, `website-monitor.yml`,
+  `youtube-monitor.yml`.
+
+High-risk historical import and monitor workflows frequently retain cron and
+Cloudflare-token references **even though their execution jobs are currently
+disabled by `if: ${{ false }}`** (job-level freeze). The dated
+2026-10-20 film-language recovery workflow relies on a strict historical UTC
+date gate instead. A later source change or explicit unfreeze could change
+their behavior. Keep their guards in place and review their active job
+conditions before any release.
+
+At the code level, `catalogue-availability-check` polls the public app
+API without Cloudflare credentials; the post-write watcher checks GitHub
+history and may dispatch a **read-only** quality workflow when a verified
+write exists; the Indian-language source collector works without production
+D1 access. Scheduled jobs may consume GitHub Actions minutes or external
+API quotas even with no D1 writes.
+
+The static CI review marks scheduled jobs referencing Cloudflare credentials
+but lacking a direct freeze-file reference for extra human review. This does
+**not** imply such jobs actually write or lack other safety gates; several
+have explicit `if: false` job-level controls.
+
+## Still pending before Phase 2
+
+1. Confirm GraphQL analytics freshness and account scope against another
+   Cloudflare account-facing source when possible. Do not infer today's
+   usage is zero from an empty result.
+2. Check and document the actual live D1 Free-plan quota counters and any
+   relevant reset/analytics lag. If the evidence remains absent, keep the
+   scratch canary blocked.
+3. Reconcile the 67 conservative static review candidates into an explicit
+   approved set of allowed schedules (source-only, public health, read-only)
+   and a set held behind the freeze. This inventory is a starting point,
+   not automatic permission to alter jobs.
+4. After an independent credible quota readiness check, manually run the
+   disposable D1 canary on the current `main` branch once; require
+   positive remote binding/rollback result **and** exact scratch deletion.
+5. Keep the 70,175-title production freeze, backup custody work and
+   explicit owner approval requirements unchanged. The historical encrypted
+   candidate backup artifact expires 2026-11-22.
+
+**No production writes, imports, posters, or UI changes are authorized by
+completing this audit.**
