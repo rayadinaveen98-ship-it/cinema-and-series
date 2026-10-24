@@ -116,6 +116,7 @@ def inspect_billing_data(body: dict, utc_day: str, account_id: str) -> dict:
         start = parse_charge_start_utc(row.get("ChargePeriodStart"))
         end = parse_charge_start_utc(row.get("ChargePeriodEnd"))
         if not (start < end and today-timedelta(days=WINDOW_DAYS+1) <= start
+                and start < today + timedelta(days=1)
                 and end <= today + timedelta(days=2)):
             raise ValueError("Charge period invalid for bounded window")
         if re.search(r"\bD1\b", service_name + " " + service_family, re.IGNORECASE):
