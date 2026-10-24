@@ -99,19 +99,42 @@ def inspect_graphql(payload: dict, today: str) -> dict:
                     and n >= 0 and int(n) == n, "Invalid D1 rows metric")
         rows_read += int(group["sum"]["rowsRead"])
         rows_written += int(group["sum"]["rowsWritten"])
-    remaining_write = max(0, FREE_WRITE_LIMIT - rows_written)
-    remaining_read = max(0, FREE_READ_LIMIT - rows_read)
+    # An empty daily GraphQL response is NOT proof of zero usage. Previous
+    # reporting incorrectly printed a full 100k write allowance in that case.
+    # Preserve a fail-closed decision but mark all derived usage as UNKNOWN.
+    has_usage = bool(groups)
+    remaining_write = (
+        max(0, FREE_WRITE_LIMIT - rows_written) if has_usage else None)
+    remaining_read = (
+        max(0, FREE_READ_LIMIT - rows_read) if has_usage else None)
+    sufficient = bool(
+        has_usage and remaining_read >= MIN_CANARY_READ_HEADROOM
+        and remaining_write >= MIN_CANARY_WRITE_HEADROOM)
+    status = (
+        "usage_unverified" if not has_usage
+        else "reported_headroom_sufficient" if sufficient
+        else "reported_headroom_insufficient")
     return {
-        "utc_day": today, "account_rows_read_reported": rows_read,
-        "account_rows_written_reported": rows_written,
+        "utc_day": today,
+        "quota_status": status,
+        "quota_status_reason": (
+            "no_current_utc_day_usage_groups" if not has_usage
+            else "reported_thresholds_satisfied" if sufficient
+            else "reported_headroom_below_canary_reserve"),
+        "usage_evidence_scope": (
+            "account_d1_graphql_daily_groups_not_realtime"),
+        "account_rows_read_reported": rows_read if has_usage else None,
+        "account_rows_written_reported": rows_written if has_usage else None,
         "free_rows_read_remaining_estimate": remaining_read,
         "free_rows_written_remaining_estimate": remaining_write,
+        "reported_daily_write_limit_reached": (
+            rows_written >= FREE_WRITE_LIMIT if has_usage else None),
+        "reported_daily_read_limit_reached": (
+            rows_read >= FREE_READ_LIMIT if has_usage else None),
         "minimum_canary_read_headroom": MIN_CANARY_READ_HEADROOM,
         "minimum_canary_write_headroom": MIN_CANARY_WRITE_HEADROOM,
-        "usage_data_empty": len(groups) == 0,
-        "reported_usage_headroom_sufficient":
-            bool(groups) and remaining_read >= MIN_CANARY_READ_HEADROOM
-            and remaining_write >= MIN_CANARY_WRITE_HEADROOM,
+        "usage_data_empty": not has_usage,
+        "reported_usage_headroom_sufficient": sufficient,
     }
 
 
@@ -130,7 +153,7 @@ def assess(databases: list[dict], analytics: dict, today: str) -> dict:
         "full_staging_authorized": False,
         "production_corrections_authorized": False,
         "caveats": [
-            "GraphQL analytics may lag live D1 usage",
+            "GraphQL analytics may lag live D1 usage; quota status is provisional",
             "Indexes, migrations and failed/retried operations consume extra rows",
             "Free-plan limits assumed conservatively for all accounts",
             "Manual quota recheck and isolated cleanup are required before staging",
@@ -189,6 +212,9 @@ def main() -> None:
     args.out.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     print("FOUNDATION_REMOTE_ACCOUNT_PREFLIGHT=" + json.dumps({
         "utc_day": today, "databases": report["database_count"],
+        "quota_status": report["quota_status"],
+        "quota_status_reason": report["quota_status_reason"],
+        "usage_evidence_scope": report["usage_evidence_scope"],
         "remaining_estimated_writes": report["free_rows_written_remaining_estimate"],
         "provisional_canary_capacity":
             report["canary_capacity_indicated_not_authorized"],
