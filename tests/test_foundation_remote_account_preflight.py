@@ -128,7 +128,7 @@ class PreflightTests(unittest.TestCase):
         self.assertIn("unknown (no current-day usage evidence)",body)
         self.assertNotIn("100,000",body)
         self.assertIn("No production SQL",body)
-        self.assertIn("\\n",body)
+        self.assertIn(chr(10),body)
 
     def test_readonly_summary_shows_provisional_metric_and_never_authorizes(self):
         report=assess([db("cinema-and-series",1)],analytics(),DAY)
