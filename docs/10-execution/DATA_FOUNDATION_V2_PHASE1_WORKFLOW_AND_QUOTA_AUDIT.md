@@ -140,3 +140,51 @@ have explicit `if: false` job-level controls.
 
 **No production writes, imports, posters, or UI changes are authorized by
 completing this audit.**
+
+
+## Phase 1.4 — Freshness diagnostics for historical Cloudflare D1 analytics
+
+Cloudflare documents the D1 dashboard's charts as being sourced from its
+**GraphQL Analytics API**. Thus, a dashboard screenshot and the GraphQL
+daily-account query are not fully independent sources of quota evidence.
+
+The credential-scoped, **read-only** account-preflight workflow now makes
+one additional GraphQL request covering exactly three UTC calendar days
+(today and the two preceding days), using the account-wide
+\`d1AnalyticsAdaptiveGroups\` dataset. It aggregates reported row reads,
+row writes, read queries and write queries by day into a safe summary;
+database UUIDs, account identifiers and API tokens never enter artifacts.
+The diagnostic compares its current-day aggregate with the existing
+single-day report, with any discrepancy marked inconsistent. Neither
+two matching reports nor a valid historical report proves real-time quota
+headroom: both requests share the same delayed analytics source.
+
+Possible safe statuses:
+
+- \`today_missing_historical_visible\` — prior-day GraphQL records exist;
+  today's metrics have not appeared. **Not evidence of quota exhaustion.**
+- \`all_three_days_missing\` — no records in the three-day window; could
+  indicate idle databases, delayed analytics, dataset visibility or other
+  causes. It does not mean zero usage.
+- \`same_day_snapshots_inconsistent\` — current-day group presence or row
+  totals disagree across two GraphQL requests. Evidence is provisional.
+- \`today_present_same_source_counts_agree\` — current-day totals agree across
+  two GraphQL requests, but **not** an independent quota/billing validation.
+
+The output explicitly says
+\`independent_realtime_quota_verified: false\` and
+\`canary_or_production_write_authorized: false\`. The existing
+\`usage_unverified\` admission block remains unchanged and cannot be bypassed
+by historical data. No D1 SQL is issued.
+
+The follow-up for an independently verified current allowance is to inspect
+Cloudflare's account billing usage together with operational evidence
+(e.g., per-query D1 row counts) and confirm an adequate reserve before
+the owner starts any temporary D1 staging. Billing dashboard counters are
+still not guaranteed real time. No automatic scratch canary or production
+write is triggered here.
+
+Cloudflare references:
+- https://developers.cloudflare.com/d1/observability/billing/
+- https://developers.cloudflare.com/d1/observability/metrics-analytics/
+- https://developers.cloudflare.com/d1/platform/pricing/

@@ -2,13 +2,15 @@ name: Foundation V2 - D1 Account Gate Offline QA
 
 on:
   push:
-    branches: [main, feat/foundation-v2-remote-account-preflight, fix/foundation-v2-phase1-quota-reporting-and-workflow-inventory]
+    branches: [main, feat/foundation-v2-remote-account-preflight, fix/foundation-v2-phase1-quota-reporting-and-workflow-inventory, feat/foundation-v2-d1-analytics-freshness-diagnostics]
     paths:
       - ".github/workflows/foundation-d1-account-preflight-offline-qa.yml"
       - ".github/workflows/foundation-d1-account-readonly-preflight.yml"
       - ".github/workflows/foundation-remote-staging-d1.yml"
       - "scripts/foundation_remote_account_preflight.py"
       - "tests/test_foundation_remote_account_preflight.py"
+      - "scripts/foundation_d1_analytics_freshness.py"
+      - "tests/test_foundation_d1_analytics_freshness.py"
       - "scripts/foundation_workflow_inventory.py"
       - "tests/test_foundation_workflow_inventory.py"
       - ".github/workflows/foundation-remote-worker-binding-canary.yml"
@@ -19,6 +21,8 @@ on:
       - ".github/workflows/foundation-remote-staging-d1.yml"
       - "scripts/foundation_remote_account_preflight.py"
       - "tests/test_foundation_remote_account_preflight.py"
+      - "scripts/foundation_d1_analytics_freshness.py"
+      - "tests/test_foundation_d1_analytics_freshness.py"
       - "scripts/foundation_workflow_inventory.py"
       - "tests/test_foundation_workflow_inventory.py"
       - ".github/workflows/foundation-remote-worker-binding-canary.yml"
@@ -39,6 +43,7 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest tests.test_foundation_remote_account_preflight -v
+          python -m unittest tests.test_foundation_d1_analytics_freshness -v
           python -m unittest tests.test_foundation_workflow_inventory -v
           python scripts/foundation_workflow_inventory.py --out data/generated/foundation-workflow-audit/inventory.json
           python -m py_compile scripts/foundation_remote_account_preflight.py
