@@ -1,0 +1,98 @@
+name: Foundation V2 - Single Read-only D1 Runtime Health
+
+# MANUAL ONLY: one fixed SELECT 1 on the verified existing production D1.
+# This consumes a small query allowance but cannot mutate catalogue.
+# It cannot prove remaining quota, unblock canary or authorize corrections.
+on:
+  workflow_dispatch:
+    inputs:
+      acknowledge:
+        description: "Allow exactly ONE SELECT 1 query on existing production D1"
+        type: choice
+        required: true
+        options:
+          - "NO"
+          - "YES_ONE_READ_ONLY_D1_QUERY"
+        default: "NO"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-v2-single-readonly-runtime
+  cancel-in-progress: false
+
+jobs:
+  single-readonly-d1-query:
+    if: ${{ inputs.acknowledge == 'YES_ONE_READ_ONLY_D1_QUERY' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Enforce frozen catalogue and manual-only SELECT source
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          f=json.loads(Path("ops/data-foundation-v2-freeze.json").read_text())
+          assert f["active"] is True and f["baseline"]["total"] == 70175
+          workflow=Path(".github/workflows/foundation-d1-runtime-readonly-probe.yml").read_text()
+          header=workflow.split("\npermissions:",1)[0]
+          assert "workflow_dispatch:" in header
+          assert not any(x.strip() in ("push:","schedule:","workflow_run:")
+                         for x in header.splitlines())
+          assert "YES_ONE_READ_ONLY_D1_QUERY" in header
+          script=Path("scripts/foundation_d1_runtime_readonly_probe.py").read_text()
+          assert 'SQL = "SELECT 1 AS probe_ok"' in script
+          PY
+      - name: Run offline SQL identity and response-validation tests
+        run: |
+          set -euo pipefail
+          python -m unittest \
+            tests.test_foundation_d1_runtime_readonly_probe \
+            tests.test_foundation_remote_account_preflight -v
+          python -m py_compile scripts/foundation_d1_runtime_readonly_probe.py
+      - name: Install Wrangler without Cloudflare secrets
+        run: npm install --no-audit --no-fund
+      - name: Execute exactly one fixed production D1 read-only health probe
+        env:
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: |
+          set -euo pipefail
+          python -m scripts.foundation_d1_runtime_readonly_probe \
+            --out data/generated/foundation-d1-readonly-runtime/safe-summary.json
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          path=Path("data/generated/foundation-d1-readonly-runtime/safe-summary.json")
+          data=json.loads(path.read_text())
+          assert data["scratch_creation_authorized"] is False
+          assert data["production_corrections_authorized"] is False
+          assert data["account_remaining_reads"] is None
+          assert data["account_remaining_writes"] is None
+          assert data["data_mutation_requested"] is False
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as out:
+              out.write("## One-time D1 runtime read-only health signal\n\n")
+              out.write(f"- Status: **{data['runtime_status']}**\n")
+              out.write(f"- Fixed SELECT 1 succeeded: **{data['query_succeeded']}**\n")
+              out.write(f"- D1 metadata rows read: **{data['d1_rows_read_reported']}**\n")
+              out.write(f"- D1 metadata rows written: **{data['d1_rows_written_reported']}**\n")
+              out.write("- This is one query-health signal, **not** a current account-wide quota balance.\n")
+              out.write("- No staging or production correction authorized.\n")
+          PY
+      - name: Upload safe status only
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-v2-single-readonly-d1-runtime-safe-result
+          path: data/generated/foundation-d1-readonly-runtime/safe-summary.json
+          if-no-files-found: error
+          retention-days: 7
