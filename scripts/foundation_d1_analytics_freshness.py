@@ -95,11 +95,12 @@ def inspect_recent_analytics(payload: dict, today: str, preflight: dict) -> dict
 
     today_data = per_day[today]
     past_present = any(per_day[d]["group_count"] > 0 for d in days[:-1])
-    if today_data["group_count"] == 0:
+    if ((today_data["group_count"] == 0) !=
+            (preflight.get("usage_data_empty") is True)):
+        state = "same_day_snapshots_inconsistent"
+    elif today_data["group_count"] == 0:
         state = ("today_missing_historical_visible" if past_present
                  else "all_three_days_missing")
-    elif preflight.get("usage_data_empty") is True:
-        state = "same_day_snapshots_inconsistent"
     elif (today_data["rows_read"] != preflight.get("account_rows_read_reported")
           or today_data["rows_written"] !=
              preflight.get("account_rows_written_reported")):
