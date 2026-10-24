@@ -161,6 +161,43 @@ def assess(databases: list[dict], analytics: dict, today: str) -> dict:
     }
 
 
+
+def format_readonly_summary(report: dict) -> str:
+    """Human-readable status; never render missing quota metrics as numbers."""
+    require(report.get("read_only_cloudflare_control_plane_and_analytics") is True,
+            "Refusing a non-read-only account status")
+    require(report.get("production_sql_executed") is False and
+            report.get("production_d1_writes") == 0 and
+            report.get("remote_staging_database_created") is False,
+            "Account summary must not claim unsupported writes")
+    status = report.get("quota_status")
+    require(status in ("usage_unverified", "reported_headroom_sufficient",
+                       "reported_headroom_insufficient"), "Invalid quota state")
+
+    def estimate(key: str) -> str:
+        value = report.get(key)
+        require(value is None or
+                (isinstance(value, int) and not isinstance(value, bool)
+                 and value >= 0), "Invalid optional quota estimate")
+        return ("unknown (no current-day usage evidence)" if value is None
+                else format(value, ","))
+
+    return (
+        "## Data Foundation V2 — read-only D1 account preflight\n\n"
+        f"- Databases in account: **{report['database_count']}**\n"
+        f"- Quota status: **{status}**\n"
+        f"- Reason: **{report['quota_status_reason']}**\n"
+        f"- Remaining write estimate (not real-time): "
+        f"**{estimate('free_rows_written_remaining_estimate')}**\n"
+        f"- Remaining read estimate (not real-time): "
+        f"**{estimate('free_rows_read_remaining_estimate')}**\n"
+        f"- Provisional canary headroom: "
+        f"**{report['canary_capacity_indicated_not_authorized']}**\n"
+        "- No production SQL, staging creation, or writes performed.\n"
+        "- GraphQL analytics can lag; no production authorization.\n"
+    )
+
+
 def fetch_database_list() -> list[dict]:
     try:
         proc = subprocess.run(

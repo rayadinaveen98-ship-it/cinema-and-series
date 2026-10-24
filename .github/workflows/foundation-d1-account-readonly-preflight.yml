@@ -57,14 +57,9 @@ jobs:
           assert r["remote_staging_database_created"] is False
           assert r["full_staging_authorized"] is False
           assert r["production_corrections_authorized"] is False
+          from scripts.foundation_remote_account_preflight import format_readonly_summary
           with open(__import__("os").environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as f:
-              f.write("## Data Foundation V2 - read-only Cloudflare account preflight\n\n")
-              f.write(f"- D1 databases in account: **{r['database_count']}**\n")
-              f.write(f"- Remaining Free-plan write estimate: **{r['free_rows_written_remaining_estimate']:,}**\n")
-              f.write(f"- Remaining Free-plan read estimate: **{r['free_rows_read_remaining_estimate']:,}**\n")
-              f.write(f"- Provisional small-canary headroom: **{r['canary_capacity_indicated_not_authorized']}**\n")
-              f.write("- No D1 SQL, staging creation, or production writes.\n")
-              f.write("- Usage analytics may lag; current manual approval remains mandatory.\n")
+              f.write(format_readonly_summary(r))
           PY
       - name: Upload safe counts only, never credentials or database UUIDs
         if: success()
