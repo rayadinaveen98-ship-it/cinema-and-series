@@ -46,7 +46,9 @@ jobs:
           assert not any(l.strip() in ("push:","schedule:","workflow_run:")
                          for l in head.splitlines())
           assert "YES_BILLING_READ_ONLY" in head
-          assert "secrets.CLOUDFLARE_API_TOKEN" not in wf
+          assert ("secrets." + "CLOUDFLARE_API_TOKEN") not in "\n".join(
+              line for line in wf.splitlines() if "assert (" not in line
+          )
           PY
       - name: Run offline historical billing safety tests without credentials
         run: |
