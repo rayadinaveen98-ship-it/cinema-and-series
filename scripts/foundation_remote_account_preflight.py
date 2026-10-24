@@ -179,22 +179,22 @@ def format_readonly_summary(report: dict) -> str:
         require(value is None or
                 (isinstance(value, int) and not isinstance(value, bool)
                  and value >= 0), "Invalid optional quota estimate")
-        return "unknown (no current-day usage evidence)" if value is None \\
-            else format(value, ",")
+        return ("unknown (no current-day usage evidence)" if value is None
+                else format(value, ","))
 
     return (
-        "## Data Foundation V2 — read-only D1 account preflight\\n\\n"
-        f"- Databases in account: **{report['database_count']}**\\n"
-        f"- Quota status: **{status}**\\n"
-        f"- Reason: **{report['quota_status_reason']}**\\n"
+        "## Data Foundation V2 — read-only D1 account preflight\n\n"
+        f"- Databases in account: **{report['database_count']}**\n"
+        f"- Quota status: **{status}**\n"
+        f"- Reason: **{report['quota_status_reason']}**\n"
         f"- Remaining write estimate (not real-time): "
-        f"**{estimate('free_rows_written_remaining_estimate')}**\\n"
+        f"**{estimate('free_rows_written_remaining_estimate')}**\n"
         f"- Remaining read estimate (not real-time): "
-        f"**{estimate('free_rows_read_remaining_estimate')}**\\n"
+        f"**{estimate('free_rows_read_remaining_estimate')}**\n"
         f"- Provisional canary headroom: "
-        f"**{report['canary_capacity_indicated_not_authorized']}**\\n"
-        "- No production SQL, staging creation, or writes performed.\\n"
-        "- GraphQL analytics can lag; no production authorization.\\n"
+        f"**{report['canary_capacity_indicated_not_authorized']}**\n"
+        "- No production SQL, staging creation, or writes performed.\n"
+        "- GraphQL analytics can lag; no production authorization.\n"
     )
 
 
