@@ -74,11 +74,57 @@ class PreflightTests(unittest.TestCase):
         result = inspect_graphql(v, DAY)
         self.assertTrue(result["usage_data_empty"])
         self.assertFalse(result["reported_usage_headroom_sufficient"])
+        self.assertEqual(result["quota_status"], "usage_unverified")
+        self.assertEqual(result["quota_status_reason"], "no_current_utc_day_usage_groups")
+        self.assertIsNone(result["free_rows_written_remaining_estimate"])
+        self.assertIsNone(result["free_rows_read_remaining_estimate"])
+        self.assertIsNone(result["account_rows_written_reported"])
+        self.assertIsNone(result["reported_daily_write_limit_reached"])
+        self.assertFalse(assess([db("cinema-and-series",1)], v, DAY)
+                         ["canary_capacity_indicated_not_authorized"])
 
     def test_quota_nearly_exhausted_rejects_canary_readiness(self):
         value = inspect_graphql(analytics(rows_written=100000 -
                                                   MIN_CANARY_WRITE_HEADROOM + 1), DAY)
         self.assertFalse(value["reported_usage_headroom_sufficient"])
+
+    def test_quota_status_reports_low_headroom_without_claiming_exhaustion(self):
+        near=inspect_graphql(analytics(rows_written=70000),DAY)
+        self.assertEqual(near["quota_status"],"reported_headroom_insufficient")
+        self.assertEqual(near["free_rows_written_remaining_estimate"],30000)
+        self.assertFalse(near["reported_daily_write_limit_reached"])
+        exhausted=inspect_graphql(analytics(rows_written=100000),DAY)
+        self.assertEqual(exhausted["quota_status"],"reported_headroom_insufficient")
+        self.assertEqual(exhausted["free_rows_written_remaining_estimate"],0)
+        self.assertTrue(exhausted["reported_daily_write_limit_reached"])
+        self.assertFalse(exhausted["reported_usage_headroom_sufficient"])
+
+    def test_sufficient_analytics_is_not_live_quota_authorization(self):
+        r=assess([db("cinema-and-series",1)],analytics(),DAY)
+        self.assertEqual(r["quota_status"],"reported_headroom_sufficient")
+        self.assertEqual(r["free_rows_written_remaining_estimate"],99500)
+        self.assertEqual(r["usage_evidence_scope"],
+                         "account_d1_graphql_daily_groups_not_realtime")
+        self.assertFalse(r["full_staging_authorized"])
+        self.assertFalse(r["production_corrections_authorized"])
+
+    def test_multiple_database_usage_groups_are_aggregated(self):
+        sample=analytics(rows_read=123,rows_written=401)
+        sample["data"]["viewer"]["accounts"][0]["d1AnalyticsAdaptiveGroups"].append(
+            {"dimensions":{"date":DAY,"databaseId":
+                "00000000-0000-4000-8000-000000000002"},
+             "sum":{"rowsRead":44,"rowsWritten":98}})
+        r=inspect_graphql(sample,DAY)
+        self.assertEqual(r["account_rows_read_reported"],167)
+        self.assertEqual(r["account_rows_written_reported"],499)
+        self.assertEqual(r["free_rows_written_remaining_estimate"],99501)
+
+    def test_empty_new_utc_day_is_not_reported_as_exhausted(self):
+        sample={"data":{"viewer":{"accounts":[{"d1AnalyticsAdaptiveGroups":[]}]}}}
+        r=inspect_graphql(sample,"2026-10-24")
+        self.assertEqual(r["quota_status"],"usage_unverified")
+        self.assertIsNone(r["reported_daily_write_limit_reached"])
+        self.assertIsNone(r["free_rows_written_remaining_estimate"])
 
     def test_wrong_utc_day_or_truncated_groups_fail_closed(self):
         with self.assertRaisesRegex(ValueError, "UTC day"):

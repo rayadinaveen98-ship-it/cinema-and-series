@@ -74,10 +74,26 @@ jobs:
           from pathlib import Path
           r=json.loads((Path(os.environ["FOUNDATION_ROOT"])/
             "account-safe-summary.json").read_text())
-          assert r["canary_capacity_indicated_not_authorized"] is True
+          status=r["quota_status"]
+          reason=r["quota_status_reason"]
+          assert status in ("usage_unverified",
+                            "reported_headroom_sufficient",
+                            "reported_headroom_insufficient")
           assert r["database_count"] <= 8
           assert r["staging_orphans_found"] == 0
           assert r["production_d1_writes"] == 0
+          summary=os.environ["GITHUB_STEP_SUMMARY"]
+          with open(summary,"a",encoding="utf-8") as f:
+              f.write("## Scratch D1 account preflight (read-only)\n\n")
+              f.write(f"- Cloudflare D1 daily status: **{status}**\n")
+              f.write(f"- Decision reason: **{reason}**\n")
+              f.write(f"- Estimated remaining writes (not realtime): "
+                      f"**{r['free_rows_written_remaining_estimate']}**\n")
+              f.write("- No staging database created or production SQL executed "
+                      "by this preflight.\n")
+          if not r["canary_capacity_indicated_not_authorized"]:
+              raise SystemExit("Scratch canary blocked: " + status + " (" +
+                               reason + "). No database created.")
           PY
       - name: Create disposable D1, test actual remote Worker D1.batch and delete scratch
         env:
