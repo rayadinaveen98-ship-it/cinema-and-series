@@ -81,6 +81,17 @@ def inventory(root: Path) -> dict:
         "cloudflare_credential_references": sum(
             x["cloudflare_token_reference"] for x in items),
         "manual_review_queue_count": sum(x["needs_manual_review"] for x in items),
+        "scheduled_with_cloudflare_token": sum(
+            x["scheduled"] and x["cloudflare_token_reference"]
+            for x in items),
+        "scheduled_with_token_no_explicit_freeze_ref": sorted(
+            x["path"] for x in items if
+            x["scheduled"] and x["cloudflare_token_reference"] and
+            not x["explicit_freeze_file_reference"]),
+        "scheduled_workflow_names": sorted(
+            x["path"] for x in items if x["scheduled"]),
+        "workflow_run_chain_names": sorted(
+            x["path"] for x in items if x["workflow_chained"]),
         "parser_uncertain_count": sum(
             x["trigger_parser_uncertain"] for x in items),
         "no_production_d1_data_access": True,
@@ -105,6 +116,12 @@ def main() -> None:
         "cloudflare_credential_references":
             result["cloudflare_credential_references"],
         "manual_review_queue": result["manual_review_queue_count"],
+        "scheduled_with_cloudflare_token":
+            result["scheduled_with_cloudflare_token"],
+        "scheduled_cloudflare_without_explicit_freeze":
+            result["scheduled_with_token_no_explicit_freeze_ref"],
+        "scheduled_names": result["scheduled_workflow_names"],
+        "workflow_run_chain_names": result["workflow_run_chain_names"],
         "parser_uncertain": result["parser_uncertain_count"],
         "production_d1_queries": 0,
     }))
