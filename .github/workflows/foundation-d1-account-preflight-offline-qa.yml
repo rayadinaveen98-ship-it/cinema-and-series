@@ -62,13 +62,13 @@ jobs:
           from pathlib import Path
           r=json.loads(Path("data/generated/foundation-workflow-audit/inventory.json").read_text())
           with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as summary:
-              summary.write("## Frozen catalogue — read-only workflow inventory\\n\\n")
-              summary.write(f"- Workflows enumerated: **{r['workflows_inspected']}**\\n")
-              summary.write(f"- Scheduled workflows: **{r['scheduled_workflows']}**\\n")
-              summary.write(f"- workflow_run chains: **{r['workflow_run_chains']}**\\n")
-              summary.write(f"- Workflows referencing Cloudflare token: **{r['cloudflare_credential_references']}**\\n")
-              summary.write(f"- Manual review queue: **{r['manual_review_queue_count']}**\\n")
-              summary.write("- This is a **static** audit, not a verified count of production writes.\\n")
+              summary.write("## Frozen catalogue — read-only workflow inventory\n\n")
+              summary.write(f"- Workflows enumerated: **{r['workflows_inspected']}**\n")
+              summary.write(f"- Scheduled workflows: **{r['scheduled_workflows']}**\n")
+              summary.write(f"- workflow_run chains: **{r['workflow_run_chains']}**\n")
+              summary.write(f"- Workflows referencing Cloudflare token: **{r['cloudflare_credential_references']}**\n")
+              summary.write(f"- Manual review queue: **{r['manual_review_queue_count']}**\n")
+              summary.write("- This is a **static** audit, not a verified count of production writes.\n")
           PY
       - name: Archive nonsecret static workflow inventory
         uses: actions/upload-artifact@v4
