@@ -2,13 +2,16 @@ name: Foundation V2 - D1 Account Gate Offline QA
 
 on:
   push:
-    branches: [main, feat/foundation-v2-remote-account-preflight]
+    branches: [main, feat/foundation-v2-remote-account-preflight, fix/foundation-v2-phase1-quota-reporting-and-workflow-inventory]
     paths:
       - ".github/workflows/foundation-d1-account-preflight-offline-qa.yml"
       - ".github/workflows/foundation-d1-account-readonly-preflight.yml"
       - ".github/workflows/foundation-remote-staging-d1.yml"
       - "scripts/foundation_remote_account_preflight.py"
       - "tests/test_foundation_remote_account_preflight.py"
+      - "scripts/foundation_workflow_inventory.py"
+      - "tests/test_foundation_workflow_inventory.py"
+      - ".github/workflows/foundation-remote-worker-binding-canary.yml"
   pull_request:
     paths:
       - ".github/workflows/foundation-d1-account-preflight-offline-qa.yml"
@@ -16,6 +19,9 @@ on:
       - ".github/workflows/foundation-remote-staging-d1.yml"
       - "scripts/foundation_remote_account_preflight.py"
       - "tests/test_foundation_remote_account_preflight.py"
+      - "scripts/foundation_workflow_inventory.py"
+      - "tests/test_foundation_workflow_inventory.py"
+      - ".github/workflows/foundation-remote-worker-binding-canary.yml"
 
 permissions:
   contents: read
@@ -33,6 +39,8 @@ jobs:
         run: |
           set -euo pipefail
           python -m unittest tests.test_foundation_remote_account_preflight -v
+          python -m unittest tests.test_foundation_workflow_inventory -v
+          python scripts/foundation_workflow_inventory.py --out data/generated/foundation-workflow-audit/inventory.json
           python -m py_compile scripts/foundation_remote_account_preflight.py
       - name: Assert remote staging cannot auto-create a database on push
         run: |
@@ -46,3 +54,26 @@ jobs:
           assert "secrets." not in wf.split("    steps:",1)[0]
           print("REMOTE_D1_CANARY_MANUAL_ONLY=pass")
           PY
+
+      - name: Publish workflow inventory counts without secrets
+        run: |
+          python - <<'PY'
+          import json,os
+          from pathlib import Path
+          r=json.loads(Path("data/generated/foundation-workflow-audit/inventory.json").read_text())
+          with open(os.environ["GITHUB_STEP_SUMMARY"],"a",encoding="utf-8") as summary:
+              summary.write("## Frozen catalogue — read-only workflow inventory\\n\\n")
+              summary.write(f"- Workflows enumerated: **{r['workflows_inspected']}**\\n")
+              summary.write(f"- Scheduled workflows: **{r['scheduled_workflows']}**\\n")
+              summary.write(f"- workflow_run chains: **{r['workflow_run_chains']}**\\n")
+              summary.write(f"- Workflows referencing Cloudflare token: **{r['cloudflare_credential_references']}**\\n")
+              summary.write(f"- Manual review queue: **{r['manual_review_queue_count']}**\\n")
+              summary.write("- This is a **static** audit, not a verified count of production writes.\\n")
+          PY
+      - name: Archive nonsecret static workflow inventory
+        uses: actions/upload-artifact@v4
+        with:
+          name: foundation-v2-workflow-inventory-static
+          path: data/generated/foundation-workflow-audit/inventory.json
+          if-no-files-found: error
+          retention-days: 14
