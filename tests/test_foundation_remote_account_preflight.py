@@ -1,7 +1,8 @@
 """Offline negative tests for remote Cloudflare D1 preflight (zero Cloudflare calls)."""
 import unittest
 from scripts.foundation_remote_account_preflight import (
-    assess, inspect_graphql, inspect_list, MIN_CANARY_WRITE_HEADROOM
+    assess, inspect_graphql, inspect_list, MIN_CANARY_WRITE_HEADROOM,
+    format_readonly_summary
 )
 
 DAY = "2026-10-23"
@@ -118,6 +119,23 @@ class PreflightTests(unittest.TestCase):
         self.assertEqual(r["account_rows_read_reported"],167)
         self.assertEqual(r["account_rows_written_reported"],499)
         self.assertEqual(r["free_rows_written_remaining_estimate"],99501)
+
+    def test_readonly_summary_handles_absent_usage_as_unknown(self):
+        empty={"data":{"viewer":{"accounts":[{"d1AnalyticsAdaptiveGroups":[]}]}}}
+        report=assess([db("cinema-and-series",1)],empty,"2026-10-24")
+        body=format_readonly_summary(report)
+        self.assertIn("usage_unverified",body)
+        self.assertIn("unknown (no current-day usage evidence)",body)
+        self.assertNotIn("100,000",body)
+        self.assertIn("No production SQL",body)
+        self.assertIn("\\n",body)
+
+    def test_readonly_summary_shows_provisional_metric_and_never_authorizes(self):
+        report=assess([db("cinema-and-series",1)],analytics(),DAY)
+        body=format_readonly_summary(report)
+        self.assertIn("reported_headroom_sufficient",body)
+        self.assertIn("99,500",body)
+        self.assertIn("not real-time",body)
 
     def test_empty_new_utc_day_is_not_reported_as_exhausted(self):
         sample={"data":{"viewer":{"accounts":[{"d1AnalyticsAdaptiveGroups":[]}]}}}
