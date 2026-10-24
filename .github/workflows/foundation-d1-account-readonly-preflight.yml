@@ -50,7 +50,7 @@ jobs:
           set -euo pipefail
           python scripts/foundation_remote_account_preflight.py \
             --out data/generated/foundation-d1-account-preflight/safe-summary.json
-          python scripts/foundation_d1_analytics_freshness.py \
+          python -m scripts.foundation_d1_analytics_freshness \
             --preflight data/generated/foundation-d1-account-preflight/safe-summary.json \
             --out data/generated/foundation-d1-account-preflight/freshness-safe-summary.json
           python - <<'PY'

@@ -111,6 +111,13 @@ class D1FreshnessTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             inspect_recent_analytics(payload(), TODAY, data)
 
+    def test_github_workflow_uses_python_module_entrypoint(self):
+        from pathlib import Path
+        workflow=Path(".github/workflows/foundation-d1-account-readonly-preflight.yml")
+        source=workflow.read_text(encoding="utf-8")
+        self.assertIn("python -m scripts.foundation_d1_analytics_freshness", source)
+        self.assertNotIn("python scripts/foundation_d1_analytics_freshness.py", source)
+
     def test_http_query_uses_only_graphql_with_account_window(self):
         self.assertIn("d1AnalyticsAdaptiveGroups", QUERY)
         self.assertIn("date_geq: $start", QUERY)
