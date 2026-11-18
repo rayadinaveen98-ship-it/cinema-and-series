@@ -47,3 +47,7 @@
 - Added two original series, Dark (German) and Squid Game (Korean). Migration 0005 introduced an **additive** `series_debuts` table rather than altering existing film-release constraints. The title-details read model includes its separately typed series launches; film On This Day stays theatrical only.
 - Disposable PostgreSQL migration, twice-applied international seed, first-season provenance and zero-current-OTT negative tests passed alongside API/domain and ingestion jobs (CI runs 44263704068/44263714142).
 - Isolated Neon Free: applied migration 0005 and batch 0003, then replayed without changes. Verified totals: 13 published titles, 10 original languages, 11 theatrical original-premiere events and 2 series debuts, 28 source references and 42 field provenance rows. Existing 7-title seed remains intact, no public API or APK.
+
+- Optimized catalogue search from per-title OR filtering to parameterized union of canonical and localized matches; optimized recommendation and related-title scoring with grouped language/genre matches instead of correlated genre counts per title.
+- Added 10k-title rollback-only PostgreSQL load profile; initial SQL execution observations: alias 9.393 to 4.706 ms, recommendation 65.582 to 12.824 ms. Browse and historical-premiere indexes remain efficient.
+- Added full-score semantic parity against reference SQL, self-exclusion, canonical-alias dedup and wildcard literal safety tests. Both CI runs on commit 92ef512f passed all four jobs; Neon hosted 13-title corpus was not modified.

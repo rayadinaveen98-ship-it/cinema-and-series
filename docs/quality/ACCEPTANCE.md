@@ -81,3 +81,10 @@ PROPOSED / APPROVED / IMPLEMENTED / TESTED / BLOCKED / RELEASED are separate lab
 - CI migration 0005 is additive; existing release_events constraints remain unchanged. Idempotency tests apply curated international seed twice and check all identifiers/aliases, 4 film dates, 2 first-season dates, five new original languages, 12 source references, 18 field provenances, 3 authoritative external IDs and zero current offers.
 - Real Neon Free pilot replay confirmed 13 titles (11 movie/2 series), 10 original languages, 11 original theatrical premiere events, 2 series debuts and unchanged existing RRR records.
 - NOT CERTIFIED: live Hono Worker-to-Neon details query, 10k-record load testing, automated operational ingest, authenticated review, Android UI/APK/physical test, and full ~60-title catalogue.
+
+## Stage 01 SQL-scale regression — verified 2026-11-18
+
+- 10,000 synthetic mixed films/series plus 13 curated records on disposable PostgreSQL, ending in transaction rollback; no hosted write.
+- Optimized and reference ranking output must match for every synthetic candidate, preserving language, genre, same-type and source-exclusion semantics.
+- Unicode alias, canonical/alias dedup, literal percent and underscore escaping, browse pagination and film-only original release correctness must pass.
+- Query plans and timings are recorded, but no hard p95 latency target is claimed; live Worker-to-Neon and physical Android remain uncertified.

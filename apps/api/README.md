@@ -36,3 +36,9 @@ Verified live OTT checks, scheduled/automatic ingestion, authenticated staging/r
 ## Film vs series chronology
 
 Title detail reads combine the original `release_events` movie timeline and the new additive `series_debuts` table, returning first-season launches with `kind: "series_debut"`. Movie On This Day continues to require a verified `original_premiere` on a movie, excludes streaming/series launch events and future/current-year events. Historical Netflix series provider names are provenance only, not current OTT offers. This code is typechecked, bundled and contract tested; no public Worker is deployed.
+
+## Stage 01 indexed search and ranking
+
+Search now unions source canonical-title and localization-title matches, de-duplicating a title with several matching aliases and using the existing lowercase trigram indexes for substring matching. User-supplied percent, underscore and backslash characters are escaped as literals. Guest recommendations and More Like This now group matched languages and genres before scoring, preserving language +5, genre +3 per match, same type +2 for related titles, source exclusion and stable ID tie-breaks. Synthetic database SQL parity checks passed against the previous algorithm across 10,000 generated records.
+
+This is database SQL verification, NOT an end-to-end Cloudflare Worker connected to hosted Neon; encrypted connection setup, operational latency and Android testing remain open gates.

@@ -32,3 +32,7 @@ Tests use synthetic fixtures with no credentials. API, ingestion preflight and P
 ## Current stage
 
 Stage 00 documentation is recorded; Stage 01 is in progress. Neon Free pilot holds **13 source-reviewed titles (11 films, 2 series) across 10 original languages**, with migrations 0001–0005 applied. Bulk ingestion, remaining approximately 47 pilot titles, full catalogue certification, native app, public API deployment and APK builds remain gated. See docs/roadmap/ROADMAP.md.
+
+## Stage 01 discovery scaling
+
+The read-only Drizzle catalogue now uses a canonical/alias UNION for title search and grouped language/genre matches for recommendations. In rollback-only disposable PostgreSQL tests, 10,000 synthetic titles exercised these query shapes and a full result-parity regression. No Worker deployment or Android API integration has occurred. Details: docs/verification/2026-11-18-discovery-scale.md.

@@ -42,7 +42,7 @@ Separate launch readiness/security/attribution/budget review and explicit releas
 
 No infrastructure provisioning or paid tier upgrade without a separate authorization. Free tier thresholds must be monitored rather than silently exceeded.
 
-## Latest development checkpoint — 2026-11-18
+## Historical pre-staging checkpoint — archived, superseded below
 
 Implemented and CI-verified: guest-first recommendation API, related-title API, original-premiere earlier-year cutoff and stage-only Wikidata source preflight. Four CI jobs green on commit 5963287f9. Neon read-only pilot confirms RRR relevance score 8 for original language Telugu + action genre; since the pilot contains only RRR, More Like This is honestly empty.
 
@@ -94,3 +94,11 @@ Still outstanding before Stage 01 exit: source entity-to-field mapping + verific
 **Evidence:** CI success on source commit `b7aad0077432631d6bae6ed2ab6d066bf92c956e` (runs 44263704068 and 44263714142), including migration and repeated seed plus verification in disposable PostgreSQL. Applied additive migration and seeded batch on isolated Neon Free, then replayed identical seed with unchanged counts. Neon readback: 13 published titles (11 movies, 2 series), 10 original languages, 11 verified film original theatrical release events, 2 verified historical series launch events, 28 source pointers, 42 field-provenance records, 0 verified current streaming offers, 0 ingestion runs/staging/review rows.
 
 **Stage 01 remains IN PROGRESS:** ~13/60 verified title-count pilot, 47 more needed. Still pending independent catalogue source work, live Worker-to-Neon HTTP, performance benchmarking, authenticated editorial review, source policies and user-facing mobile implementation. Stage 02 is NOT started and no APK exists.
+
+## Discovery performance and parity checkpoint — 2026-11-18
+
+**IMPLEMENTED / TESTED**: 10,000 synthetic titles on disposable PostgreSQL 17, inside a transaction ending in ROLLBACK; 13 curated titles unchanged. Refactored title search to indexed canonical+localization candidate UNION and guest recommendation/related-title scoring to grouped language/genre matches. Strict SQL parity regression compares all scoring outputs (including same-type bonus and excluded-source title), ensures RRR alias deduplication, matches Spirited Away to the Japanese original and treats user percent/underscore searches literally. All four CI jobs passed for commit 92ef512fd87e3813b9b8278ce0d05b2e4ef172be.
+
+Observed CI SQL execution times (baseline to optimized): English-alias search 9.393 to 4.706 ms; guest ranking 65.582 to 12.824 ms; browse 0.147 to 0.079 ms; film original-premiere day 0.154 to 0.171 ms. These are individual synthetic SQL measurements, not p95, device timing or an SLA. The direct read-only Neon catalogue queries also returned correct international aliases, Korean-language thrillers, historical movie anniversaries and original-series debuts.
+
+**Not complete**: approximately 47 additional independently sourced titles, a read-only authenticated Hono/Cloudflare Worker-to-Neon HTTP smoke, realistic international user latency, authenticated editorial review, source-rights checks and Android UI/APK. Remain at Stage 01, draft PR, no main merge or public release. See docs/verification/2026-11-18-discovery-scale.md.
