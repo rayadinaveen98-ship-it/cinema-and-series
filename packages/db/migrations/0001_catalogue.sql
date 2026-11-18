@@ -31,7 +31,7 @@ CREATE TABLE title_localizations (
   language_code text REFERENCES languages(code),
   display_title text NOT NULL CHECK (length(btrim(display_title)) BETWEEN 1 AND 300),
   title_kind text NOT NULL CHECK (title_kind IN ('original','official','alternative','transliterated')),
-  UNIQUE (title_id, language_code, display_title, title_kind)
+  UNIQUE NULLS NOT DISTINCT (title_id, language_code, display_title, title_kind)
 );
 
 CREATE TABLE genres (
@@ -84,7 +84,7 @@ CREATE TABLE release_events (
   verified boolean NOT NULL DEFAULT false,
   source_record_id uuid NOT NULL REFERENCES source_records(id),
   created_at timestamptz NOT NULL DEFAULT now(),
-  UNIQUE (title_id,release_date,event_type,territory_code,source_record_id)
+  UNIQUE NULLS NOT DISTINCT (title_id,release_date,event_type,territory_code,source_record_id)
 );
 
 CREATE TABLE providers (
