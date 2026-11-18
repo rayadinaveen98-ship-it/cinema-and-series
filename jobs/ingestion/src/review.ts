@@ -1,4 +1,6 @@
 import type { Sql,TransactionSql } from 'postgres';
+import { inspectWikidataFields, compareStagedFields } from './field-evidence.ts';
+import type { StagedTitle } from '@cinema/domain';
 
 export type ReviewDecision='qualify'|'reject';
 export interface ReviewCommand {
@@ -59,6 +61,7 @@ export async function reviewInsideTransaction(
     throw new Error('REVIEW_NOT_OPEN');
   }
   const issueCodes=Array.isArray(item.issues)?item.issues:[];
+  let fieldAssessment:ReturnType<typeof compareStagedFields>|null=null;
   if(command.decision==='qualify') {
     if(issueCodes.length!==1 || issueCodes[0]!=='NEW_SOURCE_NEEDS_VERIFICATION') {
       throw new Error('IDENTITY_REVIEW_REQUIRED');
@@ -73,6 +76,18 @@ export async function reviewInsideTransaction(
        item.external_record_id!==expectedId) {
       throw new Error('SOURCE_SNAPSHOT_REQUIRED');
     }
+    const payload=evidence as Record<string,unknown>;
+    const snapshot={
+      sourceId:'wikidata:'+expectedId,
+      canonicalSourceUrl:'https://www.wikidata.org/wiki/'+expectedId,
+      retrievedAt:new Date(item.retrieved_at as string | Date).toISOString(),
+      revisionId:typeof payload.lastrevid==='number' &&
+        Number.isSafeInteger(payload.lastrevid) && payload.lastrevid>0
+        ? payload.lastrevid:null,
+      rawEntity:payload
+    };
+    const proof=inspectWikidataFields(snapshot);
+    fieldAssessment=compareStagedFields(candidate as StagedTitle,proof);
   }
 
   const status=command.decision==='qualify'?'validated' as const:'rejected' as const;
@@ -92,7 +107,16 @@ export async function reviewInsideTransaction(
     stageId:command.stageId,
     action:command.decision,
     reviewerCode:command.reviewerCode,
-    publication:false
+    publication:false,
+    ...(fieldAssessment ? {fieldAssessment:{
+      labelObserved:fieldAssessment.labelObserved,
+      publicationDateMatches:fieldAssessment.publicationDateMatches,
+      sourceLanguageIdsUnmapped:fieldAssessment.sourceLanguageIdsUnmapped,
+      sourceGenreIdsUnmapped:fieldAssessment.sourceGenreIdsUnmapped,
+      issues:fieldAssessment.problems,
+      originalPremiereVerified:false,
+      streamingVerified:false
+    }} : {})
   };
   await tx`
     INSERT INTO catalogue_audit_log(actor_type,action,changes)

@@ -60,6 +60,12 @@ test('qualification requires actual source snapshot and leaves published tables 
   const result=await applyStageReview(sql,review);
   assert.deepEqual(result,{stageId,status:'validated',published:false});
   assert.equal((await status(stageId))?.ticket_status,'resolved');
+  const [auditProof]=await sql`SELECT changes->'fieldAssessment' AS proof FROM catalogue_audit_log
+    WHERE action='stage_quality_decision' AND changes->>'stageId'=${stageId}`;
+  assert.ok(auditProof?.proof);
+  assert.equal(auditProof?.proof.originalPremiereVerified,false);
+  assert.equal(auditProof?.proof.streamingVerified,false);
+  assert.equal(auditProof?.proof.labelObserved,false);
   const afterCounts=await sql`SELECT (SELECT count(*)::integer FROM titles) AS titles,
     (SELECT count(*)::integer FROM release_events) AS releases`;
   assert.deepEqual(afterCounts,before);
