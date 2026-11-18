@@ -18,7 +18,7 @@ Android-first, multilingual cinema and series discovery database. **Foundation s
 - apps/mobile — planned Expo SDK 58 React Native Android application; no UI implementation yet.
 - packages/domain — dependency-free TypeScript validation, identity, historical releases, and recommendation rules.
 - packages/db — normalized PostgreSQL migrations and Drizzle read-model mapping, checked with disposable CI and applied to isolated Neon Free pilot.
-- jobs — curated RRR record, source-validation preflight, and **transactional stage-only PostgreSQL persistence** with review tickets and audit; no network importer or auto-publication.
+- jobs — curated RRR record, indexed title-candidate lookup, bounded source fetch-only client, transactional staging, and internal reviewer decisions; no scheduled import or publication.
 - docs — product contract, architecture, decisions, roadmap, quality gates.
 
 ## Running the initial tests

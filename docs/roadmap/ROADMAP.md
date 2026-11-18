@@ -15,7 +15,7 @@ Stage 01 EXIT requires:
 - approximately 60 manually/source-verified films/series across language groups;
 - duplicate and incorrect-date protection demonstrated;
 - provider terms audited;
-- persisted stage-only transactions, replay/idempotency and rollback certification; COMPLETE for isolated disposable PostgreSQL, with Neon migrations applied; automated fetching, persisted review actions and publishing still pending;
+- persisted stage-only transactions/replay/rollback and internal review decisions COMPLETE for disposable PostgreSQL; Neon migrations applied. Automated fetching-to-staging, authenticated reviewer operations and publication still pending;
 - read-only discovery performance checked on multi-language catalogue, not just the single RRR record.
 
 ## Stage 02 — NOT STARTED
@@ -50,8 +50,18 @@ Still NOT implemented or approved for public launch: transactional persisted imp
 
 ## Transactional staging checkpoint — 2026-11-18
 
-Implemented and CI verified: migration 0003 (unique source+batch key and digest, unique candidate position and review ticket) and migration 0004 (no false retrieval timestamps); Node-only Postgres.js 3.4.9 staging writer. A single database transaction stages source pointers, candidates, review tickets, counters and audit. Tests verify changed-payload rejection, same-batch replay, concurrency, quarantine, rollback and correct JSONB object/array storage. The job fails closed if the candidate catalogue exceeds 500 titles; indexed scoped matching must replace pilot-only full identity lookups before bulk scale.
+Implemented and CI verified: migration 0003 (unique source+batch key and digest, unique candidate position and review ticket) and migration 0004 (no false retrieval timestamps); Node-only Postgres.js 3.4.9 staging writer. A single database transaction stages source pointers, candidates, review tickets, counters and audit. Tests verify changed-payload rejection, same-batch replay, concurrency, quarantine, rollback and correct JSONB object/array storage. Candidate matching now searches indexed Wikidata external IDs, title names and localized aliases instead of loading a fixed 500-record prefix; exceptionally ambiguous sets exceeding 600 matches fail closed. Large-scale query plan/load benchmarks remain pending.
 
 Both migrations applied to isolated Neon Free pilot with all 1 title, 2 release events, 0 staging runs, 0 staging records, and 0 review tickets preserved. No synthetic test data were inserted into Neon. No scheduled importer, UI reviewer approvals, automated publication or public Worker deployed.
 
-Next gates: source-authorized fetch adapter and throttled checkpoints; approval/deny review operations + publication safety tests; 59 additional externally verified records; query/load benchmarking; and read-only API deployment safety review. Keep the PR draft until stage exit.
+Next gates: real source-to-staging mapping with licensed claim-level validation, checkpoint/retry handling; authenticated reviewer operations and a separately reviewed publication pipeline; 59 additional externally verified records; query/load benchmarking; and read-only API deployment safety review. Keep the PR draft until stage exit.
+
+## Source client and editorial review checkpoint — 2026-11-18
+
+Implemented and CI-verified on isolated draft PR: an explicit, fetch-only Wikidata Q-entity client with descriptive identification, 1-second minimum pacing, max 5 source IDs per call, bounded response size, stop-on-429/503 and Retry-After reporting. This client has ONLY been exercised with synthetic/mock HTTP responses; no live Wikimedia fetch or automatic staging occurred.
+
+Scoped canonical candidate lookup uses external ID and pg_trgm title/alias candidate queries, not the old 500-title prefix. Tested in disposable PostgreSQL with >500 existing titles, localized-alias collisions and >600 ambiguous candidates (fail closed). Indexed query plan/performance at 10k+ titles is still unmeasured.
+
+Internal stage-only review operations now atomically reject a candidate or qualify a new one for further editorial processing, with fetched snapshot check, required evidence note, audit record, replay protection, concurrency and forced rollback tests. This is NOT an authenticated human reviewer service, NOT an approval for publication, and NOT publicly deployed. Existing alias/identity collisions cannot be qualified using this simple path.
+
+Still outstanding before Stage 01 exit: source entity-to-field mapping + verification, real authorized rate-limited fetching with checkpoint controls, reviewer authentication/RBAC, audit-safe publication process, verified multilingual pilot of ~60 records, recovery/restore certification and API-to-Neon smoke tests. Android UI/APK remains unstarted.

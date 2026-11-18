@@ -31,3 +31,7 @@ Guest-first preferences remain on-device. No advertising identifier, account ema
 ## Unverified source-pointer rule
 
 A staged source reference is **not** evidence that Wikidata was fetched or independently checked. Staging references store `retrieved_at = NULL`. Only a separately verified fetch may record an actual retrieval timestamp and elevate field verification. Review tickets are mandatory; the staging writer has no publication code path.
+
+## Wikidata source adapter — initial safe scope
+
+Wikidata's linked data interface is treated as raw unverified source evidence only. The tested client explicitly names Q-IDs; performs no discovery crawl or production writes; uses an identifiable User-Agent; sends at most five sequential source requests with conservative one-second gaps; stops on 429/503 and exposes Retry-After. Source references and CC0 facts do not automatically establish that P577 is an original theatrical premiere or that an OTT offer is currently available. Before live usage, review API rate-limit and access policies and configure source-contact/observability appropriately.

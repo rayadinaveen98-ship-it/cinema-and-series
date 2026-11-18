@@ -57,3 +57,10 @@ Neon Free and Workers Free impose strict storage/compute/request limits. Google 
 - Neon project plain-violet-46536395, database cinema_pilot: migrations 0003 and 0004 applied. Verified new indexed constraints and nullable retrieved_at. No staging runs or review tickets were created in Neon. RRR publication and release counts unchanged (1 / 2).
 - Live Neon remote staging transaction and live Worker-to-Neon API were NOT exercised. The staging test proof is on disposable PostgreSQL only.
 - Source pointer semantics: retrieved_at=NULL until actual network source retrieval. This avoids fabricated evidence timestamps.
+
+## Source access and review workflow checkpoint
+
+- Feature commit 3cd961f2312571a69655459fcb92b3d68f29fc3f: scoped external-ID/trigram candidate matching; Q-entity fetch-only client with mock API tests; review-decision writer and disposable concurrency/rollback tests.
+- Both push and PR CI workflows passed on this head (source client mock tests, 11 persistence tests and 7 reviewer tests plus other existing test suites).
+- Published metadata untouched; source client is not connected to a live scheduled importer. A review qualification is **not** publication approval and does not change titles, original releases or streaming offers.
+- Existing Neon pilot migrations 0001–0004 preserved; no new migration required. No paid resource or deployment was created.

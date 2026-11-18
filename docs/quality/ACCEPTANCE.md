@@ -49,3 +49,10 @@ PROPOSED / APPROVED / IMPLEMENTED / TESTED / BLOCKED / RELEASED are separate lab
 - Domain tests prove deterministic ranking, strict calendar cutoff before current year, invalid leap dates, duplicate prevention and OTT exclusion.
 - Ingestion preflight checks canonical source host/ID pair, release dates, media type conflicts and duplicate source rows; every valid record still needs review.
 - CI contains four green jobs: domain-tests, api-contract, disposable-postgres and ingestion-preflight. No cloud Worker-to-Neon runtime check yet.
+
+## Reviewer and source client regression gate — 2026-11-18
+
+- Source adapter tests inject fake HTTP responses: Q-ID validation, rate-limited pacing, 429/503 stop behavior, response-body size/type validation, identity mismatch and descriptive user-agent policy.
+- Scoped title-candidate query tests include >500 existing titles, localized-alias collision, and >600 ambiguous candidates safely failing without partial transaction.
+- Review tests: rejected stage cannot be qualified; fetched source snapshot required for new candidate; ambiguous-alias qualification blocked; concurrent decisions cannot both succeed; forced transaction exception rolls back all review changes and audit; stage quality validation never changes published title tables.
+- Not certified: trusted reviewer authentication or source fetch itself, human fact-review decisions, real-to-live API performance, publication or physical Android use.

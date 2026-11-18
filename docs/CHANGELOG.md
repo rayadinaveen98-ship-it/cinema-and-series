@@ -27,3 +27,8 @@
 - Added migration 0003 for batch/position/review uniqueness and 0004 to distinguish unverified source pointers from actually fetched records (nullable retrieved_at). Both tested on disposable PostgreSQL then applied to isolated Neon Free pilot.
 - All 8 disposable persistence tests passed after fixing a JSONB-string serialization bug; no synthetic staging runs or data were written to hosted Neon. Existing RRR and two release records preserved.
 - No public deployment, APK, paid resource or main-branch merge.
+
+- Replaced 500-title prefix candidate lookup with scoped source-ID/title/alias pg_trgm matching and fail-closed ambiguous-set cap; disposable PostgreSQL tests exceed 500 records and exercise 601 same-title collisions.
+- Added explicit Wikidata read-only source client with mock HTTP tests for identification, pacing, 429/503 backoff, response caps and untrusted entity identity. No real Wikimedia network requests were performed by CI.
+- Added internal review decision state machine: new candidates can qualify for further editorial checking only with a source snapshot; ambiguous matches are blocked; rejection, locks, notes, audit, races and rollback tested. Reviewer authentication and publishing are NOT implemented.
+- Four CI jobs passed on commit 3cd961f2312571a69655459fcb92b3d68f29fc3f; Neon pilot remains unchanged.
