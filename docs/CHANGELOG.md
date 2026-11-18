@@ -37,3 +37,7 @@
 - Added stage quarantine for incoming candidates that self-declare verified historical release events without separate evidence.
 - Added structured field-evidence assessment to the internal nonpublishing quality review audit; synthetic/disposable PostgreSQL checks passed.
 - Current Stage 01 is still gated on independent verified data, source-to-staging operational pipeline, operator authentication and release certification.
+
+- Added six source-reviewed historical film catalogue records across Hindi, Kannada, Telugu, Malayalam and Tamil. Stored 14 additional source pointers and 18 field-level provenance rows; one original-premiere event per film.
+- Ran the deterministic curated seed twice in disposable PostgreSQL CI with count/provenance/language/no-OTT checks. GitHub Actions completed all four jobs successfully for code commit 3e7dd277fdc4ffdd47cf219d31552bb5c4496a6a.
+- Applied the curated six-title seed to isolated Neon Free pilot and reran it to verify hosted idempotence: seven published titles total, seven verified original-premiere events, 16 sources, 24 provenance rows and no invented current OTT availability. Existing RRR unchanged; no automated staging, live API or APK.

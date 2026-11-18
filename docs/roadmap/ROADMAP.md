@@ -73,3 +73,13 @@ Still outstanding before Stage 01 exit: source entity-to-field mapping + verific
 **NOT CERTIFIED:** Editorial assertion that any P577 represents an original theatrical premiere, verified original-language mapping, existing OTT availability, legal reuse beyond scoped source policy, authenticated reviewer identity, working public API, complete multilingual pilot or Android application. Source client tests are mocked, not live.
 
 **CURRENT GATE:** Field-level source *comparison* is ready for further manual verification; independent fact-check and an authenticated publication workflow remain pending.
+
+
+## Curated catalogue batch 0002 — VERIFIED ON 2026-11-18
+
+- Scope: Six additional historical films (Jawan, K.G.F: Chapter 2, Kantara, Pushpa: The Rise, Premalu, Jailer) across hi/kn/te/ml/ta original languages. RRR retained separately.
+- Exact original theatrical release dates verified against studio/distributor and/or contemporary release reporting; original languages corroborated with production/certification records. Evidence URLs and scope in docs/data/MULTILINGUAL_PILOT_0002.md. No dub, territory-OTT, provider offer, artwork or broader filmography claims were imported.
+- Curated SQL: jobs/curated/0002_multilingual_verified.sql; six fixed canonical IDs, additive source references, language tags, one original theatrical premiere each, scoped field_provenance and curation audit. No automatic publisher or remote importer invoked.
+- CI: latest source-code run 44249777228, four jobs successful including PostgreSQL apply-twice idempotence/integrity. Neon Free pilot: applied source-reviewed batch, read back and re-applied it once; counts unchanged after replay.
+- Verified Neon now has 7 published films, 7 verified original-premiere events, 16 source pointers (2 RRR + 14 new), 24 field-provenance rows, 6 new curation audit rows, 0 import runs, 0 staging records, 0 review tickets, and **zero verified live OTT offers**. RRR was preserved.
+- Stage 01 approximately 7/60 manually sourced pilot records (~12%). Remaining: ~53 source-verified multilingual titles, international/series representation, API-on-Neon live integration, verified user workflows, editorial auth, provider rights policy and performance/load certifications. Stage 01 is IN PROGRESS, NOT complete.

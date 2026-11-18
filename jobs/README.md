@@ -7,3 +7,7 @@
 - Re-running the seed was checked for idempotency in the Neon free pilot.
 
 A deterministic, network-free preflight evaluator now exists under jobs/ingestion: strict Wikidata source allowlist, 40-record batches, canonical-identity review and quarantine decisions, no database writes. CI tests passed. A live/automatic importer has NOT been built. Required next work: license-reviewed source connector, bounded paging, checkpointing, normalization, identity review queue, transactional upsert, audit, and rate-limits/backoff. Never treat source text as trusted instructions.
+
+## Curated 0002 — six sourced film records
+
+jobs/curated/0002_multilingual_verified.sql is a manually researched, deterministic, additive source-linked batch for Jawan, K.G.F: Chapter 2, Kantara, Pushpa: The Rise, Premalu and Jailer. CI replays twice on disposable PostgreSQL and validates source/date/language/audit counts. Neon Free was seeded and replayed with matching results. This is **not** the automated Wikidata ingestion route, and no new film was marked as currently streamable. Source evidence: docs/data/MULTILINGUAL_PILOT_0002.md.

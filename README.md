@@ -31,4 +31,4 @@ Tests use synthetic fixtures with no credentials. API, ingestion preflight and P
 
 ## Current stage
 
-Stage 00 documentation is recorded; Stage 01 is in progress. Neon Free pilot holds one curated RRR record, and staging schema migrations 0001–0004 are applied. Bulk ingestion, full catalogue certification, native app, public API deployment and APK builds remain gated. See docs/roadmap/ROADMAP.md.
+Stage 00 documentation is recorded; Stage 01 is in progress. Neon Free pilot now holds seven source-reviewed, published title records across five original languages (RRR plus a six-title curated batch), and staging schema migrations 0001–0004 are applied. Bulk ingestion, remaining 53 pilot titles, full catalogue certification, native app, public API deployment and APK builds remain gated. See docs/roadmap/ROADMAP.md.

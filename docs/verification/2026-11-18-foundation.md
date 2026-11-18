@@ -72,3 +72,11 @@ Neon Free and Workers Free impose strict storage/compute/request limits. Google 
 - Source date parsing: P577 time precision 11 only, Gregorian calendar, valid midnight UTC date; P577 never directly implies original theatrical premiere. Multiple exact P577 dates require review.
 - P364 and P136 property values are returned as unresolved Wikidata Q-IDs, not automatically mapped to ISO language or controlled genre values.
 - No live Wikidata fetch, no Neon staging or title publication, no paid changes, no Worker deployment or APK.
+
+## Multilingual curated seed — source and Neon evidence
+
+- Commit 3e7dd277fdc4ffdd47cf219d31552bb5c4496a6a introduced jobs/curated/0002_multilingual_verified.sql, docs/data/MULTILINGUAL_PILOT_0002.md and packages/db/tests/curated_pilot.integration.sql.
+- Production/distributor sources: Red Chillies/YRF (Jawan, Hindi 2023-09-07); Hombale/CBFC (K.G.F: Chapter 2, Kannada 2022-04-14); Hombale and a producer interview (Kantara, Kannada 2022-09-30); Mythri and Indian Express plus Google Play (Pushpa: The Rise, Telugu 2021-12-17); contemporary Malayalam Indian Express and Times of India reporting (Premalu, Malayalam 2024-02-09); Sun Pictures and CBFC (Jailer, Tamil 2023-08-10).
+- CI push run 44249777228 passed domain-tests, api-contract, ingestion-preflight and disposable-postgres (curated RRR + six-title seed run twice; integrity test passed).
+- Neon pilot was inspected before changes (1 published RRR, two release events, two sources), expanded with six verified historical title seeds, and inspected after an identical replay: 7 published titles, 7 verified original premieres, 16 source pointers, 24 field provenance entries, 6 curation audit rows. Zero import runs, staged records, review tickets and verified current streaming offers. The existing RRR OTT premiere event remains separate from seven original-premiere events.
+- A curated published fact record is not proof of current digital playback availability, nor that a live Worker has served it. No paid services, deployed Worker or Android app were created.

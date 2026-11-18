@@ -66,3 +66,10 @@ PROPOSED / APPROVED / IMPLEMENTED / TESTED / BLOCKED / RELEASED are separate lab
 - Quarantine source-submitted `verified` release events during preflight.
 - Editorial review audit records field comparison without promoting publication status or storing unbounded raw payloads.
 - Production certification requires human/editor identity, direct evidence checks and live remote integration tests.
+
+## Multilingual catalogue pilot gate — 2026-11-18
+
+- Six deterministic, individually source-linked historical films now seeded alongside existing RRR.
+- Disposable PostgreSQL applies RRR seed and six-film seed twice; automated assertions demand 6 additional film IDs, 5 original language codes, 6 unique original premiere dates/events, 14 additional source pointers, 18 new field-provenance rows, 6 audit records and ZERO new streaming offers.
+- Neon Free pilot seed replay left all counts unchanged; historical release type and country are not converted from later dub or OTT releases.
+- Not complete: 53 further title records to reach approximately 60, broader film/series and international languages, on-device API integration, artwork license policy, genre comprehensiveness and production review flows.
