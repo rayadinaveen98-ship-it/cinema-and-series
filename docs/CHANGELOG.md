@@ -54,3 +54,6 @@
 
 - Implemented opt-in credential-gated real Hono/Drizzle neon-http smoke runner and tests for scope validation, required SELECT-only privileges, denial of owner credentials, staging/audit access and dangerous permissions. Standard CI exercises synthetic checks only; run 44269419424 passed all four jobs.
 - Live HTTP-to-Neon certification remains blocked pending founder-approved dedicated cinema_api_reader provisioning; no secrets, database mutations, Worker deployments or APKs were performed.
+
+- Created dedicated SQL-defined `cinema_api_reader` Neon role without a password; applied and verified only 11 catalogue-table SELECT grants, no admin role or private staging/review/audit access, and no DML/DDL privileges. Existing 13-title pilot unchanged.
+- Password activation is a **manual founder prerequisite** using the Neon Console Roles reset control; no secret or production database credential was used in CI. Real Hono-to-Neon smoke and subsequent development remain paused until this is finished.

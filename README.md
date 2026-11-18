@@ -39,4 +39,4 @@ The read-only Drizzle catalogue now uses a canonical/alias UNION for title searc
 
 ## Live API safety gate
 
-The optional in-process Hono-to-Neon smoke runner is implemented and synthetically tested, but has **not yet connected** to the hosted database: the Neon pilot currently lacks a scoped read-only role. Owner credentials are intentionally forbidden, and draft-PR CI receives no secrets. See docs/security/READONLY_NEON_API_SMOKE.md for the explicit permissions and approval gate.
+The optional in-process Hono-to-Neon smoke runner is implemented and synthetically tested, but has **not yet connected** to the hosted database: a dedicated scoped read-only role now exists with verified grants, but its login password has not been activated and a live HTTP smoke has not run. Owner credentials are intentionally forbidden, and draft-PR CI receives no secrets. See docs/security/READONLY_NEON_API_SMOKE.md for the explicit permissions and approval gate.

@@ -99,3 +99,10 @@ Neon Free and Workers Free impose strict storage/compute/request limits. Google 
 - Neon read-only role audit found no cinema_api_reader account (only cinema_owner and platform-admin login roles); no secret was fetched or provisioned. The owner role is not permitted for smoke.
 - IMPORTANT: Real Hono-to-Neon HTTP runner has NOT been executed. No deployed Cloudflare Worker, admin-to-reader credential reconfiguration, new role, Neon data changes, app APK or paid tier. The secure role creation and private credential injection remain a separate founder approval gate.
 - Scope and exact permissions: docs/security/READONLY_NEON_API_SMOKE.md.
+
+## Reader-only SQL role granted — 2026-11-18
+
+- Founder requested completion of the required security gate before unrelated development. On isolated Neon Free project plain-violet-46536395, branch main, database cinema_pilot, created `cinema_api_reader` via SQL with LOGIN **without a password**, NOINHERIT, no admin/create/replication/bypassRLS rights and no memberships. Did NOT use Neon Console/API administrator-role creation.
+- Granted CONNECT to cinema_pilot, USAGE on public, and SELECT on exactly 11 application read-model tables. Checked every public relation: no SELECT on staging_records, review_queue, ingestion_runs, catalogue_audit_log or any non-allowlisted relation. All 11 SELECTs true; all INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER false; CREATE public false.
+- The Neon Roles listing reports authentication_method=no_login until user privately activates/resets the password; no password was generated or retrieved. The founder's **manual** next action is Neon Console > Roles > cinema_api_reader > Reset password. No password/connection string is to be pasted into chat.
+- Before and after role grant, 13 published titles and 0 staging records; no film rows modified. Real Hono-to-Neon HTTP smoke remains NOT CERTIFIED. All further work paused at this explicit prerequisite.
