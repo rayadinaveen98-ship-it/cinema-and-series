@@ -1,15 +1,24 @@
-# Stage-only ingestion preflight
+# Safe ingestion pipeline — persisted stage-only foundation
 
-This is a pure data evaluation module. It has NO network access, hosted database credentials, scheduled runs, automatic publishing or write endpoints.
+## Implemented
 
-Limits: 40 records per batch; only matching canonical Wikidata Q-IDs under https://www.wikidata.org/wiki/Q... are allowed in the initial pilot. Other sources require a separate licensing and adapter review.
+- Pure preflight `src/stage.ts`: bounded 40-record evaluation, source allowlist, ID and alias review, invalid-date quarantine.
+- PostgreSQL writer `src/persist.ts`: exactly one transaction per submitted batch to stage candidates, unresolved review tickets, source identity pointers and audit.
+- Batch idempotency uses sourceKey + batchKey uniqueness plus a SHA-256 digest. Same payload/key replays without duplicate rows or audit. Changed payload with reused key fails.
+- Advisory lock serializes concurrent staging per source; unique DB constraints provide the final race guard.
+- JSONB fields are stored as object/array types using Postgres.js `tx.json`, never as JSON strings.
+- Source records created from staged-only pointers have `retrieved_at = NULL`: do not confuse a submitted URL with a verified network fetch.
+- Fail-closed limits: up to 40 records and 64 KiB serialized batch input; initial canonical identity lookup is capped at 500 titles (safe pilot limit, NOT at-scale design).
+- All new candidate records, including matching IDs and alias conflicts, require review. No publishing is possible through this module.
 
-Every new record requires a human/source-quality review before publication. Existing external-ID matches are reviewed for field conflicts; title aliases never silently merge unrelated records.
+## Verification
 
-Output dispositions: needs_new_review; needs_existing_review; quarantined.
+Run `pnpm --filter @cinema/ingestion run test` and `typecheck` for preflight. Database integration tests run only with `STAGING_TEST_DB_URL` pointing to a local database specifically named `cinema_test`, after migrations 0001–0004:
 
-Testing: pnpm --filter @cinema/ingestion run typecheck && pnpm --filter @cinema/ingestion run test
+    pnpm --filter @cinema/ingestion run test:db
 
-Next gates: authorized bounded fetching, a transactional persisted staging writer, DB idempotency and rollback tests, source rate limiting, checkpoint retries, and publication audit.
+The disposable PostgreSQL CI job verifies replays, immutable audit, duplicate prevention, forced rollback, and concurrent same-key calls. Hosted Neon was only migrated; **no persisted stage requests were executed there**.
 
-Do not treat deterministic in-memory evaluation as persisted import idempotency. No change to the existing Neon pilot is made by this code.
+## Not implemented
+
+No network connector, bulk source fetching, automatic scheduling, reviewer authentication/UI, approval-publishing actions, retries/backoff policy, or live data-change feed. Before actual remote import, add licensed source fetching, checkpointed batches and indexed identity matching (replace pilot-only 500-title lookup). Never expose this writer as an unauthenticated public endpoint.

@@ -22,3 +22,8 @@
 
 - Fixed On This Day to exclude same-year and future original-premiere dates; verified through domain and API tests.
 - All four jobs green on historical-cutoff commit 5963287f9 (CI runs 44237255769, 44237261186). PR remains draft and no new movie records were published.
+
+- Implemented transactional stage-only import persistence using Postgres.js, including source+batch idempotency, payload digest conflict rejection, serialized concurrent replay, quarantine, review queue records and structured JSONB audit.
+- Added migration 0003 for batch/position/review uniqueness and 0004 to distinguish unverified source pointers from actually fetched records (nullable retrieved_at). Both tested on disposable PostgreSQL then applied to isolated Neon Free pilot.
+- All 8 disposable persistence tests passed after fixing a JSONB-string serialization bug; no synthetic staging runs or data were written to hosted Neon. Existing RRR and two release records preserved.
+- No public deployment, APK, paid resource or main-branch merge.

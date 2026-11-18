@@ -49,3 +49,11 @@ Neon Free and Workers Free impose strict storage/compute/request limits. Google 
 - Both GitHub Actions runs 44237255769 and 44237261186 completed successfully for this commit, across the four CI jobs.
 - Historical release time zone is UTC for server cutoff; this is documented as a possible refinement near New Year for user-local calendars.
 - PR remains draft. The hosted Neon pilot is not changed by this gate.
+
+## Transactional persisted staging — verified 2026-11-18
+
+- Repository commit 7c0bc5b290fe3d0f1dc83aeec2835bbdd57879f8: migrations 0003/0004, stage-only Postgres.js writer, disposable integration tests, and correct JSONB object/array encoding.
+- All four CI jobs completed successfully at the latest integration-test run. Staging DB tests cover 8 cases: new candidate+review, idempotent replay, payload mismatch rejection, quarantine, media type conflict, concurrent replay, full transaction rollback and invalid/oversized batch rejection.
+- Neon project plain-violet-46536395, database cinema_pilot: migrations 0003 and 0004 applied. Verified new indexed constraints and nullable retrieved_at. No staging runs or review tickets were created in Neon. RRR publication and release counts unchanged (1 / 2).
+- Live Neon remote staging transaction and live Worker-to-Neon API were NOT exercised. The staging test proof is on disposable PostgreSQL only.
+- Source pointer semantics: retrieved_at=NULL until actual network source retrieval. This avoids fabricated evidence timestamps.

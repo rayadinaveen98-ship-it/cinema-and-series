@@ -6,7 +6,7 @@ Product contract, ADR, architecture flowcharts, data policy, free-tier guardrail
 
 ## Stage 01 — FOUNDATION IMPLEMENTATION IN PROGRESS
 
-Repository conventions, dependency-free domain tests, TypeScript typecheck, SQL migrations 0001/0002 and disposable PostgreSQL integration passed in CI. Neon Free pilot created in aws-ap-southeast-1 (project plain-violet-46536395; database cinema_pilot), with verified migration applied and 1 source-traced RRR sample. Reapplying curated seed created no duplicates. Read-only API is implemented, typechecked, request-tested and Worker bundle-checked, but is NOT DEPLOYED and has not performed a live Worker-to-Neon HTTP query. Mobile is not implemented. Personalized recommendations and similar-title reads have passed CI. The stage-only ingestion evaluator also passed strict TypeScript and quarantine tests; no import runs or published changes were made.
+Repository conventions, dependency-free domain tests, TypeScript typecheck, SQL migrations 0001–0004 and disposable PostgreSQL integration passed in CI. Neon Free pilot created in aws-ap-southeast-1 (project plain-violet-46536395; database cinema_pilot), with verified migration applied and 1 source-traced RRR sample. Reapplying curated seed created no duplicates. Read-only API is implemented, typechecked, request-tested and Worker bundle-checked, but is NOT DEPLOYED and has not performed a live Worker-to-Neon HTTP query. Mobile is not implemented. Personalized recommendations and similar-title reads have passed CI. The stage-only ingestion evaluator also passed strict TypeScript and quarantine tests; no import runs or published changes were made.
 
 Stage 01 EXIT requires:
 - all foundation CI passing and versioned tests;
@@ -15,7 +15,7 @@ Stage 01 EXIT requires:
 - approximately 60 manually/source-verified films/series across language groups;
 - duplicate and incorrect-date protection demonstrated;
 - provider terms audited;
-- stage-only ingestion upgraded to a reviewed, transactional, persisted importer with checkpoint/rollback certification and quotas;
+- persisted stage-only transactions, replay/idempotency and rollback certification; COMPLETE for isolated disposable PostgreSQL, with Neon migrations applied; automated fetching, persisted review actions and publishing still pending;
 - read-only discovery performance checked on multi-language catalogue, not just the single RRR record.
 
 ## Stage 02 — NOT STARTED
@@ -47,3 +47,11 @@ No infrastructure provisioning or paid tier upgrade without a separate authoriza
 Implemented and CI-verified: guest-first recommendation API, related-title API, original-premiere earlier-year cutoff and stage-only Wikidata source preflight. Four CI jobs green on commit 5963287f9. Neon read-only pilot confirms RRR relevance score 8 for original language Telugu + action genre; since the pilot contains only RRR, More Like This is honestly empty.
 
 Still NOT implemented or approved for public launch: transactional persisted importer, human review workflow, approximately 59 more curated pilot titles, direct Hono-to-Neon live integration, large-dataset latency tests, a released Worker and any mobile APK. Do not count Stage 01 as complete or Stage 02 as started.
+
+## Transactional staging checkpoint — 2026-11-18
+
+Implemented and CI verified: migration 0003 (unique source+batch key and digest, unique candidate position and review ticket) and migration 0004 (no false retrieval timestamps); Node-only Postgres.js 3.4.9 staging writer. A single database transaction stages source pointers, candidates, review tickets, counters and audit. Tests verify changed-payload rejection, same-batch replay, concurrency, quarantine, rollback and correct JSONB object/array storage. The job fails closed if the candidate catalogue exceeds 500 titles; indexed scoped matching must replace pilot-only full identity lookups before bulk scale.
+
+Both migrations applied to isolated Neon Free pilot with all 1 title, 2 release events, 0 staging runs, 0 staging records, and 0 review tickets preserved. No synthetic test data were inserted into Neon. No scheduled importer, UI reviewer approvals, automated publication or public Worker deployed.
+
+Next gates: source-authorized fetch adapter and throttled checkpoints; approval/deny review operations + publication safety tests; 59 additional externally verified records; query/load benchmarking; and read-only API deployment safety review. Keep the PR draft until stage exit.

@@ -27,3 +27,7 @@ All initial automated test examples are SYNTHETIC and may not be published to pu
 ## Privacy
 
 Guest-first preferences remain on-device. No advertising identifier, account email or viewing history is collected in this stage. No secrets or production credentials are committed.
+
+## Unverified source-pointer rule
+
+A staged source reference is **not** evidence that Wikidata was fetched or independently checked. Staging references store `retrieved_at = NULL`. Only a separately verified fetch may record an actual retrieval timestamp and elevate field verification. Review tickets are mandatory; the staging writer has no publication code path.
