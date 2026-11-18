@@ -105,12 +105,15 @@ INSERT INTO external_ids(title_id,source_key,external_id,source_record_id) VALUE
 ON CONFLICT DO NOTHING;
 
 INSERT INTO release_events(title_id,release_date,event_type,territory_code,verified,source_record_id,provider_code) VALUES
- ('c73e1404-0000-4000-8000-000000000201','2019-05-30','original_premiere','KR','true','c73e1404-0000-4000-8000-000000002011',NULL),
- ('c73e1404-0000-4000-8000-000000000202','2001-07-20','original_premiere','JP','true','c73e1404-0000-4000-8000-000000002021',NULL),
- ('c73e1404-0000-4000-8000-000000000203','2011-11-02','original_premiere','FR','true','c73e1404-0000-4000-8000-000000002031',NULL),
- ('c73e1404-0000-4000-8000-000000000204','2010-07-16','original_premiere','US','true','c73e1404-0000-4000-8000-000000002041',NULL),
- ('c73e1404-0000-4000-8000-000000000205','2017-12-01','series_debut',NULL,'true','c73e1404-0000-4000-8000-000000002051','netflix'),
- ('c73e1404-0000-4000-8000-000000000206','2021-09-17','series_debut',NULL,'true','c73e1404-0000-4000-8000-000000002061','netflix')
+ ('c73e1404-0000-4000-8000-000000000201','2019-05-30','original_premiere','KR',true,'c73e1404-0000-4000-8000-000000002011',NULL),
+ ('c73e1404-0000-4000-8000-000000000202','2001-07-20','original_premiere','JP',true,'c73e1404-0000-4000-8000-000000002021',NULL),
+ ('c73e1404-0000-4000-8000-000000000203','2011-11-02','original_premiere','FR',true,'c73e1404-0000-4000-8000-000000002031',NULL),
+ ('c73e1404-0000-4000-8000-000000000204','2010-07-16','original_premiere','US',true,'c73e1404-0000-4000-8000-000000002041',NULL)
+ON CONFLICT DO NOTHING;
+
+INSERT INTO series_debuts(title_id,debut_date,provider_code,territory_code,verified,source_record_id) VALUES
+ ('c73e1404-0000-4000-8000-000000000205','2017-12-01','netflix',NULL,true,'c73e1404-0000-4000-8000-000000002051'),
+ ('c73e1404-0000-4000-8000-000000000206','2021-09-17','netflix',NULL,true,'c73e1404-0000-4000-8000-000000002061')
 ON CONFLICT DO NOTHING;
 
 INSERT INTO field_provenance(title_id,field_path,source_record_id,verification_status,reviewed_at) VALUES
@@ -183,23 +186,21 @@ IF NOT EXISTS (
 IF NOT EXISTS (
   SELECT 1 FROM titles t
   JOIN title_languages l ON l.title_id=t.id AND l.relation='original'
-  JOIN release_events e ON e.title_id=t.id AND e.verified=true
+  JOIN series_debuts e ON e.title_id=t.id AND e.verified=true
   WHERE t.id='c73e1404-0000-4000-8000-000000000205'::uuid AND t.original_title='Dark'
     AND t.title_type='series' AND t.publication_status='published'
     AND t.first_release_year=2017 AND l.language_code='de'
-    AND e.release_date='2017-12-01'::date
-    AND e.event_type='series_debut'
+    AND e.debut_date='2017-12-01'::date
     AND e.provider_code='netflix' AND e.territory_code IS NULL
 ) THEN RAISE EXCEPTION 'International title/date mismatch: 205'; END IF;
 IF NOT EXISTS (
   SELECT 1 FROM titles t
   JOIN title_languages l ON l.title_id=t.id AND l.relation='original'
-  JOIN release_events e ON e.title_id=t.id AND e.verified=true
+  JOIN series_debuts e ON e.title_id=t.id AND e.verified=true
   WHERE t.id='c73e1404-0000-4000-8000-000000000206'::uuid AND t.original_title='오징어 게임'
     AND t.title_type='series' AND t.publication_status='published'
     AND t.first_release_year=2021 AND l.language_code='ko'
-    AND e.release_date='2021-09-17'::date
-    AND e.event_type='series_debut'
+    AND e.debut_date='2021-09-17'::date
     AND e.provider_code='netflix' AND e.territory_code IS NULL
 ) THEN RAISE EXCEPTION 'International title/date mismatch: 206'; END IF;
 END

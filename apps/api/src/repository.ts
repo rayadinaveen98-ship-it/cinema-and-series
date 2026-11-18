@@ -3,7 +3,7 @@ import { and, asc, desc, eq, exists, gt, ilike, inArray, lt, ne, or, sql } from 
 import type { SQL } from 'drizzle-orm';
 import {
   titles, titleLanguages, titleGenres, genres, languages, titleLocalizations,
-  releaseEvents, streamingOffers, providers, sourceRecords
+  releaseEvents, seriesDebuts, streamingOffers, providers, sourceRecords
 } from '@cinema/db/schema';
 import { classifyOffer, languageRoot } from '@cinema/domain';
 import type { ViewerPreferences } from '@cinema/domain';
@@ -62,7 +62,7 @@ export class NeonCatalogueRepository implements CatalogueRepository {
     }).from(titles).where(and(eq(titles.id,id),eq(titles.publicationStatus,'published'))).limit(1);
     if (!title) return null;
 
-    const [langRows,genreRows,aliases,releases,offers]=await Promise.all([
+    const [langRows,genreRows,aliases,releases,seriesLaunches,offers]=await Promise.all([
       this.db.select({code:titleLanguages.languageCode}).from(titleLanguages)
         .where(and(eq(titleLanguages.titleId,id),eq(titleLanguages.relation,'original'))),
       this.db.select({code:titleGenres.genreCode}).from(titleGenres)
@@ -78,6 +78,13 @@ export class NeonCatalogueRepository implements CatalogueRepository {
       }).from(releaseEvents)
         .innerJoin(sourceRecords,eq(releaseEvents.sourceRecordId,sourceRecords.id))
         .where(eq(releaseEvents.titleId,id)).orderBy(asc(releaseEvents.releaseDate)),
+      this.db.select({
+        date:seriesDebuts.debutDate,
+        territory:seriesDebuts.territoryCode,provider:seriesDebuts.providerCode,
+        verified:seriesDebuts.verified,sourceUrl:sourceRecords.sourceUrl
+      }).from(seriesDebuts)
+        .innerJoin(sourceRecords,eq(seriesDebuts.sourceRecordId,sourceRecords.id))
+        .where(eq(seriesDebuts.titleId,id)).orderBy(asc(seriesDebuts.debutDate)),
       this.db.select({
         provider:providers.displayName,providerCode:streamingOffers.providerCode,
         territory:streamingOffers.territoryCode,
@@ -95,10 +102,16 @@ export class NeonCatalogueRepository implements CatalogueRepository {
       alternateTitles:aliases.map(x=>({
         title:x.title,language:x.language,kind:x.kind
       })),
-      releases:releases.map(x=>({
-        date:x.date,kind:x.kind,territory:x.territory,
-        provider:x.provider,verified:x.verified,sourceUrl:x.sourceUrl
-      })),
+      releases:[
+        ...releases.map(x=>({
+          date:x.date,kind:x.kind,territory:x.territory,
+          provider:x.provider,verified:x.verified,sourceUrl:x.sourceUrl
+        })),
+        ...seriesLaunches.map(x=>({
+          date:x.date,kind:'series_debut' as const,territory:x.territory,
+          provider:x.provider,verified:x.verified,sourceUrl:x.sourceUrl
+        }))
+      ].sort((a,b)=>a.date.localeCompare(b.date)),
       providers:offers.map(x=>({
         provider:x.provider,territory:x.territory,
         audioLanguage:x.audioLanguage,

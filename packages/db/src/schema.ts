@@ -45,11 +45,21 @@ export const releaseEvents = pgTable('release_events', {
   id: uuid('id').primaryKey(),
   titleId: uuid('title_id').notNull(),
   releaseDate: date('release_date').notNull(),
-  eventType: text('event_type').notNull().$type<'original_premiere'|'territory_theatrical'|'ott_premiere'|'rerelease'|'series_debut'>(),
+  eventType: text('event_type').notNull().$type<'original_premiere'|'territory_theatrical'|'ott_premiere'|'rerelease'>(),
   territoryCode: char('territory_code', { length: 2 }),
   verified: boolean('verified').notNull(),
   sourceRecordId: uuid('source_record_id').notNull(),
   providerCode: text('provider_code'),
+});
+
+export const seriesDebuts = pgTable('series_debuts', {
+  id: uuid('id').primaryKey(),
+  titleId: uuid('title_id').notNull(),
+  debutDate: date('debut_date').notNull(),
+  providerCode: text('provider_code'),
+  territoryCode: char('territory_code', { length: 2 }),
+  verified: boolean('verified').notNull(),
+  sourceRecordId: uuid('source_record_id').notNull(),
 });
 
 export const sourceRecords = pgTable('source_records', {

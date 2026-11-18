@@ -30,7 +30,11 @@ BEGIN
 
   SELECT count(*) INTO total FROM release_events
     WHERE title_id::text LIKE 'c73e1404-0000-4000-8000-%';
-  IF total<>6 THEN RAISE EXCEPTION 'Expected 6 international first-release events, found %',total; END IF;
+  IF total<>4 THEN RAISE EXCEPTION 'Expected 4 international theatrical releases, found %',total; END IF;
+
+  SELECT count(*) INTO total FROM series_debuts
+    WHERE title_id::text LIKE 'c73e1404-0000-4000-8000-%';
+  IF total<>2 THEN RAISE EXCEPTION 'Expected 2 first-season debuts, found %',total; END IF;
 
   SELECT count(*) INTO total FROM release_events e
     JOIN titles t ON t.id=e.title_id
@@ -39,10 +43,10 @@ BEGIN
       AND e.verified=true AND e.provider_code IS NULL;
   IF total<>4 THEN RAISE EXCEPTION 'Film theatrical release classification is incorrect: %',total; END IF;
 
-  SELECT count(*) INTO total FROM release_events e
+  SELECT count(*) INTO total FROM series_debuts e
     JOIN titles t ON t.id=e.title_id
     WHERE e.title_id::text LIKE 'c73e1404-0000-4000-8000-%'
-      AND t.title_type='series' AND e.event_type='series_debut'
+      AND t.title_type='series'
       AND e.verified=true AND e.provider_code='netflix' AND e.territory_code IS NULL;
   IF total<>2 THEN RAISE EXCEPTION 'Netflix series debut classification is incorrect: %',total; END IF;
 

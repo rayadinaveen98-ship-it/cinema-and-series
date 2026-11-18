@@ -1,11 +1,17 @@
--- 0005: accurately represent the first publicly accessible TV season launch.
--- Dark was screened at a festival before Netflix release; Netflix launch must
--- not be classified as the first theatrical film premiere.
--- Additive schema change; does not rewrite any existing title or premiere.
+-- 0005: additive storage for the first publicly available TV season launch.
+-- Keep the original theatrical and regional film release_events check unchanged.
+-- No existing titles, releases, foreign keys or constraints are removed.
 BEGIN;
-ALTER TABLE release_events DROP CONSTRAINT release_events_event_type_check;
-ALTER TABLE release_events ADD CONSTRAINT release_events_event_type_check
-  CHECK (event_type IN (
-    'original_premiere','territory_theatrical','ott_premiere','rerelease','series_debut'
-  ));
+CREATE TABLE series_debuts (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  title_id uuid NOT NULL REFERENCES titles(id) ON DELETE CASCADE,
+  debut_date date NOT NULL,
+  provider_code text REFERENCES providers(code),
+  territory_code char(2) REFERENCES countries(code),
+  verified boolean NOT NULL DEFAULT false,
+  source_record_id uuid NOT NULL REFERENCES source_records(id),
+  created_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE NULLS NOT DISTINCT (title_id,debut_date,provider_code,territory_code,source_record_id)
+);
+CREATE INDEX series_debuts_title_date_idx ON series_debuts(title_id,debut_date);
 COMMIT;

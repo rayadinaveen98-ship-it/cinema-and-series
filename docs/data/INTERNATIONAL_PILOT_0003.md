@@ -58,7 +58,7 @@
 ## Date and publishing safeguards
 
 - **Historical movie anniversaries** use `original_premiere` for first commercial theatrical releases. Earlier film-festival screenings are not automatically classified as original theatrical openings.
-- **Series** use the new `series_debut` event kind for the first publicly accessible season release. Dark's 2017 festival exhibition should not be confused with its December 1 Netflix launch. Squid Game first became available September 17, 2021.
+- **Series** use the new additive `series_debuts` table / `series_debut` API detail kind for the first publicly accessible season release. Dark's 2017 festival exhibition should not be confused with its December 1 Netflix launch. Squid Game first became available September 17, 2021.
 - For Netflix original series, a first-season debut is a historical platform event and is **NOT evidence of present-day territorial playback**. No `streaming_offers` rows are introduced.
 - `first_release_year` reflects the historical original release/public launch, not production/copyright year (Unifrance also displays production year 2010 for Intouchables).
 - Korean and Japanese `original_title` values retain the original script. English names are localized search aliases, never duplicates of the same movie.
