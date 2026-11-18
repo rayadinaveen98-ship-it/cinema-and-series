@@ -38,20 +38,20 @@ export async function readCandidateIdentities(
       SELECT e.title_id AS id
       FROM external_ids e
       WHERE e.source_key='wikidata'
-        AND e.external_id = ANY(${tx.array(ids,'text')}::text[])
+        AND e.external_id = ANY(${tx.array(ids,25)}::text[])
       UNION
       SELECT t.id FROM titles t
-      WHERE lower(t.original_title) = ANY(${tx.array(keys,'text')}::text[])
+      WHERE lower(t.original_title) = ANY(${tx.array(keys,25)}::text[])
       UNION
       SELECT l.title_id AS id FROM title_localizations l
-      WHERE lower(l.display_title) = ANY(${tx.array(keys,'text')}::text[])
+      WHERE lower(l.display_title) = ANY(${tx.array(keys,25)}::text[])
       UNION
       SELECT t.id FROM titles t
-      JOIN unnest(${tx.array(keys,'text')}::text[]) AS q(name)
+      JOIN unnest(${tx.array(keys,25)}::text[]) AS q(name)
         ON lower(t.original_title) % q.name
       UNION
       SELECT l.title_id AS id FROM title_localizations l
-      JOIN unnest(${tx.array(keys,'text')}::text[]) AS q(name)
+      JOIN unnest(${tx.array(keys,25)}::text[]) AS q(name)
         ON lower(l.display_title) % q.name
     )
     SELECT t.id::text AS id, t.title_type AS type,
