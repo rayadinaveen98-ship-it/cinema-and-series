@@ -152,8 +152,8 @@ export async function stageInsideTransaction(
       const canonicalUrl='https://www.wikidata.org/wiki/'+externalId;
       const [added]=await tx`
         INSERT INTO source_records
-          (source_key,external_record_id,source_url,license_code)
-        VALUES ('wikidata',${externalId},${canonicalUrl},'CC0')
+          (source_key,external_record_id,source_url,license_code,retrieved_at)
+        VALUES ('wikidata',${externalId},${canonicalUrl},'CC0',NULL)
         ON CONFLICT (source_key,external_record_id) DO NOTHING
         RETURNING id::text AS id
       `;

@@ -54,6 +54,9 @@ test('transactionally writes new candidate, source provenance and one review ite
   assert.deepEqual(run,{run_status:'completed',n:1,rejected:0});
   const afterRows=await sql`SELECT count(*)::integer AS value FROM titles`;
   assert.equal(before[0]?.value,afterRows[0]?.value,'staging must not publish titles');
+  const [pointer]=await sql`SELECT retrieved_at FROM source_records
+    WHERE source_key='wikidata' AND external_record_id='Q880000101'`;
+  assert.equal(pointer?.retrieved_at,null,'unfetched source pointers must not claim a retrieval time');
 });
 
 test('replaying same key and payload returns identical run without new rows or audit',async()=>{
