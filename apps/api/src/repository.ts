@@ -1,5 +1,5 @@
 import { drizzle } from 'drizzle-orm/neon-http';
-import { and, asc, desc, eq, exists, gt, ilike, inArray, lt, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, gt, inArray, lt, ne, or, sql } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import {
   titles, titleLanguages, titleGenres, genres, languages, titleLocalizations,
@@ -127,23 +127,23 @@ export class NeonCatalogueRepository implements CatalogueRepository {
   }
 
   async search(term: string, limit: number): Promise<TitleSummary[]> {
-    // LIKE wildcards are escaped; SQL values are parameterized by Drizzle.
-    const pattern='%'+term.replace(/[\\%_]/g,(c)=>'\\'+c)+'%';
+    // Indexed candidate lookup instead of scanning all published titles with OR.
+    // The pattern's literal %, _ and backslash are escaped before binding.
+    const pattern='%'+term.replace(/[\\%_]/g,(char)=>'\\'+char)+'%';
+    const matches=sql`(
+      SELECT ${titles.id} FROM ${titles}
+      WHERE lower(${titles.originalTitle}) LIKE lower(${pattern})
+      UNION
+      SELECT ${titleLocalizations.titleId} FROM ${titleLocalizations}
+      WHERE lower(${titleLocalizations.displayTitle}) LIKE lower(${pattern})
+    )`;
     return this.db.select({
       id:titles.id,originalTitle:titles.originalTitle,
       type:titles.titleType,year:titles.firstReleaseYear
     }).from(titles)
       .where(and(
         eq(titles.publicationStatus,'published'),
-        or(
-          ilike(titles.originalTitle,pattern),
-          exists(this.db.select({id:titleLocalizations.titleId})
-            .from(titleLocalizations)
-            .where(and(
-              eq(titleLocalizations.titleId,titles.id),
-              ilike(titleLocalizations.displayTitle,pattern)
-            )))
-        )
+        sql`${titles.id} IN ${matches}`
       ))
       .orderBy(
         sql`CASE WHEN lower(${titles.originalTitle}) = lower(${term}) THEN 0 ELSE 1 END`,
@@ -196,35 +196,49 @@ export class NeonCatalogueRepository implements CatalogueRepository {
     const genreCodes = [...new Set(genresInput.map(x => x.toLowerCase()).filter(Boolean))];
     if (languageCodes.length === 0 && genreCodes.length === 0) return [];
 
-    const hasLanguage = languageCodes.length > 0
-      ? exists(this.db.select({id:titleLanguages.titleId})
-        .from(titleLanguages).where(and(
-          eq(titleLanguages.titleId,titles.id),
-          eq(titleLanguages.relation,'original'),
-          inArray(titleLanguages.languageCode,languageCodes)
-        )))
-      : sql`false`;
+    // Pre-aggregate matches once; do not perform a correlated genre count
+    // per candidate. This preserves the original language/genre scoring.
+    const languageMatches=this.db.select({
+      titleId:titleLanguages.titleId
+    }).from(titleLanguages)
+      .where(and(
+        eq(titleLanguages.relation,'original'),
+        inArray(titleLanguages.languageCode,languageCodes)
+      ))
+      .groupBy(titleLanguages.titleId)
+      .as('matching_languages');
 
-    const genreHits = genreCodes.length > 0
-      ? sql<number>`(SELECT count(*)::integer FROM ${titleGenres}
-         WHERE ${titleGenres.titleId} = ${titles.id}
-           AND ${inArray(titleGenres.genreCode,genreCodes)})`
-      : sql<number>`0`;
+    const genreMatches=this.db.select({
+      titleId:titleGenres.titleId,
+      hits:sql<number>`count(*)::integer`.as('hits')
+    }).from(titleGenres)
+      .where(inArray(titleGenres.genreCode,genreCodes))
+      .groupBy(titleGenres.titleId)
+      .as('matching_genres');
 
-    const hasGenre = sql<boolean>`(${genreHits} > 0)`;
-    const score = sql<number>`(
-       (CASE WHEN ${hasLanguage} THEN 5 ELSE 0 END)
-       + (${genreHits} * 3)
-       + ${preferType ? sql`(CASE WHEN ${titles.titleType} = ${preferType} THEN 2 ELSE 0 END)` : sql`0`}
+    const hasLanguage=sql<boolean>`${languageMatches.titleId} IS NOT NULL`;
+    const genreHits=sql<number>`COALESCE(${genreMatches.hits},0)`;
+    const hasGenre=sql<boolean>`${genreMatches.titleId} IS NOT NULL`;
+    const score=sql<number>`(
+      (CASE WHEN ${hasLanguage} THEN 5 ELSE 0 END)
+      + (${genreHits} * 3)
+      + ${preferType
+        ? sql`(CASE WHEN ${titles.titleType} = ${preferType} THEN 2 ELSE 0 END)`
+        : sql`0`}
     )`;
 
-    const filters = [eq(titles.publicationStatus,'published'),or(hasLanguage,hasGenre)];
-    if (excludeId) filters.push(ne(titles.id,excludeId));
+    const filters=[eq(titles.publicationStatus,'published'),or(hasLanguage,hasGenre)];
+    if(excludeId)filters.push(ne(titles.id,excludeId));
 
-    const rows = await this.db.select({
+    const rows=await this.db.select({
       id:titles.id,originalTitle:titles.originalTitle,type:titles.titleType,
       year:titles.firstReleaseYear,languageHit:hasLanguage,genreHits,score
-    }).from(titles).where(and(...filters)).orderBy(desc(score),asc(titles.id)).limit(limit);
+    }).from(titles)
+      .leftJoin(languageMatches,eq(languageMatches.titleId,titles.id))
+      .leftJoin(genreMatches,eq(genreMatches.titleId,titles.id))
+      .where(and(...filters))
+      .orderBy(desc(score),asc(titles.id))
+      .limit(limit);
 
     return rows.map(x=>({
       id:x.id,originalTitle:x.originalTitle,type:x.type,year:x.year,

@@ -108,12 +108,16 @@ WHERE t.publication_status='published'
              AND l.relation='original' AND l.language_code='ko')
 ORDER BY t.id LIMIT 51;
 
-\echo '[PERF] Search canonical and English alias'
+\echo '[PERF] Optimized indexed canonical and English alias search'
 EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, SUMMARY ON)
 SELECT t.id,t.original_title FROM titles t WHERE t.publication_status='published'
- AND (t.original_title ILIKE '%Synthetic Alias 10000%'
-   OR EXISTS(SELECT 1 FROM title_localizations l WHERE l.title_id=t.id
-             AND l.display_title ILIKE '%Synthetic Alias 10000%'))
+ AND t.id IN (
+   SELECT id FROM titles
+   WHERE lower(original_title) LIKE lower('%Synthetic Alias 10000%')
+   UNION
+   SELECT title_id FROM title_localizations
+   WHERE lower(display_title) LIKE lower('%Synthetic Alias 10000%')
+ )
 ORDER BY CASE WHEN lower(t.original_title)=lower('Synthetic Alias 10000') THEN 0 ELSE 1 END,
          t.original_title,t.id LIMIT 30;
 
@@ -127,19 +131,24 @@ WHERE t.publication_status='published' AND t.title_type='movie'
  AND EXTRACT(MONTH FROM r.release_date)=3 AND EXTRACT(DAY FROM r.release_date)=25
 ORDER BY r.release_date DESC,t.id LIMIT 30;
 
-\echo '[PERF] Guest recommendations source-side scoring'
+\echo '[PERF] Optimized guest ranking with pre-aggregated source matches'
 EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, SUMMARY ON)
 SELECT t.id,t.original_title,
- ((CASE WHEN EXISTS(SELECT 1 FROM title_languages l WHERE l.title_id=t.id
-    AND l.relation='original' AND l.language_code='ko') THEN 5 ELSE 0 END)
-  + (SELECT COUNT(*)::integer*3 FROM title_genres g WHERE g.title_id=t.id
-     AND g.genre_code IN ('thriller','drama'))) AS score
+  (CASE WHEN lm.title_id IS NOT NULL THEN 5 ELSE 0 END)
+  + (COALESCE(gm.hits,0)*3) AS score
 FROM titles t
-WHERE t.publication_status='published' AND
- (EXISTS(SELECT 1 FROM title_languages l WHERE l.title_id=t.id
-    AND l.relation='original' AND l.language_code='ko')
- OR EXISTS(SELECT 1 FROM title_genres g WHERE g.title_id=t.id
-    AND g.genre_code IN ('thriller','drama')))
+LEFT JOIN (
+  SELECT title_id FROM title_languages
+  WHERE relation='original' AND language_code='ko'
+  GROUP BY title_id
+) lm ON lm.title_id=t.id
+LEFT JOIN (
+  SELECT title_id,count(*)::integer AS hits
+  FROM title_genres WHERE genre_code IN ('thriller','drama')
+  GROUP BY title_id
+) gm ON gm.title_id=t.id
+WHERE t.publication_status='published'
+ AND (lm.title_id IS NOT NULL OR gm.title_id IS NOT NULL)
 ORDER BY score DESC,t.id LIMIT 20;
 
 ROLLBACK;
