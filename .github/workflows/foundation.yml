@@ -58,6 +58,6 @@ jobs:
       - name: Install PostgreSQL CLI
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Apply migration to disposable database
-        run: psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0001_catalogue.sql
+        run: psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0001_catalogue.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0002_provider_release_link.sql
       - name: Verify integrity with synthetic records
         run: psql -v ON_ERROR_STOP=1 -f packages/db/tests/catalogue.integration.sql
