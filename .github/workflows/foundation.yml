@@ -84,3 +84,21 @@ jobs:
         run: pnpm --filter @cinema/api run test
       - name: Worker bundle dry-run (no deployment)
         run: pnpm --filter @cinema/api run build:check
+
+  ingestion-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install zero-credential workspace packages
+        run: pnpm install --no-frozen-lockfile
+      - name: Typecheck pure staging preflight
+        run: pnpm --filter @cinema/ingestion run typecheck
+      - name: Verify quarantine, identity, batch limits
+        run: pnpm --filter @cinema/ingestion run test
