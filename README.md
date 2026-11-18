@@ -14,10 +14,10 @@ Android-first, multilingual cinema and series discovery database. **Foundation s
 
 ## Repository layout
 
-- apps/api — planned Hono Cloudflare Worker; currently health-only scaffold.
+- apps/api — Hono/Drizzle read-only pilot API for browsing, search, details and historical dates. Worker bundle verified but NOT deployed.
 - apps/mobile — planned Expo SDK 58 React Native Android application; no UI implementation yet.
 - packages/domain — dependency-free TypeScript validation, identity, historical releases, and recommendation rules.
-- packages/db — normalized PostgreSQL migrations 0001/0002, verified in disposable CI and applied to isolated Neon free pilot.
+- packages/db — normalized PostgreSQL migrations and Drizzle read-model mapping, checked with disposable CI and applied to isolated Neon Free pilot.
 - jobs — curated source-traceable RRR pilot record; automated bounded ingestion still pending.
 - docs — product contract, architecture, decisions, roadmap, quality gates.
 

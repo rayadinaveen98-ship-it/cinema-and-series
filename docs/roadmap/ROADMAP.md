@@ -6,7 +6,7 @@ Product contract, ADR, architecture flowcharts, data policy, free-tier guardrail
 
 ## Stage 01 — FOUNDATION IMPLEMENTATION IN PROGRESS
 
-Repository conventions, dependency-free domain tests, TypeScript typecheck, SQL migrations 0001/0002 and disposable PostgreSQL integration passed in CI. Neon Free pilot created in aws-ap-southeast-1 (project plain-violet-46536395; database cinema_pilot), with verified migration applied and 1 source-traced RRR sample. Reapplying curated seed created no duplicates. API and mobile remain scaffolds only.
+Repository conventions, dependency-free domain tests, TypeScript typecheck, SQL migrations 0001/0002 and disposable PostgreSQL integration passed in CI. Neon Free pilot created in aws-ap-southeast-1 (project plain-violet-46536395; database cinema_pilot), with verified migration applied and 1 source-traced RRR sample. Reapplying curated seed created no duplicates. Read-only API is implemented, typechecked, request-tested and Worker bundle-checked, but is NOT DEPLOYED and has not performed a live Worker-to-Neon HTTP query. Mobile is not implemented.
 
 Stage 01 EXIT requires:
 - all foundation CI passing and versioned tests;

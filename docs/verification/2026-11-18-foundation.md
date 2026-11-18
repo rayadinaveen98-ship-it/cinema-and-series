@@ -25,3 +25,10 @@ Review PR: https://github.com/rayadinaveen98-ship-it/cinema-and-series/pull/1
 
 ## Risk note
 Neon Free and Workers Free impose strict storage/compute/request limits. Google Play registration can require a separate one-time fee (currently USD 25 if no existing developer account); Android sideload testing does not require a Play Store listing. Any monetized launch is a separate approval gate.
+
+## Stage 01 API contract checkpoint
+
+- Read-only Hono/Drizzle API on draft PR #1. Paths: /v1/health, /v1/titles, /v1/titles/:id, /v1/search, /v1/releases/on-this-day, /v1/languages, /v1/genres.
+- Successful CI job set on commit 6e996759999d8c77459608acb9afb0c92226d1af: API TypeScript, synthetic HTTP tests, Wrangler dry-run, domain tests/typecheck, and disposable PostgreSQL migration/integrity.
+- No real Worker-to-Neon HTTP request has been verified; only the migration and direct Neon SQL proof are verified.
+- A placeholder recommendation method was removed rather than returning silently empty recommendations. That API is still pending.

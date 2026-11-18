@@ -11,3 +11,7 @@
 - Added 1 curated source-traceable RRR film with 2 release events, 2 source records and 6 field-evidence links. Duplicate seed rerun verified idempotent.
 - Historical query returns original premiere 2022-03-25 and excludes OTT premiere 2022-05-20 from that calendar.
 - No Cloudflare Worker deployed, no app UI/APK built and no paid services provisioned.
+
+- Implemented Hono/Drizzle read-only API: title listing, details, search, verified original-release history, language and genre directories. API request tests, typecheck and Worker dry-run passed.
+- Fixed pnpm CI workspace setup and Node 22 TypeScript strip-mode compatibility; all latest jobs passed.
+- No Cloudflare Worker deployment, no Android UI/APK, no paid services.
