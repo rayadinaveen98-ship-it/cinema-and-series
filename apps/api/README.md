@@ -30,4 +30,9 @@ Never embed DATABASE_URL in the Android app or version control. For a future hos
 
 ## Incomplete
 
-Verified live OTT checks, scheduled/automatic ingestion, write persistence for staging, request rate limiting, cloud integration testing, load benchmarks and Android app remain unimplemented. No APK exists.
+Verified live OTT checks, scheduled/automatic ingestion, authenticated staging/review endpoints, request rate limiting, hosted Worker-to-Neon integration, load benchmarks and Android app remain unimplemented. No APK exists.
+
+
+## Film vs series chronology
+
+Title detail reads combine the original `release_events` movie timeline and the new additive `series_debuts` table, returning first-season launches with `kind: "series_debut"`. Movie On This Day continues to require a verified `original_premiere` on a movie, excludes streaming/series launch events and future/current-year events. Historical Netflix series provider names are provenance only, not current OTT offers. This code is typechecked, bundled and contract tested; no public Worker is deployed.

@@ -6,7 +6,7 @@ Product contract, ADR, architecture flowcharts, data policy, free-tier guardrail
 
 ## Stage 01 — FOUNDATION IMPLEMENTATION IN PROGRESS
 
-Repository conventions, dependency-free domain tests, TypeScript typecheck, SQL migrations 0001–0004 and disposable PostgreSQL integration passed in CI. Neon Free pilot created in aws-ap-southeast-1 (project plain-violet-46536395; database cinema_pilot), with verified migration applied and 1 source-traced RRR sample. Reapplying curated seed created no duplicates. Read-only API is implemented, typechecked, request-tested and Worker bundle-checked, but is NOT DEPLOYED and has not performed a live Worker-to-Neon HTTP query. Mobile is not implemented. Personalized recommendations and similar-title reads have passed CI. The stage-only ingestion evaluator also passed strict TypeScript and quarantine tests; no import runs or published changes were made.
+Repository conventions, dependency-free domain tests, TypeScript typecheck, SQL migrations 0001–0005 and disposable PostgreSQL integration passed in CI. Neon Free pilot created in aws-ap-southeast-1 (project plain-violet-46536395; database cinema_pilot), with migrations 0001–0005 applied and a verified 13-title pilot (11 films and 2 series). Reapplying curated seed created no duplicates. Read-only API is implemented, typechecked, request-tested and Worker bundle-checked, but is NOT DEPLOYED and has not performed a live Worker-to-Neon HTTP query. Mobile is not implemented. Personalized recommendations and similar-title reads have passed CI. The stage-only ingestion evaluator also passed strict TypeScript and quarantine tests; no import runs or published changes were made.
 
 Stage 01 EXIT requires:
 - all foundation CI passing and versioned tests;
@@ -83,3 +83,14 @@ Still outstanding before Stage 01 exit: source entity-to-field mapping + verific
 - CI: latest source-code run 44249777228, four jobs successful including PostgreSQL apply-twice idempotence/integrity. Neon Free pilot: applied source-reviewed batch, read back and re-applied it once; counts unchanged after replay.
 - Verified Neon now has 7 published films, 7 verified original-premiere events, 16 source pointers (2 RRR + 14 new), 24 field-provenance rows, 6 new curation audit rows, 0 import runs, 0 staging records, 0 review tickets, and **zero verified live OTT offers**. RRR was preserved.
 - Stage 01 approximately 7/60 manually sourced pilot records (~12%). Remaining: ~53 source-verified multilingual titles, international/series representation, API-on-Neon live integration, verified user workflows, editorial auth, provider rights policy and performance/load certifications. Stage 01 is IN PROGRESS, NOT complete.
+
+
+## International film + first-series checkpoint — 2026-11-18
+
+**IMPLEMENTED, TESTED, AND SEEDED IN ISOLATED NEON FREE:** batch 0003 adds four sourced theatrical films (Parasite, Spirited Away, The Intouchables, Inception) and two sourced first-season launches (Dark, Squid Game). Original Korean/Japanese titles are preserved in their original scripts, with English search aliases. Sources include Korean Film Council, Studio Ghibli, Unifrance, American Film Institute, The Numbers and Netflix announcements; details in `docs/data/INTERNATIONAL_PILOT_0003.md`.
+
+**Schema:** migration 0005 adds a `series_debuts` table, without dropping or modifying the existing film-release constraint. Film `original_premiere` records remain solely in `release_events`. The title-details API combines them with `series_debuts` using the distinct response kind `series_debut`. The movie anniversary query explicitly requires type=movie and original_premiere. The Netflix first-season launch does NOT create a current streaming offer.
+
+**Evidence:** CI success on source commit `b7aad0077432631d6bae6ed2ab6d066bf92c956e` (runs 44263704068 and 44263714142), including migration and repeated seed plus verification in disposable PostgreSQL. Applied additive migration and seeded batch on isolated Neon Free, then replayed identical seed with unchanged counts. Neon readback: 13 published titles (11 movies, 2 series), 10 original languages, 11 verified film original theatrical release events, 2 verified historical series launch events, 28 source pointers, 42 field-provenance records, 0 verified current streaming offers, 0 ingestion runs/staging/review rows.
+
+**Stage 01 remains IN PROGRESS:** ~13/60 verified title-count pilot, 47 more needed. Still pending independent catalogue source work, live Worker-to-Neon HTTP, performance benchmarking, authenticated editorial review, source policies and user-facing mobile implementation. Stage 02 is NOT started and no APK exists.

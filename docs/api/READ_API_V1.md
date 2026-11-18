@@ -38,3 +38,8 @@ No live Hono-to-Neon connection, rate-limit load test, cache invalidation, user 
 ## Historical year boundary
 
 On This Day excludes original premiere events in the current calendar year or any future year. The read request supplies only month/day; the server sets a current UTC year cutoff. This is an intentional first-version definition of **past years**. A locale-aware historical-year rule may be refined before public launch, but future scheduled premieres must never appear as already-released historical titles.
+
+
+## Series first-season launch representation — 2026-11-18
+
+`GET /v1/titles/:id` includes a `releases` item with `kind: "series_debut"` for sourced original series launch dates from the additive `series_debuts` table. Such an item may have historical `provider: "netflix"` and `territory: null` for a global initial release; this must never be converted into a present-day streaming availability claim. `GET /v1/releases/on-this-day` currently returns **only verified movie original-premiere events** (before current UTC year). Series anniversaries require their own explicit filter/view in a later separately reviewed stage. The source-code API was typechecked and worker dry-run bundled in CI; a live hosted Worker-to-Neon HTTP check is still pending.

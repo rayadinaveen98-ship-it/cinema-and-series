@@ -23,3 +23,10 @@ Never run destructive SQL against this pilot without explicit approval. Future m
 0004 allows NULL source_records.retrieved_at so an unverified candidate reference is not falsely marked as fetched. The new stage writer explicitly stores NULL; existing RRR evidence timestamps were preserved. CI validates disposable PostgreSQL migration and staging transaction safety.
 
 Manual Neon migration note: do not split SQL on semicolons without a SQL-aware parser; semicolons inside SQL quoted comments must remain intact. The first attempted 0004 transaction failed and rolled back; a correctly parsed two-statement transaction applied successfully. Verified counts: 1 title, 2 release events, 0 ingestion runs, 0 staged records, 0 review tickets.
+
+
+## 0005 series_debuts (additive, Neon Free applied)
+
+Added a `series_debuts` relation and title-date index for sourced historical first-season public launches. A previous constraint-altering proposal was replaced before hosted execution; the final migration does not drop or modify any existing release_events constraints/data. The Hono/Drizzle detail read model combines legacy film events and series debuts, exposing the distinct `series_debut` kind, while the theatrical movie anniversary read query excludes all series launches.
+
+CI migrates 0001–0005 and applies international seed 0003 twice. Hosted Neon Free: migration and batch applied, replayed and read back. Current verified totals: 13 published titles (11 movies, 2 series), 10 original languages, 11 verified theatrical movie premieres, 2 series debut events, 28 source references, 42 field-provenance rows, zero verified current streaming offers. Hosted Worker-to-Neon integration and volume benchmarks still pending.

@@ -11,3 +11,8 @@ A deterministic, network-free preflight evaluator now exists under jobs/ingestio
 ## Curated 0002 — six sourced film records
 
 jobs/curated/0002_multilingual_verified.sql is a manually researched, deterministic, additive source-linked batch for Jawan, K.G.F: Chapter 2, Kantara, Pushpa: The Rise, Premalu and Jailer. CI replays twice on disposable PostgreSQL and validates source/date/language/audit counts. Neon Free was seeded and replayed with matching results. This is **not** the automated Wikidata ingestion route, and no new film was marked as currently streamable. Source evidence: docs/data/MULTILINGUAL_PILOT_0002.md.
+
+
+## Curated 0003 — international film and series pilot
+
+`jobs/curated/0003_international_series_verified.sql` adds 4 historical international films and 2 first-season Netflix original series launches, plus original-language data, English search aliases and source-linked provenance. The series debuts are stored in a separate, additive `series_debuts` table (migration 0005), never as a film theatrical premiere or current OTT offer. CI and isolated Neon Free both replayed the seed without duplicate rows. Evidence at `docs/data/INTERNATIONAL_PILOT_0003.md`. No live source fetches, user actions, or paid external accounts were involved.

@@ -80,3 +80,14 @@ Neon Free and Workers Free impose strict storage/compute/request limits. Google 
 - CI push run 44249777228 passed domain-tests, api-contract, ingestion-preflight and disposable-postgres (curated RRR + six-title seed run twice; integrity test passed).
 - Neon pilot was inspected before changes (1 published RRR, two release events, two sources), expanded with six verified historical title seeds, and inspected after an identical replay: 7 published titles, 7 verified original premieres, 16 source pointers, 24 field provenance entries, 6 curation audit rows. Zero import runs, staged records, review tickets and verified current streaming offers. The existing RRR OTT premiere event remains separate from seven original-premiere events.
 - A curated published fact record is not proof of current digital playback availability, nor that a live Worker has served it. No paid services, deployed Worker or Android app were created.
+
+
+## International film and TV source pilot — verified 2026-11-18
+
+- Versioned files: `packages/db/migrations/0005_series_debut_event.sql`, `jobs/curated/0003_international_series_verified.sql`, `packages/db/tests/international_pilot.integration.sql`, `docs/data/INTERNATIONAL_PILOT_0003.md`.
+- Initial schema option would replace the release_events CHECK constraint. Rejected for Neon change control; final migration adds an independent series_debuts table and index and leaves existing constraints/rows unchanged. CI passed both push and PR workflows on commit `b7aad0077432631d6bae6ed2ab6d066bf92c956e`.
+- Historic theatrical dates checked: Parasite KR 2019-05-30 (Korean Film Council); Spirited Away JP 2001-07-20 (Studio Ghibli); The Intouchables FR 2011-11-02 (Unifrance); Inception US 2010-07-16 (American Film Institute and The Numbers).
+- First publicly available TV season launch, **not** theatrical/festival first screening: Dark NETFLIX 2017-12-01 (Netflix official announcement); Squid Game NETFLIX 2021-09-17 (Netflix official announcement).
+- Disposable PostgreSQL repeats seed twice, asserts film vs series separation, 4 film premieres, 2 series launches, 12 new source pointers, 18 new field-provenance rows, 6 new audit entries, 4 English aliases and no new streaming offers.
+- Neon Free before: 7 titles, 8 total prior release_events including the RRR OTT premiere, 16 source pointers, 0 ingestion runs. After applying migration/batch and after replay: 13 published titles, 10 original languages, 11 verified theatrical film original premieres, 2 separately stored verified series debuts, 28 source pointers, 42 provenance entries, 0 verified streaming offers and 0 staging/review records. Six new curation audit entries stable after replay.
+- No destructive database migrations, public Cloudflare Workers, actual Worker-to-Neon request, bulk fetch job, signed APK or paid infrastructure created.

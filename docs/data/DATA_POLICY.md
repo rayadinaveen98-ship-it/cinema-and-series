@@ -45,3 +45,10 @@ Original-language property P364 and genre property P136 use Wikidata entity iden
 ## Curated six-title source batch (2026-11-18)
 
 New published pilot facts come from the checked public producer/distributor and film-certification or contemporary reporting references listed in docs/data/MULTILINGUAL_PILOT_0002.md. Original languages represent the original film, NOT all the languages distributed in. Their Indian theatrical first-release dates are scoped to the historical source evidence, not inferred from government film-certificate issue dates or OTT listing dates. Source pointer rows have retrieved_at=NULL because no raw automated fetch was persisted. No images, posters, summaries, current-OTT availability, or downstream content rights are claimed. One reviewable provenance reference per seeded canonical title, original language and theatrical premiere is present; any correction requires reviewed additive migration.
+
+
+## First-season series launch vs theatrical premiere
+
+The new additive `series_debuts` table describes the first general-public availability of a series (e.g. Netflix first-season release) with provider and source provenance. It does **not** establish the first festival screening, a theatrical opening or current territorial availability. `release_events.original_premiere` continues to represent sourced first commercial theatrical releases of **films**; TV premieres are excluded from the film On This Day calendar. Title details expose a distinct `series_debut` kind; a future series-anniversary view may be planned and tested separately. No currently verified streaming offers may be created merely because a series was historically launched by a provider.
+
+Batch 0003 facts and sources are documented in `docs/data/INTERNATIONAL_PILOT_0003.md`. Korean/Japanese original titles remain in original script with English display-title aliases. The source rows are factual reference pointers (`retrieved_at=NULL`) and grant no imagery, text-reproduction or streaming-distribution rights.

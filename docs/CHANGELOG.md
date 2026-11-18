@@ -41,3 +41,9 @@
 - Added six source-reviewed historical film catalogue records across Hindi, Kannada, Telugu, Malayalam and Tamil. Stored 14 additional source pointers and 18 field-level provenance rows; one original-premiere event per film.
 - Ran the deterministic curated seed twice in disposable PostgreSQL CI with count/provenance/language/no-OTT checks. GitHub Actions completed all four jobs successfully for code commit 3e7dd277fdc4ffdd47cf219d31552bb5c4496a6a.
 - Applied the curated six-title seed to isolated Neon Free pilot and reran it to verify hosted idempotence: seven published titles total, seven verified original-premiere events, 16 sources, 24 provenance rows and no invented current OTT availability. Existing RRR unchanged; no automated staging, live API or APK.
+
+
+- Added four internationally sourced theatrical films: Parasite (Korean), Spirited Away (Japanese), The Intouchables (French) and Inception (English), preserving original scripts and English search names.
+- Added two original series, Dark (German) and Squid Game (Korean). Migration 0005 introduced an **additive** `series_debuts` table rather than altering existing film-release constraints. The title-details read model includes its separately typed series launches; film On This Day stays theatrical only.
+- Disposable PostgreSQL migration, twice-applied international seed, first-season provenance and zero-current-OTT negative tests passed alongside API/domain and ingestion jobs (CI runs 44263704068/44263714142).
+- Isolated Neon Free: applied migration 0005 and batch 0003, then replayed without changes. Verified totals: 13 published titles, 10 original languages, 11 theatrical original-premiere events and 2 series debuts, 28 source references and 42 field provenance rows. Existing 7-title seed remains intact, no public API or APK.

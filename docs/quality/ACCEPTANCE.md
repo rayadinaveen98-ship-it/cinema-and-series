@@ -73,3 +73,11 @@ PROPOSED / APPROVED / IMPLEMENTED / TESTED / BLOCKED / RELEASED are separate lab
 - Disposable PostgreSQL applies RRR seed and six-film seed twice; automated assertions demand 6 additional film IDs, 5 original language codes, 6 unique original premiere dates/events, 14 additional source pointers, 18 new field-provenance rows, 6 audit records and ZERO new streaming offers.
 - Neon Free pilot seed replay left all counts unchanged; historical release type and country are not converted from later dub or OTT releases.
 - Not complete: 53 further title records to reach approximately 60, broader film/series and international languages, on-device API integration, artwork license policy, genre comprehensiveness and production review flows.
+
+
+## International film and series pilot — 2026-11-18
+
+- Four international films use original-premiere events with sourced first local commercial theatrical dates; two original series use the separate series_debuts table, provider='netflix' and no implied current streaming availability.
+- CI migration 0005 is additive; existing release_events constraints remain unchanged. Idempotency tests apply curated international seed twice and check all identifiers/aliases, 4 film dates, 2 first-season dates, five new original languages, 12 source references, 18 field provenances, 3 authoritative external IDs and zero current offers.
+- Real Neon Free pilot replay confirmed 13 titles (11 movie/2 series), 10 original languages, 11 original theatrical premiere events, 2 series debuts and unchanged existing RRR records.
+- NOT CERTIFIED: live Hono Worker-to-Neon details query, 10k-record load testing, automated operational ingest, authenticated review, Android UI/APK/physical test, and full ~60-title catalogue.
