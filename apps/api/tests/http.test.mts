@@ -63,6 +63,7 @@ test('historical release requires actual valid calendar day',async()=>{
     assert.equal((await request(url)).status,400,url);
   }
   assert.equal((await request('/v1/releases/on-this-day?month=2&day=29')).status,200);
+  assert.equal(JSON.parse(lastCall.slice('history:'.length)).beforeYear,new Date().getUTCFullYear());
 });
 test('title details return 404 for missing canonical UUID and 400 for invalid ID',async()=>{
   assert.equal((await request('/v1/titles/hello')).status,400);

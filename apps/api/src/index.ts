@@ -194,7 +194,7 @@ export function createApp(createStore: StoreFactory = (url) => new NeonCatalogue
       throw new HttpError(400,'BAD_REQUEST','Invalid calendar day');
     }
     const limit=positiveInt(c.req.query('limit'),'limit',20,50);
-    const data=await store(c.env).onThisDay({month,day,limit});
+    const data=await store(c.env).onThisDay({month,day,limit,beforeYear:new Date().getUTCFullYear()});
     c.header('Cache-Control','public,max-age=300,s-maxage=3600');
     return c.json({data});
   });

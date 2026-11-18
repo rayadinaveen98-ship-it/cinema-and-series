@@ -116,3 +116,16 @@ test('related-title ranking rejects unreasonable limits',()=>{
   assert.throws(()=>similarTitles(titles as any,'A',0),RangeError);
   assert.throws(()=>similarTitles(titles as any,'A',101),RangeError);
 });
+
+
+test('On This Day strictly excludes same-year and future scheduled premieres',()=>{
+  const base=titles[0]!;
+  const expanded=[
+    ...titles,
+    {...base,id:'FUTURE',releaseEvents:[premiere('2099-02-28')]},
+    {...base,id:'CURRENT',releaseEvents:[premiere('2026-02-28')]}
+  ];
+  assert.deepEqual(findOnThisDay(expanded as any,2,28,50,2026).map(x=>x.titleId),['B']);
+  assert.deepEqual(findOnThisDay(expanded as any,2,28,50,2027).map(x=>x.titleId),['CURRENT','B']);
+  assert.throws(()=>findOnThisDay(expanded as any,2,28,50,0),RangeError);
+});

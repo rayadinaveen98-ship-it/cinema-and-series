@@ -46,6 +46,7 @@ export interface HistoricalOptions {
   month: number;
   day: number;
   limit: number;
+  beforeYear: number;
 }
 
 export interface CatalogueRepository {

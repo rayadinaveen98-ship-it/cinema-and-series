@@ -1,5 +1,5 @@
 import { drizzle } from 'drizzle-orm/neon-http';
-import { and, asc, desc, eq, exists, gt, ilike, inArray, ne, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, gt, ilike, inArray, lt, ne, or, sql } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import {
   titles, titleLanguages, titleGenres, genres, languages, titleLocalizations,
@@ -138,7 +138,7 @@ export class NeonCatalogueRepository implements CatalogueRepository {
       ).limit(limit);
   }
 
-  async onThisDay({month,day,limit}: HistoricalOptions): Promise<HistoricalTitle[]> {
+  async onThisDay({month,day,limit,beforeYear}: HistoricalOptions): Promise<HistoricalTitle[]> {
     return this.db.selectDistinct({
       id:titles.id,originalTitle:titles.originalTitle,
       type:titles.titleType,year:titles.firstReleaseYear,
@@ -149,6 +149,7 @@ export class NeonCatalogueRepository implements CatalogueRepository {
         eq(titles.publicationStatus,'published'),
         eq(releaseEvents.eventType,'original_premiere'),
         eq(releaseEvents.verified,true),
+        lt(releaseEvents.releaseDate,String(beforeYear)+'-01-01'),
         sql`EXTRACT(MONTH FROM ${releaseEvents.releaseDate})=${month}`,
         sql`EXTRACT(DAY FROM ${releaseEvents.releaseDate})=${day}`
       ))
