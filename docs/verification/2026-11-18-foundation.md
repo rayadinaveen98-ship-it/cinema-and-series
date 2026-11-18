@@ -91,3 +91,11 @@ Neon Free and Workers Free impose strict storage/compute/request limits. Google 
 - Disposable PostgreSQL repeats seed twice, asserts film vs series separation, 4 film premieres, 2 series launches, 12 new source pointers, 18 new field-provenance rows, 6 new audit entries, 4 English aliases and no new streaming offers.
 - Neon Free before: 7 titles, 8 total prior release_events including the RRR OTT premiere, 16 source pointers, 0 ingestion runs. After applying migration/batch and after replay: 13 published titles, 10 original languages, 11 verified theatrical film original premieres, 2 separately stored verified series debuts, 28 source pointers, 42 provenance entries, 0 verified streaming offers and 0 staging/review records. Six new curation audit entries stable after replay.
 - No destructive database migrations, public Cloudflare Workers, actual Worker-to-Neon request, bulk fetch job, signed APK or paid infrastructure created.
+
+## Credential-gated real API smoke preparation — 2026-11-18
+
+- Code commit 3ea096c81abaff794c5f1e5b1b0eda84d27fe7a8 adds apps/api/smoke/live-neon.mts, safety.ts, synthetic negative guards and dedicated pnpm smoke:neon command. GitHub CI run 44269419424 passed all four existing jobs, including API typecheck, mock HTTP contracts, new guard negatives and bundle dry run.
+- Expected smoke behavior if separately approved with a new least-privilege reader: Hono createApp() invokes the actual Drizzle neon-http NeonCatalogueRepository, verifies SELECT-only role and absence of private staging access, then tests real catalogue, cursor, language, Japanese alias, historical movie anniversaries, distinct series launches, guest recommendations, similar and HTTP errors.
+- Neon read-only role audit found no cinema_api_reader account (only cinema_owner and platform-admin login roles); no secret was fetched or provisioned. The owner role is not permitted for smoke.
+- IMPORTANT: Real Hono-to-Neon HTTP runner has NOT been executed. No deployed Cloudflare Worker, admin-to-reader credential reconfiguration, new role, Neon data changes, app APK or paid tier. The secure role creation and private credential injection remain a separate founder approval gate.
+- Scope and exact permissions: docs/security/READONLY_NEON_API_SMOKE.md.

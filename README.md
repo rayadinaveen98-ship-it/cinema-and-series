@@ -36,3 +36,7 @@ Stage 00 documentation is recorded; Stage 01 is in progress. Neon Free pilot hol
 ## Stage 01 discovery scaling
 
 The read-only Drizzle catalogue now uses a canonical/alias UNION for title search and grouped language/genre matches for recommendations. In rollback-only disposable PostgreSQL tests, 10,000 synthetic titles exercised these query shapes and a full result-parity regression. No Worker deployment or Android API integration has occurred. Details: docs/verification/2026-11-18-discovery-scale.md.
+
+## Live API safety gate
+
+The optional in-process Hono-to-Neon smoke runner is implemented and synthetically tested, but has **not yet connected** to the hosted database: the Neon pilot currently lacks a scoped read-only role. Owner credentials are intentionally forbidden, and draft-PR CI receives no secrets. See docs/security/READONLY_NEON_API_SMOKE.md for the explicit permissions and approval gate.

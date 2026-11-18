@@ -51,3 +51,6 @@
 - Optimized catalogue search from per-title OR filtering to parameterized union of canonical and localized matches; optimized recommendation and related-title scoring with grouped language/genre matches instead of correlated genre counts per title.
 - Added 10k-title rollback-only PostgreSQL load profile; initial SQL execution observations: alias 9.393 to 4.706 ms, recommendation 65.582 to 12.824 ms. Browse and historical-premiere indexes remain efficient.
 - Added full-score semantic parity against reference SQL, self-exclusion, canonical-alias dedup and wildcard literal safety tests. Both CI runs on commit 92ef512f passed all four jobs; Neon hosted 13-title corpus was not modified.
+
+- Implemented opt-in credential-gated real Hono/Drizzle neon-http smoke runner and tests for scope validation, required SELECT-only privileges, denial of owner credentials, staging/audit access and dangerous permissions. Standard CI exercises synthetic checks only; run 44269419424 passed all four jobs.
+- Live HTTP-to-Neon certification remains blocked pending founder-approved dedicated cinema_api_reader provisioning; no secrets, database mutations, Worker deployments or APKs were performed.
