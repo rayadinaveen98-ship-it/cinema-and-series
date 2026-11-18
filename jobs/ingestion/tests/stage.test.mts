@@ -36,7 +36,7 @@ test('repeated source ID in a batch is quarantined',()=>{
 test('authoritative external ID matches existing title but still requires review',()=>{
   const x=evaluateBatch([title('wikidata:Q456','Renamed Canonical Title')],existing as any);
   assert.equal(x.reviewExisting,1);
-  assert.deepEqual(x.decisions[0]?.possibleTitleIds,[existing[0].id]);
+  assert.deepEqual(x.decisions[0]?.possibleTitleIds,[existing[0]!.id]);
 });
 test('conflicting media type is quarantined even with exact identifier',()=>{
   const x=evaluateBatch([title('wikidata:Q456','Conflicting Series','series')],existing as any);
