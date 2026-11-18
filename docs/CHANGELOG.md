@@ -19,3 +19,6 @@
 - Added guest-first POST recommendation ranking and GET similar-title API, with input caps, error cases and deterministic tests.
 - Added stage-only Wikidata source preflight, 40-record safety limit, duplicate/alias/type conflict quarantine and its independent CI job.
 - Latest four-job CI passed (run 44236729306); Neon remains one RRR record without bulk importer writes.
+
+- Fixed On This Day to exclude same-year and future original-premiere dates; verified through domain and API tests.
+- All four jobs green on historical-cutoff commit 5963287f9 (CI runs 44237255769, 44237261186). PR remains draft and no new movie records were published.

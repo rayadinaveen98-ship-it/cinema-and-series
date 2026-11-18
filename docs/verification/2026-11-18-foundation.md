@@ -42,3 +42,10 @@ Neon Free and Workers Free impose strict storage/compute/request limits. Google 
 - Earlier trial failures were corrected during CI (contract entry omission, fixture tie-order, strict TypeScript test). These are not a production deployment or real database corruption.
 - Read-only Neon SQL smoke: language te + genre action scores RRR at 8; similar RRR returns empty while catalogue has one title. Separate from a deployed Worker-to-Neon integration test.
 - Pilot unchanged: one published RRR, zero ingestion runs/staging/review rows. No paid upgrades or Android APK.
+
+## Final historical-cutoff gate
+
+- Commit 5963287f9f41503f4aeecf336756f79e94ca6dc0 adds before-current-year restrictions to domain history and Hono/Drizzle SQL query.
+- Both GitHub Actions runs 44237255769 and 44237261186 completed successfully for this commit, across the four CI jobs.
+- Historical release time zone is UTC for server cutoff; this is documented as a possible refinement near New Year for user-local calendars.
+- PR remains draft. The hosted Neon pilot is not changed by this gate.

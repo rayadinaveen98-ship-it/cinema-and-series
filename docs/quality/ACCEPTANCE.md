@@ -41,3 +41,11 @@ PROPOSED / APPROVED / IMPLEMENTED / TESTED / BLOCKED / RELEASED are separate lab
 - One real, source-linked RRR sample inserted; seed rerun held counts at 1 title, 2 events, 1 unverified offer, 2 sources, 6 field provenance records.
 - Live pilot historical SQL returns original premiere March 25, 2022 and not the May 20 OTT premiere.
 - Not tested: API build/deployment, Drizzle adapter, 60-title pilot, schema rollback, ingestion at scale, visual UI, native APK or physical Android acceptance.
+
+## 2026-11-18 discovery and preflight checks
+
+- API validates 4 KB JSON recommendation bodies, language and genre syntax/limits, unknown fields, content type and return limits. No user identity is collected.
+- Similar-title endpoint rejects malformed IDs and source titles missing from published catalogue; relevance ranking excludes self and staged titles.
+- Domain tests prove deterministic ranking, strict calendar cutoff before current year, invalid leap dates, duplicate prevention and OTT exclusion.
+- Ingestion preflight checks canonical source host/ID pair, release dates, media type conflicts and duplicate source rows; every valid record still needs review.
+- CI contains four green jobs: domain-tests, api-contract, disposable-postgres and ingestion-preflight. No cloud Worker-to-Neon runtime check yet.

@@ -41,3 +41,9 @@ Separate launch readiness/security/attribution/budget review and explicit releas
 ## Zero-rupee gate
 
 No infrastructure provisioning or paid tier upgrade without a separate authorization. Free tier thresholds must be monitored rather than silently exceeded.
+
+## Latest development checkpoint — 2026-11-18
+
+Implemented and CI-verified: guest-first recommendation API, related-title API, original-premiere earlier-year cutoff and stage-only Wikidata source preflight. Four CI jobs green on commit 5963287f9. Neon read-only pilot confirms RRR relevance score 8 for original language Telugu + action genre; since the pilot contains only RRR, More Like This is honestly empty.
+
+Still NOT implemented or approved for public launch: transactional persisted importer, human review workflow, approximately 59 more curated pilot titles, direct Hono-to-Neon live integration, large-dataset latency tests, a released Worker and any mobile APK. Do not count Stage 01 as complete or Stage 02 as started.
