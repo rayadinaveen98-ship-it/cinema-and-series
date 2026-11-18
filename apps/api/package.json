@@ -5,12 +5,19 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "build:check": "wrangler deploy --dry-run"
+    "build:check": "wrangler deploy --dry-run",
+    "test": "node --experimental-strip-types --test tests/*.test.mts",
+    "typecheck": "tsc --noEmit --project tsconfig.json"
   },
   "dependencies": {
+    "@cinema/domain": "workspace:*",
+    "@cinema/db": "workspace:*",
+    "@neondatabase/serverless": "^1.0.0",
+    "drizzle-orm": "^0.44.0",
     "hono": "^4.0.0"
   },
   "devDependencies": {
+    "@types/node": "^22.0.0",
     "wrangler": "^4.0.0",
     "typescript": "^5.8.3"
   }

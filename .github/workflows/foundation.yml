@@ -61,3 +61,23 @@ jobs:
         run: psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0001_catalogue.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0002_provider_release_link.sql
       - name: Verify integrity with synthetic records
         run: psql -v ON_ERROR_STOP=1 -f packages/db/tests/catalogue.integration.sql
+
+  api-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install workspace dependencies without remote credentials
+        run: pnpm install --no-frozen-lockfile
+      - name: Typecheck Hono API and Drizzle read model
+        run: pnpm --filter @cinema/api run typecheck
+      - name: Request and error-response contract tests
+        run: pnpm --filter @cinema/api run test
+      - name: Worker bundle dry-run (no deployment)
+        run: pnpm --filter @cinema/api run build:check
