@@ -20,6 +20,8 @@ const fake:CatalogueRepository={
   async onThisDay(options) { lastCall='history:'+JSON.stringify(options); return [{...rrr,originalPremiereDate:'2022-03-25'}]; },
   async languages() {return [{code:'te',name:'Telugu'}];},
   async genres() {return [{code:'action',name:'Action'}];},
+  async recommend(prefs,limit){lastCall='recommend:'+JSON.stringify({prefs,limit});return [{...rrr,score:8,reasons:['language','genre']}];},
+  async similar(id,limit){lastCall='similar:'+id+':'+limit;return id===rrr.id?[]:null;},
 };
 const app=createApp(()=>fake);
 const env={DATABASE_URL:'postgresql://synthetic.invalid/test'};
@@ -80,4 +82,70 @@ test('unexpected repository exception exposes no internal content',async()=>{
 });
 test('unknown route returns structured 404',async()=>{
   assert.equal((await request('/v1/does-not-exist')).status,404);
+});
+
+
+test('recommendations accept validated guest-only languages and genres without persistence',async()=>{
+  const res=await request('/v1/recommendations?limit=3',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({languages:['te-IN','te'],genres:['action']})
+  });
+  assert.equal(res.status,200);
+  const data=await res.json();
+  assert.equal(data.data[0].score,8);
+  assert.equal(res.headers.get('cache-control'),'no-store');
+  assert.deepEqual(JSON.parse(lastCall.slice('recommend:'.length)),{
+    prefs:{languages:['te'],genres:['action']},limit:3
+  });
+});
+
+test('malformed, empty, oversized, or extra-field recommendation payloads are rejected',async()=>{
+  const cases=[
+    {languages:[],genres:[]},
+    {languages:['not-a-language-code'],genres:['action']},
+    {languages:['te'],genres:['ACTIon']},
+    {languages:'te',genres:[]},
+    {languages:['te'],genres:[],userId:'tracking-id'},
+    {languages:['te'],genres:[],extra:'x'.repeat(5000)}
+  ];
+  for(const input of cases) {
+    const res=await request('/v1/recommendations',{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(input)
+    });
+    assert.ok([400,413].includes(res.status),JSON.stringify(input).slice(0,100));
+  }
+  const unsupported=await request('/v1/recommendations',{
+    method:'POST',headers:{'Content-Type':'text/plain'},body:'hello'
+  });
+  assert.equal(unsupported.status,400);
+  const malformed=await request('/v1/recommendations',{
+    method:'POST',headers:{'Content-Type':'application/json'},body:'{broken'
+  });
+  assert.equal(malformed.status,400);
+  const badLimit=await request('/v1/recommendations?limit=500',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({languages:['te'],genres:[]})
+  });
+  assert.equal(badLimit.status,400);
+});
+
+test('related-title endpoint validates UUID, bounds size and handles missing titles',async()=>{
+  const bad=await request('/v1/titles/hello/similar');
+  assert.equal(bad.status,400);
+  const tooMany=await request('/v1/titles/'+rrr.id+'/similar?limit=99');
+  assert.equal(tooMany.status,400);
+  const notFound=await request('/v1/titles/00000000-0000-4000-8000-000000000001/similar');
+  assert.equal(notFound.status,404);
+  const ok=await request('/v1/titles/'+rrr.id+'/similar?limit=5');
+  assert.equal(ok.status,200);
+  assert.deepEqual((await ok.json()).data,[]);
+  assert.equal(lastCall,'similar:'+rrr.id+':5');
+});
+
+test('recommendations return controlled 503 with no database configuration',async()=>{
+  const res=await app.request('/v1/recommendations',{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({languages:['te'],genres:[]})
+  },{});
+  assert.equal(res.status,503);
 });

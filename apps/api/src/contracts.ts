@@ -52,7 +52,7 @@ export interface CatalogueRepository {
   list(options: ListOptions): Promise<Page<TitleSummary>>;
   detail(id: string): Promise<TitleDetail | null>;
   search(q: string, limit: number): Promise<TitleSummary[]>;
-  onThisDay(options: HistoricalOptions): Promise<ReleaseSummary[] & never[]> | Promise<HistoricalTitle[]>;
+  onThisDay(options: HistoricalOptions): Promise<HistoricalTitle[]>;
   languages(): Promise<{ code: string; name: string }[]>;
   genres(): Promise<{ code: string; name: string }[]>;
 }

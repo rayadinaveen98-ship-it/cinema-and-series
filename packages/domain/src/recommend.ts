@@ -30,3 +30,33 @@ export function recommendTitles(
   return result.sort((a, b) => b.score - a.score || a.titleId.localeCompare(b.titleId))
     .slice(0, limit);
 }
+
+
+/** Pure deterministic reference for related-title ranking. */
+export function similarTitles(
+  catalogue: readonly CatalogueTitle[],
+  sourceId: string,
+  limit = 20
+): Recommendation[] {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 100) throw new RangeError('Invalid limit');
+  const source = catalogue.find(x=>x.id===sourceId && x.status==='published');
+  if (!source) return [];
+  const languages = new Set(source.originalLanguages.map(languageRoot).filter(Boolean));
+  const genres = new Set(source.genres.map(x=>x.toLowerCase()));
+  const ranked: Recommendation[] = [];
+  for (const title of catalogue) {
+    if (title.status!=='published' || title.id===sourceId) continue;
+    const sameLanguage=title.originalLanguages.some(x=>languages.has(languageRoot(x)));
+    const genreHits=new Set(title.genres.map(x=>x.toLowerCase()).filter(x=>genres.has(x))).size;
+    if (!sameLanguage && genreHits===0) continue;
+    const reasons: Recommendation['reasons']=[
+      ...(sameLanguage?['language' as const]:[]),...(genreHits?['genre' as const]:[])
+    ];
+    ranked.push({
+      titleId:title.id,
+      score:(sameLanguage?5:0)+3*genreHits+(source.type===title.type?2:0),
+      reasons
+    });
+  }
+  return ranked.sort((a,b)=>b.score-a.score || a.titleId.localeCompare(b.titleId)).slice(0,limit);
+}

@@ -1,14 +1,15 @@
 import { drizzle } from 'drizzle-orm/neon-http';
-import { and, asc, desc, eq, exists, gt, ilike, or, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, exists, gt, ilike, inArray, ne, or, sql } from 'drizzle-orm';
 import type { SQL } from 'drizzle-orm';
 import {
   titles, titleLanguages, titleGenres, genres, languages, titleLocalizations,
   releaseEvents, streamingOffers, providers, sourceRecords
 } from '@cinema/db/schema';
 import { classifyOffer, languageRoot } from '@cinema/domain';
+import type { ViewerPreferences } from '@cinema/domain';
 import type {
   CatalogueRepository, HistoricalOptions, HistoricalTitle, ListOptions,
-  Page, TitleDetail, TitleSummary
+  Page, RankedTitle, TitleDetail, TitleSummary
 } from './contracts.ts';
 
 const connect = (url: string) => drizzle(url);
@@ -162,5 +163,81 @@ export class NeonCatalogueRepository implements CatalogueRepository {
   async genres(): Promise<{code:string;name:string}[]> {
     return this.db.select({code:genres.code,name:genres.displayName})
       .from(genres).orderBy(asc(genres.displayName)).limit(100);
+  }
+
+  /**
+   * Database-side rank (not a 300-title recent candidate cutoff).
+   * Matches are constrained by indexed original-language and genre relations.
+   * Query cost must be benchmarked before large catalogue import.
+   */
+  private async rankedMatches(
+    languagesInput: readonly string[],
+    genresInput: readonly string[],
+    limit: number,
+    excludeId?: string,
+    preferType?: 'movie' | 'series'
+  ): Promise<RankedTitle[]> {
+    const languageCodes = [...new Set(languagesInput.map(languageRoot).filter(Boolean))];
+    const genreCodes = [...new Set(genresInput.map(x => x.toLowerCase()).filter(Boolean))];
+    if (languageCodes.length === 0 && genreCodes.length === 0) return [];
+
+    const hasLanguage = languageCodes.length > 0
+      ? exists(this.db.select({id:titleLanguages.titleId})
+        .from(titleLanguages).where(and(
+          eq(titleLanguages.titleId,titles.id),
+          eq(titleLanguages.relation,'original'),
+          inArray(titleLanguages.languageCode,languageCodes)
+        )))
+      : sql`false`;
+
+    const genreHits = genreCodes.length > 0
+      ? sql<number>`(SELECT count(*)::integer FROM ${titleGenres}
+         WHERE ${titleGenres.titleId} = ${titles.id}
+           AND ${inArray(titleGenres.genreCode,genreCodes)})`
+      : sql<number>`0`;
+
+    const hasGenre = sql<boolean>`(${genreHits} > 0)`;
+    const score = sql<number>`(
+       (CASE WHEN ${hasLanguage} THEN 5 ELSE 0 END)
+       + (${genreHits} * 3)
+       + ${preferType ? sql`(CASE WHEN ${titles.titleType} = ${preferType} THEN 2 ELSE 0 END)` : sql`0`}
+    )`;
+
+    const filters = [eq(titles.publicationStatus,'published'),or(hasLanguage,hasGenre)];
+    if (excludeId) filters.push(ne(titles.id,excludeId));
+
+    const rows = await this.db.select({
+      id:titles.id,originalTitle:titles.originalTitle,type:titles.titleType,
+      year:titles.firstReleaseYear,languageHit:hasLanguage,genreHits,score
+    }).from(titles).where(and(...filters)).orderBy(desc(score),asc(titles.id)).limit(limit);
+
+    return rows.map(x=>({
+      id:x.id,originalTitle:x.originalTitle,type:x.type,year:x.year,
+      score:Number(x.score),
+      reasons:[
+        ...(x.languageHit ? ['language' as const] : []),
+        ...(Number(x.genreHits)>0 ? ['genre' as const] : []),
+        ...(preferType && x.type===preferType ? ['sameType' as const] : [])
+      ]
+    }));
+  }
+
+  async recommend(preferences: ViewerPreferences, limit: number): Promise<RankedTitle[]> {
+    return this.rankedMatches(preferences.languages,preferences.genres,limit);
+  }
+
+  async similar(titleId: string, limit: number): Promise<RankedTitle[] | null> {
+    const [source] = await this.db.select({id:titles.id,type:titles.titleType})
+      .from(titles).where(and(eq(titles.id,titleId),eq(titles.publicationStatus,'published')))
+      .limit(1);
+    if (!source) return null;
+
+    const [original,genreRows] = await Promise.all([
+      this.db.select({code:titleLanguages.languageCode}).from(titleLanguages)
+        .where(and(eq(titleLanguages.titleId,titleId),eq(titleLanguages.relation,'original'))),
+      this.db.select({code:titleGenres.genreCode}).from(titleGenres)
+        .where(eq(titleGenres.titleId,titleId))
+    ]);
+    return this.rankedMatches(original.map(x=>x.code),genreRows.map(x=>x.code),limit,titleId,source.type);
   }
 }

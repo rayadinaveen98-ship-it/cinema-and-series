@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeSearchKey, isValidISODate, isValidMonthDay, validateStagedTitle,
-  resolveTitleIdentity, findOnThisDay, recommendTitles, classifyOffer
+  resolveTitleIdentity, findOnThisDay, recommendTitles, similarTitles, classifyOffer
 } from '../src/index.ts';
 
 const premiere = (date: string, verification = 'verified', kind = 'original_premiere') =>
@@ -93,4 +93,26 @@ test('provider offer freshness never turns unverified or expired into current av
   assert.equal(classifyOffer({...base,verification:'unverified'} as any,now),'unverified');
   assert.equal(classifyOffer({...base,expiresAt:'2026-11-01T00:00:00Z'} as any,now),'expired');
   assert.equal(classifyOffer({...base,lastVerifiedAt:'2026-12-01T00:00:00Z'} as any,now),'unverified');
+});
+
+
+test('similarity excludes self and unpublished records, and values genre/language overlap',()=>{
+  const other = [
+    ...titles,
+    {id:'E',type:'movie',originalTitle:'Another Telugu Film',
+     originalLanguages:['te'],genres:['action','drama'],status:'published',
+     externalIds:[],releaseEvents:[]},
+    {id:'F',type:'series',originalTitle:'Telugu Mystery',
+     originalLanguages:['te'],genres:['mystery'],status:'published',
+     externalIds:[],releaseEvents:[]}
+  ];
+  const matches=similarTitles(other as any,'A');
+  assert.deepEqual(matches.map(x=>x.titleId),['E','F','B']);
+  assert.equal(matches[0]?.score,13);
+  assert.equal(matches.some(x=>x.titleId==='A'||x.titleId==='D'),false);
+  assert.deepEqual(similarTitles(other as any,'NOT-FOUND'),[]);
+});
+test('related-title ranking rejects unreasonable limits',()=>{
+  assert.throws(()=>similarTitles(titles as any,'A',0),RangeError);
+  assert.throws(()=>similarTitles(titles as any,'A',101),RangeError);
 });

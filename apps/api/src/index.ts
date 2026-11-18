@@ -5,12 +5,12 @@ import { NeonCatalogueRepository } from './repository.ts';
 
 type Bindings = { DATABASE_URL?: string };
 type StoreFactory = (url: string) => CatalogueRepository;
-type HttpErrorCode = 'BAD_REQUEST' | 'DATABASE_UNAVAILABLE';
+type HttpErrorCode = 'BAD_REQUEST' | 'DATABASE_UNAVAILABLE' | 'PAYLOAD_TOO_LARGE';
 
 class HttpError extends Error {
-  readonly status: 400 | 503;
+  readonly status: 400 | 413 | 503;
   readonly code: HttpErrorCode;
-  constructor(status: 400 | 503, code: HttpErrorCode, message: string) {
+  constructor(status: 400 | 413 | 503, code: HttpErrorCode, message: string) {
     super(message);
     this.status = status;
     this.code = code;
@@ -48,6 +48,74 @@ function genreCode(value: string | undefined): string | undefined {
     throw new HttpError(400,'BAD_REQUEST','Invalid genre code');
   }
   return value;
+}
+
+
+/**
+ * Read a bounded UTF-8 JSON request without ever buffering an unbounded payload.
+ * No personal identifier or viewing history is accepted by this endpoint.
+ */
+async function readBoundedJson(request: Request, maximumBytes = 4096): Promise<unknown> {
+  const mime=(request.headers.get('content-type')??'').split(';',1)[0]?.toLowerCase().trim();
+  if (mime!=='application/json') {
+    throw new HttpError(400,'BAD_REQUEST','Content-Type must be application/json');
+  }
+  const declared=request.headers.get('content-length');
+  if (declared!==null && (!/^\d+$/.test(declared) || Number(declared)>maximumBytes)) {
+    throw new HttpError(413,'PAYLOAD_TOO_LARGE','Request payload exceeds limit');
+  }
+  const reader=request.body?.getReader();
+  if (!reader) throw new HttpError(400,'BAD_REQUEST','JSON request body is required');
+  const parts:Uint8Array[]=[];
+  let total=0;
+  try {
+    while(true) {
+      const chunk=await reader.read();
+      if (chunk.done) break;
+      total+=chunk.value.byteLength;
+      if (total>maximumBytes) {
+        await reader.cancel();
+        throw new HttpError(413,'PAYLOAD_TOO_LARGE','Request payload exceeds limit');
+      }
+      parts.push(chunk.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const all=new Uint8Array(total);
+  let offset=0;
+  for (const part of parts) {
+    all.set(part,offset);
+    offset+=part.length;
+  }
+  try {
+    return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(all)) as unknown;
+  } catch {
+    throw new HttpError(400,'BAD_REQUEST','Malformed JSON');
+  }
+}
+
+function checkedPreferences(data:unknown): {languages:string[];genres:string[]} {
+  if (typeof data!=='object' || data===null || Array.isArray(data)) {
+    throw new HttpError(400,'BAD_REQUEST','Expected preferences object');
+  }
+  const input=data as Record<string,unknown>;
+  const keys=Object.keys(input);
+  if (keys.some(x=>x!=='languages' && x!=='genres')) {
+    throw new HttpError(400,'BAD_REQUEST','Unrecognized preferences field');
+  }
+  if (!Array.isArray(input.languages) || !Array.isArray(input.genres) ||
+      input.languages.length>8 || input.genres.length>12 ||
+      input.languages.some(x=>typeof x!=='string' || !isLanguageTag(x)) ||
+      input.genres.some(x=>typeof x!=='string' || !/^[a-z][a-z0-9-]{1,39}$/.test(x))) {
+    throw new HttpError(400,'BAD_REQUEST','Invalid language or genre preferences');
+  }
+  const languages=[...new Set((input.languages as string[]).map(x=>x.toLowerCase().split('-')[0]!).filter(Boolean))];
+  const genres=[...new Set((input.genres as string[]).map(x=>x.toLowerCase()))];
+  if (languages.length+genres.length===0) {
+    throw new HttpError(400,'BAD_REQUEST','Choose at least one language or genre');
+  }
+  return {languages,genres};
 }
 
 /** Exported app factory supports real Hono HTTP tests without a Neon credential. */
@@ -128,6 +196,25 @@ export function createApp(createStore: StoreFactory = (url) => new NeonCatalogue
     const limit=positiveInt(c.req.query('limit'),'limit',20,50);
     const data=await store(c.env).onThisDay({month,day,limit});
     c.header('Cache-Control','public,max-age=300,s-maxage=3600');
+    return c.json({data});
+  });
+
+
+  app.post('/v1/recommendations',async(c)=>{
+    const preferences=checkedPreferences(await readBoundedJson(c.req.raw));
+    const limit=positiveInt(c.req.query('limit'),'limit',20,30);
+    const data=await store(c.env).recommend(preferences,limit);
+    c.header('Cache-Control','no-store');
+    return c.json({data});
+  });
+
+  app.get('/v1/titles/:id/similar',async(c)=>{
+    const id=c.req.param('id');
+    if (!uuidPattern.test(id)) throw new HttpError(400,'BAD_REQUEST','Invalid title ID');
+    const limit=positiveInt(c.req.query('limit'),'limit',12,30);
+    const data=await store(c.env).similar(id,limit);
+    if (data===null) return c.json({error:{code:'NOT_FOUND',message:'Title not found'}},404);
+    c.header('Cache-Control','public,max-age=60,s-maxage=120');
     return c.json({data});
   });
 
