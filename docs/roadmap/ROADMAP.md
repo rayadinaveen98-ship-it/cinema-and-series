@@ -1,12 +1,12 @@
 # Cinema & Series roadmap
 
-## Stage 00 — APPROVED / repository documentation in progress
+## Stage 00 — IMPLEMENTED (documents committed; awaiting PR integration)
 
 Product contract, ADR, architecture flowcharts, data policy, free-tier guardrails and acceptance checklist.
 
 ## Stage 01 — FOUNDATION IMPLEMENTATION IN PROGRESS
 
-Repository conventions, dependency-free domain engine rules, initial PostgreSQL schema and synthetic automated tests. API and mobile are scaffolds only.
+Repository conventions, dependency-free domain tests, TypeScript typecheck, SQL migrations 0001/0002 and disposable PostgreSQL integration passed in CI. Neon Free pilot created in aws-ap-southeast-1 (project plain-violet-46536395; database cinema_pilot), with verified migration applied and 1 source-traced RRR sample. Reapplying curated seed created no duplicates. API and mobile remain scaffolds only.
 
 Stage 01 EXIT requires:
 - all foundation CI passing and versioned tests;

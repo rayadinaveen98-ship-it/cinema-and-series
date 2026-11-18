@@ -32,3 +32,12 @@
 ## Evidence classification
 
 PROPOSED / APPROVED / IMPLEMENTED / TESTED / BLOCKED / RELEASED are separate labels. A green unit test does not certify a deployed Worker, actual metadata or Android experience.
+
+
+## Verified implementation checkpoint — 2026-11-18
+
+- GitHub foundation CI domain tests, TypeScript compiler and disposable PostgreSQL migration + synthetic integrity checks: success.
+- Isolated Neon Free pilot created; 0001+0002 migrations executed; 18 tables verified.
+- One real, source-linked RRR sample inserted; seed rerun held counts at 1 title, 2 events, 1 unverified offer, 2 sources, 6 field provenance records.
+- Live pilot historical SQL returns original premiere March 25, 2022 and not the May 20 OTT premiere.
+- Not tested: API build/deployment, Drizzle adapter, 60-title pilot, schema rollback, ingestion at scale, visual UI, native APK or physical Android acceptance.

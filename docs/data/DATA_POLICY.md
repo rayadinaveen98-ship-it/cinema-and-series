@@ -22,7 +22,7 @@ Each connector requires a license review, rate-limit/user-agent policy, bounded 
 
 ## Test data
 
-All initial automated test examples are SYNTHETIC and may not be published to public catalogue. The proposed first real-world pilot (about 60 titles) is unstarted.
+All initial automated test examples are SYNTHETIC and may not be published to public catalogue. The real-world pilot has STARTED with 1 curated and provenance-linked RRR record. The remaining approximately 59 cross-language pilot records are not yet verified or ingested.
 
 ## Privacy
 

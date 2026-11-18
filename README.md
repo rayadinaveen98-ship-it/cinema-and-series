@@ -17,8 +17,8 @@ Android-first, multilingual cinema and series discovery database. **Foundation s
 - apps/api — planned Hono Cloudflare Worker; currently health-only scaffold.
 - apps/mobile — planned Expo SDK 58 React Native Android application; no UI implementation yet.
 - packages/domain — dependency-free TypeScript validation, identity, historical releases, and recommendation rules.
-- packages/db — PostgreSQL first migration and schema policy.
-- jobs — bounded, checkpointed metadata ingestion; implementation pending.
+- packages/db — normalized PostgreSQL migrations 0001/0002, verified in disposable CI and applied to isolated Neon free pilot.
+- jobs — curated source-traceable RRR pilot record; automated bounded ingestion still pending.
 - docs — product contract, architecture, decisions, roadmap, quality gates.
 
 ## Running the initial tests
@@ -31,4 +31,4 @@ These tests use **synthetic fixtures**, no real movie imports, accounts or cloud
 
 ## Current stage
 
-Stage 00 architecture and Stage 01 initial foundation. Data ingestion, live PostgreSQL, native app, real-catalogue certification, and APK builds remain gated. See docs/roadmap/ROADMAP.md.
+Stage 00 documentation is recorded; Stage 01 is in progress. An isolated Neon Free pilot database exists with one curated RRR record. Bulk ingestion, full catalogue certification, native app, public API deployment and APK builds remain gated. See docs/roadmap/ROADMAP.md.

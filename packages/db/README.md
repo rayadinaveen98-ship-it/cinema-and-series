@@ -1,27 +1,17 @@
-# Database migration v0001 — NOT APPLIED
+# Database — Neon Free pilot deployed (not production)
 
-0001_catalogue.sql defines initial normalized PostgreSQL tables.
+Migrations 0001_catalogue.sql and 0002_provider_release_link.sql are additive and were verified with PostgreSQL 17 on GitHub Actions disposable service, then applied to the isolated Neon pilot.
 
-## Provenance and scope
+## Verified evidence, 2026-11-18
 
-- A title has a canonical UUID and original language relations.
-- Localized/alternative titles cannot create duplicate canonical films.
-- Original premieres, regional theatrical releases, OTT premieres and rereleases are separate release events.
-- Provider offers carry territory and time-stamped verification.
-- External IDs are unique per source, with staging and review tables for conservative imports.
-- Traceable source records and field provenance allow corrections.
+- Neon project: plain-violet-46536395, database cinema_pilot, region aws-ap-southeast-1.
+- PostgreSQL 17.12; 18 normalized tables exist and pg_trgm installed.
+- One curated title RRR, two historical release events, one current-offer record marked UNVERIFIED, two source records, six provenance links.
+- Running jobs/curated/0001_rrr_verified.sql a second time did not create duplicate records.
+- Original release 2022-03-25 is returned by original-premiere query; ZEE5 OTT premiere 2022-05-20 is excluded from that historical original-premiere query.
 
-## Migration safety gate
+## Boundaries
 
-SQL has NOT been executed against Neon or disposable PostgreSQL. Before any hosted database migration:
-1. Validate schema in isolated disposable PostgreSQL.
-2. Confirm extension support and run application queries/explain plans.
-3. Test idempotent imports, invalid data, uniqueness and transaction rollback.
-4. Establish database backup/restore and non-destructive migration rules.
-5. Write a reviewed upgrade/rollback playbook.
+No public API or mobile consumer is deployed. The curated seed does not prove bulk source licensing or a full 60-title pilot. Drizzle ORM adapter, schema diff check, tested restore/rollback, and volume benchmarks remain pending. No production credentials are in GitHub. The pilot remains within the connected Neon Free organization; usage quotas still apply.
 
-Planned Drizzle ORM integration follows this tested SQL foundation. Do not create manual divergent schemas without a migration review.
-
-## Known future additions
-
-Series seasons/episodes, verified dubbed audio tracks, editorial collection management and optional personal account tables are deferred until core catalogue certification.
+Never run destructive SQL against this pilot without explicit approval. Future migrations must be additive and separately checked against a disposable PostgreSQL instance first.

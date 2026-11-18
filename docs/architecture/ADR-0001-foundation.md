@@ -6,7 +6,7 @@ Status: APPROVED for foundation implementation; production readiness NOT establi
 Decision:
 - Use a TypeScript monorepo and modular API rather than paid microservices.
 - Android-first with React Native and Expo SDK 58, with responsive phone/tablet experiences.
-- Choose PostgreSQL as canonical relational database. A Neon free-tier project is a candidate, not yet provisioned.
+- Choose PostgreSQL as canonical relational database. An isolated Neon Free pilot has been provisioned in aws-ap-southeast-1 (project plain-violet-46536395); there is no production deployment.
 - Hono/Cloudflare Workers are the preferred API runtime, not yet deployed.
 - No persistent identity account in the initial guest-first product.
 - No posters or asset-download pipeline in v1.
