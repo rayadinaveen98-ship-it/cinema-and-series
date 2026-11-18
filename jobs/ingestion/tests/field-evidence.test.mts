@@ -106,7 +106,7 @@ test('source entity ID mismatch is refused before comparison',()=>{
 test('unmatched title and publication date stay flagged, never become verified',()=>{
   const result=compareStagedFields({
     ...candidate(),originalTitle:'Fabricated Alias',
-    releaseEvents:[{...candidate().releaseEvents[0],date:'2022-05-20'}]
+    releaseEvents:[{...candidate().releaseEvents[0]!,date:'2022-05-20'}]
   },inspectWikidataFields(create()));
   assert.equal(result.labelObserved,false);
   assert.deepEqual(result.publicationDateMatches,[false]);
