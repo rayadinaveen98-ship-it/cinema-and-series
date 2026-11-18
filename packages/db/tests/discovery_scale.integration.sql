@@ -1,0 +1,243 @@
+-- Disposable PostgreSQL 17 ONLY: analytical synthetic catalogue regression.
+-- All generated rows are inside one transaction and ROLLBACK at the end.
+-- No hosted Neon writes, real film facts, or performance time guarantees.
+BEGIN;
+SET LOCAL statement_timeout='30s';
+
+INSERT INTO source_records(id,source_key,external_record_id,source_url,license_code,retrieved_at)
+VALUES ('fa000002-0000-4000-8000-000000000001','synthetic','performance-only',
+        'https://example.org/synthetic-perf','TEST_ONLY',NULL);
+
+INSERT INTO titles(id,title_type,original_title,publication_status,first_release_year)
+SELECT ('fa000001-0000-4000-8000-' || lpad(gs::text,12,'0'))::uuid,
+       CASE WHEN gs%5=0 THEN 'series' ELSE 'movie' END,
+       'Synthetic Load Title '||gs,'published',2000+(gs%25)
+FROM generate_series(1,10000) gs;
+
+INSERT INTO title_languages(title_id,language_code,relation)
+SELECT ('fa000001-0000-4000-8000-' || lpad(gs::text,12,'0'))::uuid,
+       CASE gs%3 WHEN 0 THEN 'en' WHEN 1 THEN 'ko' ELSE 'te' END,'original'
+FROM generate_series(1,10000) gs;
+
+INSERT INTO title_genres(title_id,genre_code)
+SELECT ('fa000001-0000-4000-8000-' || lpad(gs::text,12,'0'))::uuid,
+       CASE WHEN gs%2=0 THEN 'thriller' ELSE 'drama' END
+FROM generate_series(1,10000) gs;
+
+INSERT INTO title_localizations(title_id,language_code,display_title,title_kind)
+SELECT ('fa000001-0000-4000-8000-' || lpad(gs::text,12,'0'))::uuid,
+       'en','Synthetic Alias '||gs,'alternative'
+FROM generate_series(5,10000,5) gs;
+
+INSERT INTO release_events(title_id,release_date,event_type,territory_code,verified,source_record_id)
+SELECT ('fa000001-0000-4000-8000-' || lpad(gs::text,12,'0'))::uuid,
+       date '2005-01-01'+(gs%7000),'original_premiere','US',true,
+       'fa000002-0000-4000-8000-000000000001'::uuid
+FROM generate_series(1,10000) gs WHERE gs%5<>0;
+
+INSERT INTO series_debuts(title_id,debut_date,provider_code,territory_code,verified,source_record_id)
+SELECT ('fa000001-0000-4000-8000-' || lpad(gs::text,12,'0'))::uuid,
+       date '2005-01-01'+(gs%7000),'netflix',NULL,true,
+       'fa000002-0000-4000-8000-000000000001'::uuid
+FROM generate_series(1,10000) gs WHERE gs%5=0;
+
+ANALYZE titles;
+ANALYZE title_languages;
+ANALYZE title_genres;
+ANALYZE title_localizations;
+ANALYZE release_events;
+ANALYZE series_debuts;
+
+DO $assert_synthetic$
+DECLARE n integer;
+BEGIN
+ SELECT count(*) INTO n FROM titles WHERE publication_status='published';
+ IF n<>10013 THEN RAISE EXCEPTION 'Expected 10013 published titles, got %',n; END IF;
+ SELECT count(*) INTO n FROM titles WHERE publication_status='published' AND title_type='series';
+ IF n<>2002 THEN RAISE EXCEPTION 'Expected 2002 series, got %',n; END IF;
+ SELECT count(*) INTO n FROM release_events WHERE title_id::text LIKE 'fa000001-0000-4000-8000-%';
+ IF n<>8000 THEN RAISE EXCEPTION 'Expected 8000 synthetic film premieres, got %',n; END IF;
+ SELECT count(*) INTO n FROM series_debuts WHERE title_id::text LIKE 'fa000001-0000-4000-8000-%';
+ IF n<>2000 THEN RAISE EXCEPTION 'Expected 2000 synthetic series debuts, got %',n; END IF;
+ SELECT count(*) INTO n FROM title_localizations
+ WHERE display_title ILIKE '%Synthetic Alias 10000%';
+ IF n<>1 THEN RAISE EXCEPTION 'Alias search mismatch, got %',n; END IF;
+ SELECT count(*) INTO n FROM titles t
+ WHERE t.publication_status='published' AND
+   (t.original_title ILIKE '%Synthetic Load Title 9999%'
+    OR EXISTS (SELECT 1 FROM title_localizations l
+               WHERE l.title_id=t.id AND l.display_title ILIKE '%Synthetic Load Title 9999%'));
+ IF n<>1 THEN RAISE EXCEPTION 'Canonical search mismatch, got %',n; END IF;
+ SELECT count(*) INTO n FROM release_events r JOIN titles t ON t.id=r.title_id
+ WHERE r.event_type='original_premiere' AND t.title_type='series';
+ IF n<>0 THEN RAISE EXCEPTION 'Series leaked into film original premieres, got %',n; END IF;
+ SELECT count(*) INTO n FROM streaming_offers WHERE title_id::text LIKE 'fa000001-0000-4000-8000-%';
+ IF n<>0 THEN RAISE EXCEPTION 'Synthetic release created a streaming-offer claim: %',n; END IF;
+ SELECT count(*) INTO n FROM (
+   SELECT id FROM titles WHERE publication_status='published' ORDER BY id LIMIT 51
+ ) page;
+ IF n<>51 THEN RAISE EXCEPTION 'Unexpected first-page row count, got %',n; END IF;
+ SELECT count(*) INTO n FROM (
+   SELECT t.id,
+     (CASE WHEN EXISTS(
+       SELECT 1 FROM title_languages l
+       WHERE l.title_id=t.id AND l.relation='original' AND l.language_code='ko'
+     ) THEN 5 ELSE 0 END)
+     + (SELECT COUNT(*)::integer*3 FROM title_genres g
+         WHERE g.title_id=t.id AND g.genre_code IN ('thriller','drama')) AS score
+   FROM titles t WHERE t.publication_status='published'
+   AND (EXISTS(
+      SELECT 1 FROM title_languages l
+      WHERE l.title_id=t.id AND l.relation='original' AND l.language_code='ko'
+   ) OR EXISTS(
+      SELECT 1 FROM title_genres g WHERE g.title_id=t.id
+       AND g.genre_code IN ('thriller','drama')
+   ))
+   ORDER BY score DESC,t.id LIMIT 20
+ ) ranked;
+ IF n<>20 THEN RAISE EXCEPTION 'Ranking query returned an unexpected count: %',n; END IF;
+END
+$assert_synthetic$;
+
+
+-- Compare every 10k-title recommendation output against its prior,
+-- independently expressed correlated-query reference, including same-type
+-- bonus and source-title exclusion. A faster query must not change results.
+DO $verify_optimized_parity$
+DECLARE differing integer;
+        aliases integer;
+        wildcards integer;
+BEGIN
+ WITH reference_scores AS (
+   SELECT t.id,
+    EXISTS(SELECT 1 FROM title_languages l
+       WHERE l.title_id=t.id AND l.relation='original' AND l.language_code='ko') AS lang_hit,
+    (SELECT COUNT(*)::integer FROM title_genres g WHERE g.title_id=t.id
+       AND g.genre_code IN ('thriller','drama')) AS genre_hits,
+    (CASE WHEN EXISTS(SELECT 1 FROM title_languages l
+       WHERE l.title_id=t.id AND l.relation='original' AND l.language_code='ko')
+       THEN 5 ELSE 0 END)
+      + (SELECT COUNT(*)::integer*3 FROM title_genres g WHERE g.title_id=t.id
+         AND g.genre_code IN ('thriller','drama'))
+      + (CASE WHEN t.title_type='series' THEN 2 ELSE 0 END) AS score
+   FROM titles t WHERE t.publication_status='published'
+     AND t.id <> 'c73e1404-0000-4000-8000-000000000205'::uuid
+     AND (EXISTS(SELECT 1 FROM title_languages l WHERE l.title_id=t.id
+         AND l.relation='original' AND l.language_code='ko')
+       OR EXISTS(SELECT 1 FROM title_genres g WHERE g.title_id=t.id
+         AND g.genre_code IN ('thriller','drama')))
+ ), optimized_scores AS (
+   SELECT t.id,
+     (lm.title_id IS NOT NULL) AS lang_hit,
+     COALESCE(gm.hits,0) AS genre_hits,
+     (CASE WHEN lm.title_id IS NOT NULL THEN 5 ELSE 0 END)
+       + (COALESCE(gm.hits,0)*3)
+       + (CASE WHEN t.title_type='series' THEN 2 ELSE 0 END) AS score
+   FROM titles t
+   LEFT JOIN (
+     SELECT title_id FROM title_languages
+     WHERE relation='original' AND language_code='ko'
+     GROUP BY title_id
+   ) lm ON lm.title_id=t.id
+   LEFT JOIN (
+     SELECT title_id,COUNT(*)::integer AS hits
+     FROM title_genres
+     WHERE genre_code IN ('thriller','drama') GROUP BY title_id
+   ) gm ON gm.title_id=t.id
+   WHERE t.publication_status='published'
+     AND t.id <> 'c73e1404-0000-4000-8000-000000000205'::uuid
+     AND (lm.title_id IS NOT NULL OR gm.title_id IS NOT NULL)
+ ), mismatches AS (
+   (SELECT * FROM reference_scores EXCEPT SELECT * FROM optimized_scores)
+   UNION ALL
+   (SELECT * FROM optimized_scores EXCEPT SELECT * FROM reference_scores)
+ )
+ SELECT count(*)::integer INTO differing FROM mismatches;
+ IF differing<>0 THEN
+   RAISE EXCEPTION 'Ranked language/genre/same-type scores diverged on % titles',differing;
+ END IF;
+
+ -- Existing canonical title and localization must never become two rows.
+ SELECT COUNT(*)::integer INTO aliases FROM titles t
+ WHERE t.publication_status='published'
+   AND t.id IN (
+     SELECT id FROM titles WHERE lower(original_title) LIKE lower('%RRR%')
+     UNION
+     SELECT title_id FROM title_localizations
+     WHERE lower(display_title) LIKE lower('%RRR%')
+   );
+ IF aliases<>1 THEN RAISE EXCEPTION 'Repeated canonical/alias RRR match: %',aliases; END IF;
+
+ SELECT COUNT(*)::integer INTO aliases FROM titles t
+ WHERE t.publication_status='published'
+   AND t.id IN (
+     SELECT id FROM titles WHERE lower(original_title) LIKE lower('%Spirited Away%')
+     UNION
+     SELECT title_id FROM title_localizations
+     WHERE lower(display_title) LIKE lower('%Spirited Away%')
+   );
+ IF aliases<>1 THEN RAISE EXCEPTION 'Localized Japanese title was lost: %',aliases; END IF;
+
+ -- Treat % and _ as literal user input, not unbounded LIKE wildcards.
+ SELECT COUNT(*)::integer INTO wildcards FROM titles t
+ WHERE lower(t.original_title) LIKE lower('%\_%');
+ IF wildcards<>0 THEN RAISE EXCEPTION 'Underscore literal treated as wildcard'; END IF;
+ SELECT COUNT(*)::integer INTO wildcards FROM titles t
+ WHERE lower(t.original_title) LIKE lower('%\%%');
+ IF wildcards<>0 THEN RAISE EXCEPTION 'Percent literal treated as wildcard'; END IF;
+END
+$verify_optimized_parity$;
+
+\echo '[PERF] 10,000 synthetic titles + 13 curated titles. These are SQL execution profiles, not API/Android latency budgets.'
+\echo '[PERF] Browse original-language filter'
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, SUMMARY ON)
+SELECT t.id,t.original_title FROM titles t
+WHERE t.publication_status='published'
+ AND EXISTS(SELECT 1 FROM title_languages l WHERE l.title_id=t.id
+             AND l.relation='original' AND l.language_code='ko')
+ORDER BY t.id LIMIT 51;
+
+\echo '[PERF] Optimized indexed canonical and English alias search'
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, SUMMARY ON)
+SELECT t.id,t.original_title FROM titles t WHERE t.publication_status='published'
+ AND t.id IN (
+   SELECT id FROM titles
+   WHERE lower(original_title) LIKE lower('%Synthetic Alias 10000%')
+   UNION
+   SELECT title_id FROM title_localizations
+   WHERE lower(display_title) LIKE lower('%Synthetic Alias 10000%')
+ )
+ORDER BY CASE WHEN lower(t.original_title)=lower('Synthetic Alias 10000') THEN 0 ELSE 1 END,
+         t.original_title,t.id LIMIT 30;
+
+\echo '[PERF] Film-only historical original premiere lookup'
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, SUMMARY ON)
+SELECT t.id,t.original_title,r.release_date
+FROM release_events r JOIN titles t ON t.id=r.title_id
+WHERE t.publication_status='published' AND t.title_type='movie'
+ AND r.event_type='original_premiere' AND r.verified=true
+ AND r.release_date<'2026-01-01'
+ AND EXTRACT(MONTH FROM r.release_date)=3 AND EXTRACT(DAY FROM r.release_date)=25
+ORDER BY r.release_date DESC,t.id LIMIT 30;
+
+\echo '[PERF] Optimized guest ranking with pre-aggregated source matches'
+EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, SUMMARY ON)
+SELECT t.id,t.original_title,
+  (CASE WHEN lm.title_id IS NOT NULL THEN 5 ELSE 0 END)
+  + (COALESCE(gm.hits,0)*3) AS score
+FROM titles t
+LEFT JOIN (
+  SELECT title_id FROM title_languages
+  WHERE relation='original' AND language_code='ko'
+  GROUP BY title_id
+) lm ON lm.title_id=t.id
+LEFT JOIN (
+  SELECT title_id,count(*)::integer AS hits
+  FROM title_genres WHERE genre_code IN ('thriller','drama')
+  GROUP BY title_id
+) gm ON gm.title_id=t.id
+WHERE t.publication_status='published'
+ AND (lm.title_id IS NOT NULL OR gm.title_id IS NOT NULL)
+ORDER BY score DESC,t.id LIMIT 20;
+
+ROLLBACK;

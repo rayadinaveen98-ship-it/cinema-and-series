@@ -1,0 +1,129 @@
+name: Foundation Quality
+on:
+  push:
+    branches: ["main", "feature/**"]
+  pull_request:
+    branches: ["main"]
+permissions:
+  contents: read
+jobs:
+  domain-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run dependency-free domain tests
+        run: node --experimental-strip-types --test packages/domain/tests/*.test.mts
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Typecheck domain package
+        run: pnpm --filter @cinema/domain run typecheck
+      - name: Secret and generated-file guard
+        shell: bash
+        run: |
+          if git ls-files | grep -E '(^|/)(\.env|\.dev\.vars|node_modules/|.*\.apk$|.*\.aab$)'; then
+            echo "Forbidden credentials or generated artifacts in version control"
+            exit 1
+          fi
+
+  disposable-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: cinema_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: cinema_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cinema_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: cinema_test
+      PGPASSWORD: test_password
+      PGDATABASE: cinema_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL CLI
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Apply migration to disposable database
+        run: psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0001_catalogue.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0002_provider_release_link.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0003_ingestion_stage_idempotency.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0004_source_provenance_fetch_time.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0005_series_debut_event.sql
+      - name: Verify integrity with synthetic records
+        run: psql -v ON_ERROR_STOP=1 -f packages/db/tests/catalogue.integration.sql
+      - name: Certify source-reviewed multilingual pilot seed twice (disposable database)
+        run: |
+          psql -v ON_ERROR_STOP=1 -f jobs/curated/0001_rrr_verified.sql
+          psql -v ON_ERROR_STOP=1 -f jobs/curated/0002_multilingual_verified.sql
+          psql -v ON_ERROR_STOP=1 -f jobs/curated/0002_multilingual_verified.sql
+          psql -v ON_ERROR_STOP=1 -f packages/db/tests/curated_pilot.integration.sql
+      - name: Certify international films and first-season launches (twice, disposable only)
+        run: |
+          psql -v ON_ERROR_STOP=1 -f jobs/curated/0003_international_series_verified.sql
+          psql -v ON_ERROR_STOP=1 -f jobs/curated/0003_international_series_verified.sql
+          psql -v ON_ERROR_STOP=1 -f packages/db/tests/international_pilot.integration.sql
+      - name: Benchmark discovery on 10000 synthetic records (transaction rolled back)
+        run: psql -v ON_ERROR_STOP=1 -f packages/db/tests/discovery_scale.integration.sql
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Node integration dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Verify transactional staging, replay, races and rollback (disposable DB only)
+        env:
+          STAGING_TEST_DB_URL: postgres://cinema_test:test_password@127.0.0.1:5432/cinema_test
+        run: pnpm --filter @cinema/ingestion run test:db
+
+  api-contract:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install workspace dependencies without remote credentials
+        run: pnpm install --no-frozen-lockfile
+      - name: Typecheck Hono API and Drizzle read model
+        run: pnpm --filter @cinema/api run typecheck
+      - name: Request and error-response contract tests
+        run: pnpm --filter @cinema/api run test
+      - name: Worker bundle dry-run (no deployment)
+        run: pnpm --filter @cinema/api run build:check
+
+  ingestion-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install zero-credential workspace packages
+        run: pnpm install --no-frozen-lockfile
+      - name: Typecheck pure staging preflight
+        run: pnpm --filter @cinema/ingestion run typecheck
+      - name: Verify quarantine, identity, batch limits
+        run: pnpm --filter @cinema/ingestion run test

@@ -1,0 +1,19 @@
+{
+  "name": "@cinema/ingestion",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --experimental-strip-types --test tests/stage.test.mts tests/wikidata-client.test.mts tests/field-evidence.test.mts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:db": "node --experimental-strip-types --test --test-concurrency=1 tests/persistence.test.mts tests/review.test.mts"
+  },
+  "dependencies": {
+    "@cinema/domain": "workspace:*",
+    "postgres": "3.4.9"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3",
+    "@types/node": "^22.0.0"
+  }
+}
