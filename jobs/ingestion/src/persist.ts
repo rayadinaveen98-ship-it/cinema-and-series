@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import type { Sql, TransactionSql } from 'postgres';
-import type { CatalogueTitle } from '@cinema/domain';
 import { evaluateBatch } from './stage.ts';
+import { readCandidateIdentities } from './candidates.ts';
 
 export interface StageBatchRequest {
   /** Explicitly reviewed source adapter. No other source accepted in v1. */
@@ -46,48 +46,6 @@ function validateBatchRequest(request: StageBatchRequest): ValidatedBatch {
 }
 
 /**
- * Full pilot title lookup is intentionally capped at 500 canonical titles.
- * This is SAFE for the current ~60-title test pilot but not large-scale ingestion.
- * When the limit is exceeded the job fails closed instead of missing duplicate IDs.
- * The next stage must replace this with indexed, bounded candidate lookups.
- */
-async function readPilotIdentities(tx: TransactionSql): Promise<CatalogueTitle[]> {
-  const rows=await tx`
-    SELECT
-      t.id::text AS id,
-      t.title_type AS type,
-      t.original_title AS original_title,
-      t.publication_status AS status,
-      COALESCE(
-        (SELECT array_agg(e.source_key || ':' || e.external_id ORDER BY e.source_key,e.external_id)
-         FROM external_ids e WHERE e.title_id=t.id),
-        ARRAY[]::text[]
-      ) AS external_ids,
-      COALESCE(
-        (SELECT array_agg(l.display_title ORDER BY l.display_title)
-         FROM title_localizations l WHERE l.title_id=t.id),
-        ARRAY[]::text[]
-      ) AS alternate_titles
-    FROM titles t
-    WHERE t.publication_status IN ('published','staged')
-    ORDER BY t.id
-    LIMIT 501
-  `;
-  if (rows.length > 500) throw new Error('CATALOGUE_LOOKUP_LIMIT_EXCEEDED');
-  return rows.map(row=>({
-    id: String(row.id),
-    type:row.type==='series'?'series' as const:'movie' as const,
-    originalTitle:String(row.original_title),
-    originalLanguages:[],
-    genres:[],
-    status:row.status==='published'?'published' as const:'staged' as const,
-    externalIds:row.external_ids as string[],
-    alternativeTitles:row.alternate_titles as string[],
-    releaseEvents:[]
-  }));
-}
-
-/**
  * Runs ONLY within an externally managed transaction, exported for rollback tests.
  * No mutations of titles, release_events, streaming_offers or external_ids.
  */
@@ -126,7 +84,7 @@ export async function stageInsideTransaction(
 
   // Read real canonical identities from DB, never take caller-supplied
   // identity or publishability claims as authoritative.
-  const catalogue=await readPilotIdentities(tx);
+  const catalogue=await readCandidateIdentities(tx,batch.records);
   const decisions=evaluateBatch(batch.records,catalogue);
 
   const [created]=await tx`

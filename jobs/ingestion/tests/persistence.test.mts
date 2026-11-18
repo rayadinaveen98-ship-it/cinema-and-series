@@ -181,3 +181,58 @@ test('client-supplied malformed batch or too-large payload fails before any tran
   `;
   assert.equal(rows[0]?.n,0);
 });
+
+
+test('indexed lookup matches a canonical title even when catalogue exceeds former 500-row cap',async()=>{
+  await sql`
+    INSERT INTO titles(title_type,original_title,publication_status)
+    SELECT 'movie','Filler Example ' || gs::text,'published'
+    FROM generate_series(1,550) AS gs
+  `;
+  const [target]=await sql`
+    INSERT INTO titles(title_type,original_title,publication_status)
+    VALUES ('movie','Original Multilingual Collision','published')
+    RETURNING id::text AS id
+  `;
+  const [source]=await sql`
+    INSERT INTO source_records(source_key,external_record_id,source_url,license_code)
+    VALUES ('wikidata','Q880000120','https://www.wikidata.org/wiki/Q880000120','CC0')
+    RETURNING id::text AS id
+  `;
+  await sql`
+    INSERT INTO external_ids(title_id,source_key,external_id,source_record_id)
+    VALUES (${String(target!.id)}::uuid,'wikidata','Q880000120',${String(source!.id)}::uuid)
+  `;
+  const result=await persistStageBatch(sql,{
+    sourceKey:'wikidata',batchKey:'index-over-500',
+    records:[fixture('Q880000120','New Localized Name')]
+  });
+  assert.equal(result.pendingReview,1);
+  const [stage]=await sql`
+    SELECT issue_codes,review_status
+    FROM staging_records WHERE ingestion_run_id=${result.runId}::uuid
+  `;
+  assert.deepEqual(stage?.issue_codes,['SOURCE_MATCH_REQUIRES_FIELD_REVIEW']);
+  assert.equal(stage?.review_status,'pending');
+});
+test('indexed title-localization collisions still require review, never auto-merge',async()=>{
+  const [target]=await sql`
+    INSERT INTO titles(title_type,original_title,publication_status)
+    VALUES ('movie','Distinct Telugu Canonical Name','published')
+    RETURNING id::text AS id
+  `;
+  await sql`
+    INSERT INTO title_localizations(title_id,language_code,display_title,title_kind)
+    VALUES (${String(target!.id)}::uuid,NULL,'Ambiguous Localized Identity','alternative')
+  `;
+  const result=await persistStageBatch(sql,{
+    sourceKey:'wikidata',batchKey:'alias-identity',
+    records:[fixture('Q880000121','Ambiguous Localized Identity')]
+  });
+  const [stage]=await sql`
+    SELECT issue_codes,review_status FROM staging_records
+    WHERE ingestion_run_id=${result.runId}::uuid
+  `;
+  assert.deepEqual(stage?.issue_codes,['AMBIGUOUS_TITLE_ALIAS']);
+  assert.equal(stage?.review_status,'pending');
+});
