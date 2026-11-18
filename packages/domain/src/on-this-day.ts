@@ -22,7 +22,9 @@ export function findOnThisDay(
   const dayCode = '-' + String(month).padStart(2, '0') + '-' + String(day).padStart(2, '0');
   const results: OnThisDayItem[] = [];
   for (const title of catalogue) {
-    if (title.status !== 'published') continue;
+    // Historical movie calendar is for original theatrical releases only.
+    // Series launch dates are represented separately as series_debut.
+    if (title.status !== 'published' || title.type !== 'movie') continue;
     const premieres = title.releaseEvents
       .filter((event) => isVerifiedOriginalPremiere(event) && event.date.endsWith(dayCode) && Number(event.date.slice(0,4)) < beforeYear)
       .sort((a, b) => a.date.localeCompare(b.date));

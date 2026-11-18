@@ -1,5 +1,5 @@
 /**
- * Read-model mapping of SQL migrations 0001/0002.
+ * Read-model mapping of SQL migrations 0001–0005.
  * The SQL migrations remain authoritative until a schema-diff gate is added.
  * Do not use drizzle-kit push against the hosted pilot.
  */
@@ -45,7 +45,7 @@ export const releaseEvents = pgTable('release_events', {
   id: uuid('id').primaryKey(),
   titleId: uuid('title_id').notNull(),
   releaseDate: date('release_date').notNull(),
-  eventType: text('event_type').notNull(),
+  eventType: text('event_type').notNull().$type<'original_premiere'|'territory_theatrical'|'ott_premiere'|'rerelease'|'series_debut'>(),
   territoryCode: char('territory_code', { length: 2 }),
   verified: boolean('verified').notNull(),
   sourceRecordId: uuid('source_record_id').notNull(),

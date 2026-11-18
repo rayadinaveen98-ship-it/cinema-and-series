@@ -129,3 +129,20 @@ test('On This Day strictly excludes same-year and future scheduled premieres',()
   assert.deepEqual(findOnThisDay(expanded as any,2,28,50,2027).map(x=>x.titleId),['CURRENT','B']);
   assert.throws(()=>findOnThisDay(expanded as any,2,28,50,0),RangeError);
 });
+
+
+test('Series first-season launches are distinct from theatrical film anniversaries',()=>{
+  const firstSeason={...titles[2]!,status:'published',releaseEvents:[
+    premiere('2017-12-01','verified','series_debut')
+  ]};
+  const validated=validateStagedTitle({
+    ...staged,type:'series',
+    releaseEvents:[premiere('2017-12-01','unverified','series_debut')]
+  });
+  assert.equal(validated.ok,true);
+  assert.deepEqual(findOnThisDay([...titles,firstSeason] as any,12,1,50,2026),[]);
+  const incorrectlyLabeled={...firstSeason,id:'MISCLASSIFIED_SERIES',releaseEvents:[
+    premiere('2017-12-01','verified','original_premiere')
+  ]};
+  assert.deepEqual(findOnThisDay([...titles,incorrectlyLabeled] as any,12,1,50,2026),[]);
+});

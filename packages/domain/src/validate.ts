@@ -2,7 +2,7 @@ import type { DomainIssue, ReleaseEvent, StagedTitle } from './types.ts';
 import { isValidISODate } from './dates.ts';
 import { isCountryCode, isLanguageTag } from './normalize.ts';
 
-const RELEASE_KINDS = new Set(['original_premiere', 'territory_theatrical', 'ott_premiere', 'rerelease']);
+const RELEASE_KINDS = new Set(['original_premiere', 'territory_theatrical', 'ott_premiere', 'rerelease', 'series_debut']);
 const VERIFICATIONS = new Set(['verified', 'unverified', 'rejected']);
 
 export type ValidationResult = { ok: boolean; issues: DomainIssue[]; record?: StagedTitle };

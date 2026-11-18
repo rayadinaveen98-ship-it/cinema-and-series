@@ -1,6 +1,6 @@
 export type TitleType = 'movie' | 'series';
 export type RecordStatus = 'staged' | 'published';
-export type ReleaseKind = 'original_premiere' | 'territory_theatrical' | 'ott_premiere' | 'rerelease';
+export type ReleaseKind = 'original_premiere' | 'territory_theatrical' | 'ott_premiere' | 'rerelease' | 'series_debut';
 export type SourceVerification = 'verified' | 'unverified' | 'rejected';
 
 export interface ReleaseEvent {

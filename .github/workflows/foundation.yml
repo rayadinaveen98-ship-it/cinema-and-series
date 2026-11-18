@@ -61,7 +61,7 @@ jobs:
       - name: Install PostgreSQL CLI
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Apply migration to disposable database
-        run: psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0001_catalogue.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0002_provider_release_link.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0003_ingestion_stage_idempotency.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0004_source_provenance_fetch_time.sql
+        run: psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0001_catalogue.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0002_provider_release_link.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0003_ingestion_stage_idempotency.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0004_source_provenance_fetch_time.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0005_series_debut_event.sql
       - name: Verify integrity with synthetic records
         run: psql -v ON_ERROR_STOP=1 -f packages/db/tests/catalogue.integration.sql
       - name: Certify source-reviewed multilingual pilot seed twice (disposable database)

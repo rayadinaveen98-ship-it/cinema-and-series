@@ -147,6 +147,7 @@ export class NeonCatalogueRepository implements CatalogueRepository {
       .innerJoin(titles,eq(releaseEvents.titleId,titles.id))
       .where(and(
         eq(titles.publicationStatus,'published'),
+        eq(titles.titleType,'movie'),
         eq(releaseEvents.eventType,'original_premiere'),
         eq(releaseEvents.verified,true),
         lt(releaseEvents.releaseDate,String(beforeYear)+'-01-01'),
