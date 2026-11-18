@@ -63,6 +63,7 @@ test('replaying same key and payload returns identical run without new rows or a
   assert.deepEqual(await persistedCounts(first.runId),{staged:1,reviews:1});
   const audits=await sql`SELECT changes FROM catalogue_audit_log
     WHERE action='stage_only_batch'`;
+  console.error('STAGING_AUDIT_DEBUG',JSON.stringify(audits));
   assert.equal(audits.filter(row=>row.changes?.batchKey==='replay-002').length,1);
 });
 
