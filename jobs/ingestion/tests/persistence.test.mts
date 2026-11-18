@@ -236,3 +236,23 @@ test('indexed title-localization collisions still require review, never auto-mer
   assert.deepEqual(stage?.issue_codes,['AMBIGUOUS_TITLE_ALIAS']);
   assert.equal(stage?.review_status,'pending');
 });
+
+
+test('too many ambiguous title candidates fail closed without partial staging',async()=>{
+  await sql`
+    INSERT INTO titles(title_type,original_title,publication_status)
+    SELECT 'movie','Shared Overloaded Title','published'
+    FROM generate_series(1,601)
+  `;
+  await assert.rejects(persistStageBatch(sql,{
+    sourceKey:'wikidata',batchKey:'ambiguity-limit-601',
+    records:[fixture('Q880000125','Shared Overloaded Title')]
+  }),/AMBIGUOUS_CANDIDATE_LIMIT_EXCEEDED/);
+  const [checks]=await sql`
+    SELECT (SELECT count(*)::integer FROM ingestion_runs
+      WHERE batch_key='ambiguity-limit-601') AS runs,
+      (SELECT count(*)::integer FROM source_records
+      WHERE source_key='wikidata' AND external_record_id='Q880000125') AS sources
+  `;
+  assert.deepEqual(checks,{runs:0,sources:0});
+});
