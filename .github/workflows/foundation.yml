@@ -61,9 +61,21 @@ jobs:
       - name: Install PostgreSQL CLI
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
       - name: Apply migration to disposable database
-        run: psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0001_catalogue.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0002_provider_release_link.sql
+        run: psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0001_catalogue.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0002_provider_release_link.sql && psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0003_ingestion_stage_idempotency.sql
       - name: Verify integrity with synthetic records
         run: psql -v ON_ERROR_STOP=1 -f packages/db/tests/catalogue.integration.sql
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Node integration dependencies
+        run: pnpm install --no-frozen-lockfile
+      - name: Verify transactional staging, replay, races and rollback (disposable DB only)
+        env:
+          STAGING_TEST_DB_URL: postgres://cinema_test:test_password@127.0.0.1:5432/cinema_test
+        run: pnpm --filter @cinema/ingestion run test:db
 
   api-contract:
     runs-on: ubuntu-latest

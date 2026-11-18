@@ -4,11 +4,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --experimental-strip-types --test tests/*.test.mts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "test": "node --experimental-strip-types --test tests/stage.test.mts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test:db": "node --experimental-strip-types --test tests/persistence.test.mts"
   },
   "dependencies": {
-    "@cinema/domain": "workspace:*"
+    "@cinema/domain": "workspace:*",
+    "postgres": "3.4.9"
   },
   "devDependencies": {
     "typescript": "^5.8.3",
