@@ -106,3 +106,7 @@ Observed CI SQL execution times (baseline to optimized): English-alias search 9.
 ## Read-only Hono/Neon HTTP smoke preparation — 2026-11-18
 
 The opt-in runner and synthetic safety tests are implemented. The runner uses real Hono routes + Drizzle/Neon HTTP (without a deployed Worker), validates the scoped reader role, SELECT-only privileges and no private staging access, and checks public catalogue requests. **LIVE HTTP SMOKE NOT TESTED:** cinema_api_reader has now been created with precisely 11 scoped SELECT grants and verified to have no data writes, admin membership, schema CREATE or private review/audit reads. Its password has NOT been activated; no database credential has been issued to GitHub or the test runner. This is separately security-gated. See docs/security/READONLY_NEON_API_SMOKE.md. Stage 01 remains IN PROGRESS and no public Worker/APK exists.
+
+## Reader-authenticated database gate — PASSED, 2026-11-18
+
+Founder confirmed privately saving the Neon-generated password. Reader login identity now accepts scoped SELECT and rejects private `staging_records` SELECT with permission denied. **Security role provisioning prerequisite completed.** Next required milestone is actual Hono/Drizzle neon-http smoke in a trusted local Windows environment using the reader DSN only (never via draft-PR CI). No further catalogue expansion or deployment until this live HTTP test is run and reviewed. Stage 01 remains IN PROGRESS.

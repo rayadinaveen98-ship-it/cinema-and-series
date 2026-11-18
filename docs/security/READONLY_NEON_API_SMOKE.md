@@ -1,6 +1,6 @@
 # Stage 01: credential-gated Hono/Neon HTTP smoke
 
-Status: RUNNER IMPLEMENTED and guard-tested. Dedicated reader CREATED and permission-verified, but PASSWORD ACTIVATION MANUAL and REAL HTTP SMOKE NOT EXECUTED.
+Status: RUNNER IMPLEMENTED and guard-tested. Dedicated reader CREATED, password ACTIVATED privately by founder, SELECT and private-denial checks verified AS READER; real Hono HTTP smoke NOT EXECUTED.
 
 The existing cinema_owner Neon login has administrative privileges and MUST NEVER be used for this app's read-only API or smoke. The isolated cinema_pilot database currently has 13 sourced titles, 11 films and two series; direct SQL results do not certify real Hono-Neon HTTP requests.
 
@@ -29,7 +29,7 @@ ALTER ROLE cinema_api_reader SET statement_timeout = '5s';
 
 This PR contains documentation only; the grants were applied directly to isolated Neon. Verification confirmed: the role has CONNECT, public USAGE, SELECT only on 11 specified catalogue relations, zero INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER, zero CREATE on public, zero role memberships or admin flags, and no SELECT on staging, review, audit or any other non-allowlisted table. The smoke runner re-checks those privileges before issuing catalogue requests.
 
-## Mandatory manual password activation (NOT YET DONE)
+## Manual password activation (COMPLETED on 2026-11-18)
 
 1. Open https://console.neon.tech and select Cinema & Series pilot project (project ID plain-violet-46536395), branch main.
 2. Under Postgres database, open Roles and find cinema_api_reader, then use Reset password and confirm Reset. This makes Neon generate a new secret privately. The role was deliberately created without a password.
@@ -64,3 +64,7 @@ It performs no writes, creates no listener, and does not deploy a Cloudflare Wor
 The reader permission setup is now verified. To certify the next step, privately activate its password and execute the runner in a trusted private environment, record passing case names and commit SHA without secrets, and re-check hosted title counts. A successful in-process test would establish Hono/Neon HTTP integration, NOT public Cloudflare runtime, realistic p95, physical Android, or release readiness. Those require separately approved tests.
 
 Current state: 13-title direct Neon SQL VERIFIED; reader created with correct grants, but login password not activated. Real Hono -> Neon HTTP run BLOCKED; deployment, GitHub secret provisioning, and APK have NOT occurred.
+
+## Reader-authentication checkpoint — verified 2026-11-18
+
+Founder confirmed password reset and secure storage. Neon reported `authentication_method=password`, and an explicit database query as role `cinema_api_reader` returned 13 published catalogue titles. Attempting a SELECT on `staging_records` as the same role failed with `permission denied` as required. Admin and per-table rights were previously checked and remain restricted. No password or connection URL was recorded. This completes the login and authorization prerequisites but does **not** certify the real Hono-to-Neon HTTP runner or a deployed Worker. Next manual gate: use the reader connection URL privately in an approved local Windows execution of `pnpm --filter @cinema/api run smoke:neon`; share only the PASS/FAIL summary.

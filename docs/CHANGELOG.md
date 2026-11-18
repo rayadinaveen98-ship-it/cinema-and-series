@@ -57,3 +57,5 @@
 
 - Created dedicated SQL-defined `cinema_api_reader` Neon role without a password; applied and verified only 11 catalogue-table SELECT grants, no admin role or private staging/review/audit access, and no DML/DDL privileges. Existing 13-title pilot unchanged.
 - Password activation is a **manual founder prerequisite** using the Neon Console Roles reset control; no secret or production database credential was used in CI. Real Hono-to-Neon smoke and subsequent development remain paused until this is finished.
+
+- Verified Neon-generated password activation for `cinema_api_reader` without receiving the password. Direct limited-role SELECT returned 13 published titles; staging SELECT was denied. This completes least-privilege login readiness, not Hono API HTTP certification. Next action is an operator-run secret-safe local smoke.

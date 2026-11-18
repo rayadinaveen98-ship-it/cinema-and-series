@@ -106,3 +106,9 @@ Neon Free and Workers Free impose strict storage/compute/request limits. Google 
 - Granted CONNECT to cinema_pilot, USAGE on public, and SELECT on exactly 11 application read-model tables. Checked every public relation: no SELECT on staging_records, review_queue, ingestion_runs, catalogue_audit_log or any non-allowlisted relation. All 11 SELECTs true; all INSERT/UPDATE/DELETE/TRUNCATE/REFERENCES/TRIGGER false; CREATE public false.
 - The Neon Roles listing reports authentication_method=no_login until user privately activates/resets the password; no password was generated or retrieved. The founder's **manual** next action is Neon Console > Roles > cinema_api_reader > Reset password. No password/connection string is to be pasted into chat.
 - Before and after role grant, 13 published titles and 0 staging records; no film rows modified. Real Hono-to-Neon HTTP smoke remains NOT CERTIFIED. All further work paused at this explicit prerequisite.
+
+## Scoped reader password and privilege acceptance — 2026-11-18
+
+- Founder confirmed a new password was generated and safely saved using Neon Console Reset password. No credential was shared in chat, GitHub or tests.
+- Independently checked that `cinema_api_reader` is a password-authenticated Neon login, with no superuser/CREATEDB/CREATEROLE/BYPASSRLS flags. A live scoped SQL query made *as that role* returned exactly 13 published titles; a SELECT on private `staging_records` returned `permission denied`. This is actual limited-role database access, **not** a Hono runtime HTTP test.
+- Next required action: user runs the opt-in Hono/Neon HTTP smoke locally with an environment-only reader DSN, and shares the sanitized PASS/FAIL labels. CI must not receive the secret and no Worker deployment or APK is authorized. Roadmap remains Stage 01 / live Hono HTTP BLOCKED until smoke is executed.
