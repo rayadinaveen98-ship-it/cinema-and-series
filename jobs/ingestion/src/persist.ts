@@ -169,7 +169,8 @@ export async function stageInsideTransaction(
       }
     }
 
-    const issueJson=JSON.stringify(disposition.issues);
+    // Use the driver's JSON parameter serializer; passing JSON.stringify(text)
+    // as a plain value would store a JSONB STRING, not an object/array.
     const reviewStatus=disposition.disposition==='quarantined'?'rejected':'pending';
     const [staging]=await tx`
       INSERT INTO staging_records
@@ -177,9 +178,9 @@ export async function stageInsideTransaction(
       VALUES (
         ${runId}::uuid,
         ${sourceRecordId}::uuid,
-        ${candidateJson}::jsonb,
+        ${tx.json(JSON.parse(candidateJson))}::jsonb,
         ${reviewStatus},
-        ${issueJson}::jsonb,
+        ${tx.json(disposition.issues)}::jsonb,
         ${position}
       )
       RETURNING id::text AS id
@@ -205,13 +206,13 @@ export async function stageInsideTransaction(
   `;
 
   // Safe, minimal audit event only; deliberately no publication of any title.
-  const audit=JSON.stringify({
+  const audit={
     runId,source:batch.sourceKey,batchKey:batch.batchKey,
     staged:decisions.total,quarantined:decisions.quarantined
-  });
+  };
   await tx`
     INSERT INTO catalogue_audit_log(actor_type,action,changes)
-    VALUES ('import_job','stage_only_batch',${audit}::jsonb)
+    VALUES ('import_job','stage_only_batch',${tx.json(audit)}::jsonb)
   `;
 
   return {

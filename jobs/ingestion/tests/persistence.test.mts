@@ -44,6 +44,10 @@ test('transactionally writes new candidate, source provenance and one review ite
   assert.equal(result.pendingReview,1);
   assert.equal(result.quarantined,0);
   assert.deepEqual(await persistedCounts(result.runId),{staged:1,reviews:1});
+  const shape=await sql`SELECT jsonb_typeof(raw_candidate) AS record_type,
+    jsonb_typeof(issue_codes) AS issues_type
+    FROM staging_records WHERE ingestion_run_id=${result.runId}::uuid`;
+  assert.deepEqual(shape[0],{record_type:'object',issues_type:'array'});
 
   const [run]=await sql`SELECT run_status,processed_count::integer AS n,
     rejected_count::integer AS rejected FROM ingestion_runs WHERE id=${result.runId}::uuid`;
@@ -63,8 +67,10 @@ test('replaying same key and payload returns identical run without new rows or a
   assert.deepEqual(await persistedCounts(first.runId),{staged:1,reviews:1});
   const audits=await sql`SELECT changes FROM catalogue_audit_log
     WHERE action='stage_only_batch'`;
-  console.error('STAGING_AUDIT_DEBUG',JSON.stringify(audits));
   assert.equal(audits.filter(row=>row.changes?.batchKey==='replay-002').length,1);
+  const dbTypes=await sql`SELECT jsonb_typeof(changes) AS type
+    FROM catalogue_audit_log WHERE action='stage_only_batch'`;
+  assert.ok(dbTypes.every(row=>row.type==='object'));
 });
 
 test('changed payload with same idempotency key is rejected and leaves existing run intact',async()=>{
