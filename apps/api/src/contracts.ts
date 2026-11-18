@@ -53,6 +53,8 @@ export interface CatalogueRepository {
   detail(id: string): Promise<TitleDetail | null>;
   search(q: string, limit: number): Promise<TitleSummary[]>;
   onThisDay(options: HistoricalOptions): Promise<HistoricalTitle[]>;
+  recommend(preferences: import('@cinema/domain').ViewerPreferences, limit: number): Promise<RankedTitle[]>;
+  similar(titleId: string, limit: number): Promise<RankedTitle[] | null>;
   languages(): Promise<{ code: string; name: string }[]>;
   genres(): Promise<{ code: string; name: string }[]>;
 }
@@ -61,3 +63,8 @@ export interface HistoricalTitle extends TitleSummary {
   originalPremiereDate: string;
 }
 
+
+export interface RankedTitle extends TitleSummary {
+  score: number;
+  reasons: Array<'language' | 'genre' | 'sameType'>;
+}

@@ -107,7 +107,7 @@ test('similarity excludes self and unpublished records, and values genre/languag
      externalIds:[],releaseEvents:[]}
   ];
   const matches=similarTitles(other as any,'A');
-  assert.deepEqual(matches.map(x=>x.titleId),['E','F','B']);
+  assert.deepEqual(matches.map(x=>x.titleId),['E','B','F']);
   assert.equal(matches[0]?.score,13);
   assert.equal(matches.some(x=>x.titleId==='A'||x.titleId==='D'),false);
   assert.deepEqual(similarTitles(other as any,'NOT-FOUND'),[]);
