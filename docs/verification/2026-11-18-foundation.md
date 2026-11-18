@@ -64,3 +64,11 @@ Neon Free and Workers Free impose strict storage/compute/request limits. Google 
 - Both push and PR CI workflows passed on this head (source client mock tests, 11 persistence tests and 7 reviewer tests plus other existing test suites).
 - Published metadata untouched; source client is not connected to a live scheduled importer. A review qualification is **not** publication approval and does not change titles, original releases or streaming offers.
 - Existing Neon pilot migrations 0001–0004 preserved; no new migration required. No paid resource or deployment was created.
+
+## Field-evidence and review-audit checkpoint — 2026-11-18
+
+- Commit 729a9fa8e6380599ff95cc04456ec6cd7e80ba0e: added field-evidence module with eight synthetic field-level tests; stage self-verified premiere quarantine test; review-audit integration and assertion in disposable PostgreSQL.
+- Corrected a strict TypeScript optional-array fixture error during first CI attempt. Latest corrected CI run 44248197976 succeeded across domain-tests, api-contract, ingestion-preflight and disposable-postgres.
+- Source date parsing: P577 time precision 11 only, Gregorian calendar, valid midnight UTC date; P577 never directly implies original theatrical premiere. Multiple exact P577 dates require review.
+- P364 and P136 property values are returned as unresolved Wikidata Q-IDs, not automatically mapped to ISO language or controlled genre values.
+- No live Wikidata fetch, no Neon staging or title publication, no paid changes, no Worker deployment or APK.

@@ -56,3 +56,13 @@ PROPOSED / APPROVED / IMPLEMENTED / TESTED / BLOCKED / RELEASED are separate lab
 - Scoped title-candidate query tests include >500 existing titles, localized-alias collision, and >600 ambiguous candidates safely failing without partial transaction.
 - Review tests: rejected stage cannot be qualified; fetched source snapshot required for new candidate; ambiguous-alias qualification blocked; concurrent decisions cannot both succeed; forced transaction exception rolls back all review changes and audit; stage quality validation never changes published title tables.
 - Not certified: trusted reviewer authentication or source fetch itself, human fact-review decisions, real-to-live API performance, publication or physical Android use.
+
+## Source-field evaluation negative-case gate — 2026-11-18
+
+- Reject unsupported year/month precision, impossible calendar dates, and non-Gregorian P577 data as exact days.
+- Preserve multiple day-precision P577 values as an ambiguity requiring review.
+- Never infer verified original theatrical premiere from P577, or current streaming availability from a source statement.
+- Never map P364/P136 Q-identifiers directly into normalized language and genre codes.
+- Quarantine source-submitted `verified` release events during preflight.
+- Editorial review audit records field comparison without promoting publication status or storing unbounded raw payloads.
+- Production certification requires human/editor identity, direct evidence checks and live remote integration tests.

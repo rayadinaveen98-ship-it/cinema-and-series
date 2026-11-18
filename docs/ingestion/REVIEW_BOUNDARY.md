@@ -27,3 +27,7 @@ Status: built/tested in isolated PR. Not production authentication, publication 
 - Real manual field-level review and operator identity.
 - Publication dry-run and atomic rollback/correction tests on disposable PostgreSQL.
 - Large-catalogue candidate-index EXPLAIN, >10k records and non-Latin title collision tests.
+
+## Source field matrix: new evidence checkpoint
+
+A staging reviewer may qualify a *candidate for later editorial work* only, not a historical release date. The qualification audit now includes field-comparison observations from `field-evidence.ts`: label observed, unverified P577 date matches, unresolved language/genre Q-IDs, and issue flags. Regardless of matches, the output always states `originalPremiereVerified=false`, `streamingVerified=false` and `publishable=false`. Secondary evidence and an authenticated publication process remain separate gates.

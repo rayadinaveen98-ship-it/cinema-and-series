@@ -32,3 +32,8 @@
 - Added explicit Wikidata read-only source client with mock HTTP tests for identification, pacing, 429/503 backoff, response caps and untrusted entity identity. No real Wikimedia network requests were performed by CI.
 - Added internal review decision state machine: new candidates can qualify for further editorial checking only with a source snapshot; ambiguous matches are blocked; rejection, locks, notes, audit, races and rollback tested. Reviewer authentication and publishing are NOT implemented.
 - Four CI jobs passed on commit 3cd961f2312571a69655459fcb92b3d68f29fc3f; Neon pilot remains unchanged.
+
+- Added isolated Wikidata claim-assessment module: candidate title label matching, strict day-precision Gregorian P577 observations, multi-date conflict flags, source P364/P136 Q-ID preservation. No inferred original-premiere or streaming verification.
+- Added stage quarantine for incoming candidates that self-declare verified historical release events without separate evidence.
+- Added structured field-evidence assessment to the internal nonpublishing quality review audit; synthetic/disposable PostgreSQL checks passed.
+- Current Stage 01 is still gated on independent verified data, source-to-staging operational pipeline, operator authentication and release certification.

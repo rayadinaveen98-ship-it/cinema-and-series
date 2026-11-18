@@ -65,3 +65,11 @@ Scoped canonical candidate lookup uses external ID and pg_trgm title/alias candi
 Internal stage-only review operations now atomically reject a candidate or qualify a new one for further editorial processing, with fetched snapshot check, required evidence note, audit record, replay protection, concurrency and forced rollback tests. This is NOT an authenticated human reviewer service, NOT an approval for publication, and NOT publicly deployed. Existing alias/identity collisions cannot be qualified using this simple path.
 
 Still outstanding before Stage 01 exit: source entity-to-field mapping + verification, real authorized rate-limited fetching with checkpoint controls, reviewer authentication/RBAC, audit-safe publication process, verified multilingual pilot of ~60 records, recovery/restore certification and API-to-Neon smoke tests. Android UI/APK remains unstarted.
+
+## Stage 01 — Field-evidence checkpoint (2026-11-18)
+
+**IMPLEMENTED + TESTED IN DRAFT PR:** Structured, strict Wikidata P577 date observations; rejected incomplete year/month precision and invalid/non-Gregorian dates; multiple-date conflict flags; unresolved Wikidata P364/P136 item IDs; language/genre and title-label comparison; complete no-auto-publish invariant. Source-provided `verification=verified` release events are quarantined before staging. Internal review qualifications now audit this source-field comparison without altering canonical titles, releases or streaming offers.
+
+**NOT CERTIFIED:** Editorial assertion that any P577 represents an original theatrical premiere, verified original-language mapping, existing OTT availability, legal reuse beyond scoped source policy, authenticated reviewer identity, working public API, complete multilingual pilot or Android application. Source client tests are mocked, not live.
+
+**CURRENT GATE:** Field-level source *comparison* is ready for further manual verification; independent fact-check and an authenticated publication workflow remain pending.

@@ -23,3 +23,15 @@ CI exercises >500 catalogue rows, localized-alias collisions, >600 ambiguous can
 - Historical publication dates, original languages, dub/territory streaming offers and genres are NOT promoted from unverified Wikidata statements.
 - At-scale identity indexing/EXPLAIN and data-quality benchmarks still need real representative catalogue data.
 - No scheduled bulk fetch, checkpoint/resume persistence, source mapping, authenticated editorial UI, production publishing or public backend exists.
+
+## Field evidence assessment — 2026-11-18
+
+`src/field-evidence.ts` reads raw Wikidata labels, date statements (P577), original-language item IDs (P364) and genre item IDs (P136). Its output is unverified evidence for human comparison only. P577 must have exact day precision (Wikibase precision 11) and an unambiguous Gregorian day to be considered an observable date. The report never classifies P577 as an original theatrical premiere, and never maps raw language/genre Q-IDs to our canonical codes without separate reference checks.
+
+`compareStagedFields` records matching title labels and publication dates, missing fields, conflicting publication dates and unsupported self-verified release claims. All results explicitly set `originalPremiereVerified=false`, `streamingVerified=false` and `publishable=false`. A staged record claiming an already-verified release is quarantined by the preflight rather than trusted.
+
+The internal `review.ts` qualify transaction now includes this nonpublishing evidence matrix in an audit entry (field booleans and issue codes only; no raw media text or reviewer note). It does **not** turn the fields into verified public facts, and cannot bypass independent theatrical-release and territory-specific streaming checks.
+
+The Wikidata claim mapping follows official JSON-format documentation: https://doc.wikimedia.org/Wikibase/master/php/docs_topics_json.html and https://www.wikidata.org/wiki/Property:P577 . The source adapter still uses injected/mock HTTP in CI, not a live Wikimedia crawl.
+
+Outstanding: independently corroborated original premiere / country / language classification, curated field provenance for actual records, authenticated editor/RBAC, publish/withdraw lifecycle, source freshness, human UI and source-permission review.

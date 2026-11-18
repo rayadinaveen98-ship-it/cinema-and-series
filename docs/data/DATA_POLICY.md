@@ -35,3 +35,9 @@ A staged source reference is **not** evidence that Wikidata was fetched or indep
 ## Wikidata source adapter — initial safe scope
 
 Wikidata's linked data interface is treated as raw unverified source evidence only. The tested client explicitly names Q-IDs; performs no discovery crawl or production writes; uses an identifiable User-Agent; sends at most five sequential source requests with conservative one-second gaps; stops on 429/503 and exposes Retry-After. Source references and CC0 facts do not automatically establish that P577 is an original theatrical premiere or that an OTT offer is currently available. Before live usage, review API rate-limit and access policies and configure source-contact/observability appropriately.
+
+## Claim precision and original-premiere evidence
+
+Wikidata property P577 represents a publication/release date and may contain several release-related dates. It is never, by itself, permission to mark a film's original theatrical premiere as verified. Extract only exact Gregorian day precision from its Wikibase time values as an **unverified observation**. Do not coerce month/year precision to a calendar day or confuse a festival screening, regional release or OTT date with a first theatrical premiere. Field-level editorial verification requires corroborating release kind and territory from acceptable sources.
+
+Original-language property P364 and genre property P136 use Wikidata entity identifiers: they are not equivalent to the app's normalized language and genre codes without an explicit checked mapping. Review qualification is stage-only, not a publication decision. All current-content streaming offers require separately sourced territory-specific verification.
