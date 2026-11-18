@@ -18,10 +18,13 @@ jobs:
       - name: Run dependency-free domain tests
         run: node --experimental-strip-types --test packages/domain/tests/*.test.mts
 
-      - name: Install pinned TypeScript compiler for isolated typecheck
-        run: npm install --no-save --ignore-scripts --no-audit --no-fund typescript@5.8.3
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.1
+      - name: Install workspace dependencies
+        run: pnpm install --no-frozen-lockfile
       - name: Typecheck domain package
-        run: ./node_modules/.bin/tsc --noEmit --project packages/domain/tsconfig.json
+        run: pnpm --filter @cinema/domain run typecheck
       - name: Secret and generated-file guard
         shell: bash
         run: |

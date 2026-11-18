@@ -8,8 +8,12 @@ type StoreFactory = (url: string) => CatalogueRepository;
 type HttpErrorCode = 'BAD_REQUEST' | 'DATABASE_UNAVAILABLE';
 
 class HttpError extends Error {
-  constructor(readonly status: 400 | 503, readonly code: HttpErrorCode, message: string) {
+  readonly status: 400 | 503;
+  readonly code: HttpErrorCode;
+  constructor(status: 400 | 503, code: HttpErrorCode, message: string) {
     super(message);
+    this.status = status;
+    this.code = code;
   }
 }
 
