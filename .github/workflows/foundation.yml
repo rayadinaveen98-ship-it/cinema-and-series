@@ -75,6 +75,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f jobs/curated/0003_international_series_verified.sql
           psql -v ON_ERROR_STOP=1 -f jobs/curated/0003_international_series_verified.sql
           psql -v ON_ERROR_STOP=1 -f packages/db/tests/international_pilot.integration.sql
+      - name: Benchmark discovery on 10000 synthetic records (transaction rolled back)
+        run: psql -v ON_ERROR_STOP=1 -f packages/db/tests/discovery_scale.integration.sql
       - uses: pnpm/action-setup@v4
         with:
           version: 10.17.1
