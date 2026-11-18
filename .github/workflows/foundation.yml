@@ -17,6 +17,11 @@ jobs:
           node-version: "22"
       - name: Run dependency-free domain tests
         run: node --experimental-strip-types --test packages/domain/tests/*.test.mts
+
+      - name: Install pinned TypeScript compiler for isolated typecheck
+        run: npm install --no-save --ignore-scripts --no-audit --no-fund typescript@5.8.3
+      - name: Typecheck domain package
+        run: ./node_modules/.bin/tsc --noEmit --project packages/domain/tsconfig.json
       - name: Secret and generated-file guard
         shell: bash
         run: |
@@ -24,3 +29,35 @@ jobs:
             echo "Forbidden credentials or generated artifacts in version control"
             exit 1
           fi
+
+  disposable-postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: cinema_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: cinema_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cinema_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: localhost
+      PGPORT: "5432"
+      PGUSER: cinema_test
+      PGPASSWORD: test_password
+      PGDATABASE: cinema_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL CLI
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+      - name: Apply migration to disposable database
+        run: psql -v ON_ERROR_STOP=1 -f packages/db/migrations/0001_catalogue.sql
+      - name: Verify integrity with synthetic records
+        run: psql -v ON_ERROR_STOP=1 -f packages/db/tests/catalogue.integration.sql
