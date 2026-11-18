@@ -1,5 +1,3 @@
-import type { ViewerPreferences } from '@cinema/domain';
-
 export interface TitleSummary {
   id: string;
   originalTitle: string;
@@ -57,14 +55,9 @@ export interface CatalogueRepository {
   onThisDay(options: HistoricalOptions): Promise<ReleaseSummary[] & never[]> | Promise<HistoricalTitle[]>;
   languages(): Promise<{ code: string; name: string }[]>;
   genres(): Promise<{ code: string; name: string }[]>;
-  recommend(preferences: ViewerPreferences, limit: number): Promise<RecommendedTitle[]>;
 }
 
 export interface HistoricalTitle extends TitleSummary {
   originalPremiereDate: string;
 }
 
-export interface RecommendedTitle extends TitleSummary {
-  score: number;
-  reasons: Array<'language' | 'genre'>;
-}

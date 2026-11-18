@@ -163,8 +163,4 @@ export class NeonCatalogueRepository implements CatalogueRepository {
     return this.db.select({code:genres.code,name:genres.displayName})
       .from(genres).orderBy(asc(genres.displayName)).limit(100);
   }
-  async recommend(): Promise<[]> {
-    // Recommend endpoint is deliberately not exposed until scoped candidate queries are tested.
-    return [];
-  }
 }

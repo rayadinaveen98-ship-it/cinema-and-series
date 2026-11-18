@@ -20,7 +20,6 @@ const fake:CatalogueRepository={
   async onThisDay(options) { lastCall='history:'+JSON.stringify(options); return [{...rrr,originalPremiereDate:'2022-03-25'}]; },
   async languages() {return [{code:'te',name:'Telugu'}];},
   async genres() {return [{code:'action',name:'Action'}];},
-  async recommend(){return [];}
 };
 const app=createApp(()=>fake);
 const env={DATABASE_URL:'postgresql://synthetic.invalid/test'};
