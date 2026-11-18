@@ -99,6 +99,95 @@ BEGIN
 END
 $assert_synthetic$;
 
+
+-- Compare every 10k-title recommendation output against its prior,
+-- independently expressed correlated-query reference, including same-type
+-- bonus and source-title exclusion. A faster query must not change results.
+DO $verify_optimized_parity$
+DECLARE differing integer;
+        aliases integer;
+        wildcards integer;
+BEGIN
+ WITH reference_scores AS (
+   SELECT t.id,
+    EXISTS(SELECT 1 FROM title_languages l
+       WHERE l.title_id=t.id AND l.relation='original' AND l.language_code='ko') AS lang_hit,
+    (SELECT COUNT(*)::integer FROM title_genres g WHERE g.title_id=t.id
+       AND g.genre_code IN ('thriller','drama')) AS genre_hits,
+    (CASE WHEN EXISTS(SELECT 1 FROM title_languages l
+       WHERE l.title_id=t.id AND l.relation='original' AND l.language_code='ko')
+       THEN 5 ELSE 0 END)
+      + (SELECT COUNT(*)::integer*3 FROM title_genres g WHERE g.title_id=t.id
+         AND g.genre_code IN ('thriller','drama'))
+      + (CASE WHEN t.title_type='series' THEN 2 ELSE 0 END) AS score
+   FROM titles t WHERE t.publication_status='published'
+     AND t.id <> 'c73e1404-0000-4000-8000-000000000205'::uuid
+     AND (EXISTS(SELECT 1 FROM title_languages l WHERE l.title_id=t.id
+         AND l.relation='original' AND l.language_code='ko')
+       OR EXISTS(SELECT 1 FROM title_genres g WHERE g.title_id=t.id
+         AND g.genre_code IN ('thriller','drama')))
+ ), optimized_scores AS (
+   SELECT t.id,
+     (lm.title_id IS NOT NULL) AS lang_hit,
+     COALESCE(gm.hits,0) AS genre_hits,
+     (CASE WHEN lm.title_id IS NOT NULL THEN 5 ELSE 0 END)
+       + (COALESCE(gm.hits,0)*3)
+       + (CASE WHEN t.title_type='series' THEN 2 ELSE 0 END) AS score
+   FROM titles t
+   LEFT JOIN (
+     SELECT title_id FROM title_languages
+     WHERE relation='original' AND language_code='ko'
+     GROUP BY title_id
+   ) lm ON lm.title_id=t.id
+   LEFT JOIN (
+     SELECT title_id,COUNT(*)::integer AS hits
+     FROM title_genres
+     WHERE genre_code IN ('thriller','drama') GROUP BY title_id
+   ) gm ON gm.title_id=t.id
+   WHERE t.publication_status='published'
+     AND t.id <> 'c73e1404-0000-4000-8000-000000000205'::uuid
+     AND (lm.title_id IS NOT NULL OR gm.title_id IS NOT NULL)
+ ), mismatches AS (
+   (SELECT * FROM reference_scores EXCEPT SELECT * FROM optimized_scores)
+   UNION ALL
+   (SELECT * FROM optimized_scores EXCEPT SELECT * FROM reference_scores)
+ )
+ SELECT count(*)::integer INTO differing FROM mismatches;
+ IF differing<>0 THEN
+   RAISE EXCEPTION 'Ranked language/genre/same-type scores diverged on % titles',differing;
+ END IF;
+
+ -- Existing canonical title and localization must never become two rows.
+ SELECT COUNT(*)::integer INTO aliases FROM titles t
+ WHERE t.publication_status='published'
+   AND t.id IN (
+     SELECT id FROM titles WHERE lower(original_title) LIKE lower('%RRR%')
+     UNION
+     SELECT title_id FROM title_localizations
+     WHERE lower(display_title) LIKE lower('%RRR%')
+   );
+ IF aliases<>1 THEN RAISE EXCEPTION 'Repeated canonical/alias RRR match: %',aliases; END IF;
+
+ SELECT COUNT(*)::integer INTO aliases FROM titles t
+ WHERE t.publication_status='published'
+   AND t.id IN (
+     SELECT id FROM titles WHERE lower(original_title) LIKE lower('%Spirited Away%')
+     UNION
+     SELECT title_id FROM title_localizations
+     WHERE lower(display_title) LIKE lower('%Spirited Away%')
+   );
+ IF aliases<>1 THEN RAISE EXCEPTION 'Localized Japanese title was lost: %',aliases; END IF;
+
+ -- Treat % and _ as literal user input, not unbounded LIKE wildcards.
+ SELECT COUNT(*)::integer INTO wildcards FROM titles t
+ WHERE lower(t.original_title) LIKE lower('%\_%');
+ IF wildcards<>0 THEN RAISE EXCEPTION 'Underscore literal treated as wildcard'; END IF;
+ SELECT COUNT(*)::integer INTO wildcards FROM titles t
+ WHERE lower(t.original_title) LIKE lower('%\%%');
+ IF wildcards<>0 THEN RAISE EXCEPTION 'Percent literal treated as wildcard'; END IF;
+END
+$verify_optimized_parity$;
+
 \echo '[PERF] 10,000 synthetic titles + 13 curated titles. These are SQL execution profiles, not API/Android latency budgets.'
 \echo '[PERF] Browse original-language filter'
 EXPLAIN (ANALYZE, BUFFERS, TIMING OFF, SUMMARY ON)
