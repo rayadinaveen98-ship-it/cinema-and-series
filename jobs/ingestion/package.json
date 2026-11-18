@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --experimental-strip-types --test tests/stage.test.mts tests/wikidata-client.test.mts",
+    "test": "node --experimental-strip-types --test tests/stage.test.mts tests/wikidata-client.test.mts tests/field-evidence.test.mts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:db": "node --experimental-strip-types --test tests/persistence.test.mts tests/review.test.mts"
   },

@@ -72,3 +72,12 @@ test('empty batch returns no candidates',()=>{
     total:0,reviewNew:0,reviewExisting:0,quarantined:0,decisions:[]
   });
 });
+
+test('unverified source submissions cannot self-assert verified historical releases',()=>{
+  const fabricated={...title(),releaseEvents:[
+    {...title().releaseEvents[0],verification:'verified'}
+  ]};
+  const result=evaluateBatch([fabricated],[]);
+  assert.equal(result.quarantined,1);
+  assert.deepEqual(result.decisions[0]?.issues,['UNSUPPORTED_VERIFIED_RELEASE_CLAIM']);
+});

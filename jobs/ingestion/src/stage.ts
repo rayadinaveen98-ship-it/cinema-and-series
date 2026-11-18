@@ -62,6 +62,13 @@ export function evaluateBatch(
       continue;
     }
     seen.add(sourceId);
+    if (candidate.releaseEvents.some(event=>event.verification==='verified')) {
+      decisions.push({
+        sourceId,disposition:'quarantined',
+        issues:['UNSUPPORTED_VERIFIED_RELEASE_CLAIM'],possibleTitleIds:[]
+      });
+      continue;
+    }
     const match=resolveTitleIdentity(candidate,catalogue);
     if (match.decision==='matched') {
       const existing=catalogue.find(x=>x.id===match.titleId);
