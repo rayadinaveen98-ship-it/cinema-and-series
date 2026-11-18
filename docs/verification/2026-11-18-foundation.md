@@ -32,3 +32,13 @@ Neon Free and Workers Free impose strict storage/compute/request limits. Google 
 - Successful CI job set on commit 6e996759999d8c77459608acb9afb0c92226d1af: API TypeScript, synthetic HTTP tests, Wrangler dry-run, domain tests/typecheck, and disposable PostgreSQL migration/integrity.
 - No real Worker-to-Neon HTTP request has been verified; only the migration and direct Neon SQL proof are verified.
 - A placeholder recommendation method was removed rather than returning silently empty recommendations. That API is still pending.
+
+
+## Discovery and ingestion-safety checkpoint — 2026-11-18
+
+- Implemented POST /v1/recommendations (guest-language/genre scoring, no-store, strict 4 KB JSON body and bounded filters), GET /v1/titles/:id/similar (ranked related titles, never includes source, unpublished excluded).
+- Implemented stage-only ingestion preflight: canonical Wikidata Q-IDs only, 40-record maximum, duplicate and ambiguous-ID quarantine, no database writes or publication.
+- GitHub Actions push run 44236729306 on d27b95b6173746bd19772f31d4908c109bc30e7b: all four jobs passed: domain-tests, api-contract, ingestion-preflight and disposable-postgres.
+- Earlier trial failures were corrected during CI (contract entry omission, fixture tie-order, strict TypeScript test). These are not a production deployment or real database corruption.
+- Read-only Neon SQL smoke: language te + genre action scores RRR at 8; similar RRR returns empty while catalogue has one title. Separate from a deployed Worker-to-Neon integration test.
+- Pilot unchanged: one published RRR, zero ingestion runs/staging/review rows. No paid upgrades or Android APK.

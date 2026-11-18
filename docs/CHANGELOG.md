@@ -15,3 +15,7 @@
 - Implemented Hono/Drizzle read-only API: title listing, details, search, verified original-release history, language and genre directories. API request tests, typecheck and Worker dry-run passed.
 - Fixed pnpm CI workspace setup and Node 22 TypeScript strip-mode compatibility; all latest jobs passed.
 - No Cloudflare Worker deployment, no Android UI/APK, no paid services.
+
+- Added guest-first POST recommendation ranking and GET similar-title API, with input caps, error cases and deterministic tests.
+- Added stage-only Wikidata source preflight, 40-record safety limit, duplicate/alias/type conflict quarantine and its independent CI job.
+- Latest four-job CI passed (run 44236729306); Neon remains one RRR record without bulk importer writes.

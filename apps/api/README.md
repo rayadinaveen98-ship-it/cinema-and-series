@@ -10,6 +10,8 @@ Hono + TypeScript + Drizzle Neon HTTP backend. Implemented and CI-verified, but 
 - GET /v1/search?q=RRR: exact/substring title and alias lookup, limit 1-30. Fuzzy spelling ranking remains future work.
 - GET /v1/releases/on-this-day?month=3&day=25: verified original premieres only, not OTT/regional events.
 - GET /v1/languages and /v1/genres: reference directories.
+- POST /v1/recommendations: validated guest language/genre preferences; max 4 KB JSON, max 8 languages/12 genres, ranked and explainable results; no-store caching.
+- GET /v1/titles/:id/similar: similar published titles by original language and genres; excludes the source title and returns 404 for unknown canonical IDs.
 
 Every data endpoint returns controlled 503 when the DATABASE_URL secret is absent; no dummy results. Bad queries yield 400, unrecognized routes 404, unexpected errors 500 with credential-safe messages.
 
@@ -28,4 +30,4 @@ Never embed DATABASE_URL in the Android app or version control. For a future hos
 
 ## Incomplete
 
-Recommendations endpoint, similar-title API, verified live OTT checks, automatic ingestion, request rate limiting, cloud integration testing and Android app remain unimplemented. No APK exists.
+Verified live OTT checks, scheduled/automatic ingestion, write persistence for staging, request rate limiting, cloud integration testing, load benchmarks and Android app remain unimplemented. No APK exists.

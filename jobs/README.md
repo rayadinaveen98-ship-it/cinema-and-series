@@ -6,4 +6,4 @@
 - Current regional streaming offer is explicitly UNVERIFIED, preventing a false current-availability claim.
 - Re-running the seed was checked for idempotency in the Neon free pilot.
 
-A live/automatic importer has NOT been built. Required next work: license-reviewed source connector, bounded paging, checkpointing, normalization, identity review queue, transactional upsert, audit, and rate-limits/backoff. Never treat source text as trusted instructions.
+A deterministic, network-free preflight evaluator now exists under jobs/ingestion: strict Wikidata source allowlist, 40-record batches, canonical-identity review and quarantine decisions, no database writes. CI tests passed. A live/automatic importer has NOT been built. Required next work: license-reviewed source connector, bounded paging, checkpointing, normalization, identity review queue, transactional upsert, audit, and rate-limits/backoff. Never treat source text as trusted instructions.

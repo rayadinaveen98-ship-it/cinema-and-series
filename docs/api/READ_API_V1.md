@@ -11,6 +11,8 @@ GET /v1/search?q=RRR — exact and substring canonical/alias search.
 GET /v1/releases/on-this-day?month=3&day=25 — verified original premieres; excludes OTT and territory-specific release types.
 GET /v1/languages — language directory.
 GET /v1/genres — genre directory.
+POST /v1/recommendations — validated guest language/genre preferences, no account state or paid AI; deterministic score ordering.
+GET /v1/titles/:id/similar — bounded shared language/genre matches, source title excluded.
 
 Success envelope: JSON object with data; list additionally has page.nextCursor.
 Error envelope: JSON object with error.code and error.message.
@@ -23,7 +25,10 @@ Error envelope: JSON object with error.code and error.message.
 - Production source provenance is preserved for release events.
 - An unknown provider's present-day availability remains unverified, even if the historical digital premiere is confirmed.
 - SQL is parameterized through Drizzle.
-- Recommendations and user write endpoints are not exposed until verified; no dummy success responses.
+- Recommendations and similar-title reads are tested; user writes and ingestion publication are not exposed.
+- Recommendation body is JSON, max 4096 bytes, max 8 languages and 12 genres, at least one preference, bound by a 1–30 result limit. Cache-Control: no-store.
+- Similar-title result limit is 1–30, default 12. Unknown/unpublished source title gets 404.
+- Ranked discovery never returns staged titles. Genre relevance and original language scoring are transparent, with stable ID tie-breaks.
 
 ## Evidence and limits
 

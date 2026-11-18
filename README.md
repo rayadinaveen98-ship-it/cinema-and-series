@@ -14,11 +14,11 @@ Android-first, multilingual cinema and series discovery database. **Foundation s
 
 ## Repository layout
 
-- apps/api — Hono/Drizzle read-only pilot API for browsing, search, details and historical dates. Worker bundle verified but NOT deployed.
+- apps/api — Hono/Drizzle pilot API for browsing, search, details, historical releases, recommendations and related titles. Worker bundle tested, NOT deployed.
 - apps/mobile — planned Expo SDK 58 React Native Android application; no UI implementation yet.
 - packages/domain — dependency-free TypeScript validation, identity, historical releases, and recommendation rules.
 - packages/db — normalized PostgreSQL migrations and Drizzle read-model mapping, checked with disposable CI and applied to isolated Neon Free pilot.
-- jobs — curated source-traceable RRR pilot record; automated bounded ingestion still pending.
+- jobs — curated source-traceable RRR record and an isolated source-validation/quarantine preflight; network ingestion and publishing still pending.
 - docs — product contract, architecture, decisions, roadmap, quality gates.
 
 ## Running the initial tests
@@ -27,7 +27,7 @@ Use Node 22.13 or newer:
 
     node --experimental-strip-types --test packages/domain/tests/*.test.mts
 
-These tests use **synthetic fixtures**, no real movie imports, accounts or cloud service credentials. A separate dependency-backed API/mobile build will be added and verified before any deployment.
+Tests use synthetic fixtures with no credentials. API, ingestion preflight and PostgreSQL integration are exercised by GitHub Actions; a real mobile build and public deployment are still pending.
 
 ## Current stage
 
