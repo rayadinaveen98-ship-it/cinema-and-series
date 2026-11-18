@@ -7,7 +7,8 @@
     "dev": "wrangler dev",
     "build:check": "wrangler deploy --dry-run",
     "test": "node --experimental-strip-types --test tests/*.test.mts",
-    "typecheck": "tsc --noEmit --project tsconfig.json"
+    "typecheck": "tsc --noEmit --project tsconfig.json",
+    "smoke:neon": "node --experimental-strip-types smoke/live-neon.mts"
   },
   "dependencies": {
     "@cinema/domain": "workspace:*",

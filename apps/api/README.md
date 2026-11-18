@@ -42,3 +42,13 @@ Title detail reads combine the original `release_events` movie timeline and the 
 Search now unions source canonical-title and localization-title matches, de-duplicating a title with several matching aliases and using the existing lowercase trigram indexes for substring matching. User-supplied percent, underscore and backslash characters are escaped as literals. Guest recommendations and More Like This now group matched languages and genres before scoring, preserving language +5, genre +3 per match, same type +2 for related titles, source exclusion and stable ID tie-breaks. Synthetic database SQL parity checks passed against the previous algorithm across 10,000 generated records.
 
 This is database SQL verification, NOT an end-to-end Cloudflare Worker connected to hosted Neon; encrypted connection setup, operational latency and Android testing remain open gates.
+
+## Secure real Neon HTTP smoke (not yet run)
+
+A new **opt-in** command exercises the actual Hono API, Drizzle/Neon HTTP adapter and the isolated Neon pilot without deploying a Worker:
+
+    pnpm --filter @cinema/api run smoke:neon
+
+It requires `CINEMA_SMOKE_DATABASE_URL` in the executing process environment, using the dedicated `cinema_api_reader` role on `cinema_pilot`, TLS, and a `*.neon.tech` hostname. The command fails closed without it, validates database read-only permissions, refuses owner credentials, and prints only pass/fail test labels. **Do not paste the URL into chat, PR descriptions, logs, or source files.**
+
+This is not run in automatic PR CI because unreviewed PR code must not be given an authenticated database credential. Tests of the URL/permission guards use synthetic inputs and run automatically as part of `pnpm test`; the real smoke command stays separately authorized. Setup and acceptance criteria are in `docs/security/READONLY_NEON_API_SMOKE.md`. Even a passing smoke would test local/in-process Hono-to-Neon HTTP, not a deployed Cloudflare Worker or physical Android device.

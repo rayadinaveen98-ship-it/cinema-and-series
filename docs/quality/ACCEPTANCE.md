@@ -88,3 +88,10 @@ PROPOSED / APPROVED / IMPLEMENTED / TESTED / BLOCKED / RELEASED are separate lab
 - Optimized and reference ranking output must match for every synthetic candidate, preserving language, genre, same-type and source-exclusion semantics.
 - Unicode alias, canonical/alias dedup, literal percent and underscore escaping, browse pagination and film-only original release correctness must pass.
 - Query plans and timings are recorded, but no hard p95 latency target is claimed; live Worker-to-Neon and physical Android remain uncertified.
+
+## Real Hono/Neon smoke security gate — 2026-11-18
+
+- Fail closed on missing DSN, wrong database, non-Neon host, admin login, disabled TLS, write permissions or access to private staging/audit tables.
+- PR CI runs negative guards with synthetic strings only. It must NEVER receive live Neon or other production credentials.
+- Optional live runner must validate 13-title pilot browse, pagination, language and type filters, Japanese alias, historical movie premiere, distinct series launch, recommendations, similarity and 400/404 responses.
+- Live HTTP smoke remains BLOCKED until a separately approved read-only role is provisioned and a trusted operator runs it with a private secret; this is not a deployed Worker/Android certification.
