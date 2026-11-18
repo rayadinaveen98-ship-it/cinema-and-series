@@ -1,0 +1,26 @@
+name: Foundation Quality
+on:
+  push:
+    branches: ["main", "feature/**"]
+  pull_request:
+    branches: ["main"]
+permissions:
+  contents: read
+jobs:
+  domain-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Run dependency-free domain tests
+        run: node --experimental-strip-types --test packages/domain/tests/*.test.mts
+      - name: Secret and generated-file guard
+        shell: bash
+        run: |
+          if git ls-files | grep -E '(^|/)(\.env|\.dev\.vars|node_modules/|.*\.apk$|.*\.aab$)'; then
+            echo "Forbidden credentials or generated artifacts in version control"
+            exit 1
+          fi
